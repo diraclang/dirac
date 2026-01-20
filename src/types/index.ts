@@ -69,6 +69,10 @@ export interface DiracSession {
   
   // Debugging
   debug: boolean;
+  
+  // Import tracking
+  currentFile?: string;
+  importedFiles?: Set<string>;
 }
 
 export interface DiracConfig {
@@ -77,4 +81,5 @@ export interface DiracConfig {
   debug?: boolean;
   maxLLMCalls?: number;
   maxDepth?: number;
+  filePath?: string;  // Current file path for imports
 }

@@ -42,6 +42,12 @@ export async function executeEval(session: DiracSession, element: DiracElement):
     context.path = path;
     context.__dirname = process.cwd();  // ESM doesn't have __dirname, use cwd
     
+    // Add helper to get current parameters from stack
+    context.getParams = () => {
+      const params = session.parameterStack[session.parameterStack.length - 1];
+      return params && params[0] ? params[0] : null;
+    };
+    
     let result: any;
     // Execute as async function to support top-level await
     const func = new AsyncFunction(...Object.keys(context), expr);

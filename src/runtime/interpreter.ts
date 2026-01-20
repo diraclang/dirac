@@ -3,7 +3,7 @@
  */
 
 import type { DiracElement, DiracSession } from '../types/index.js';
-import { substituteVariables, emit } from './session.js';
+import { substituteVariables, emit, getSubroutine } from './session.js';
 import { executeDefvar } from '../tags/defvar.js';
 import { executeAssign } from '../tags/assign.js';
 import { executeOutput } from '../tags/output.js';
@@ -14,6 +14,9 @@ import { executeIf } from '../tags/if.js';
 import { executeLLM } from '../tags/llm.js';
 import { executeEval } from '../tags/eval.js';
 import { executeExecute } from '../tags/execute.js';
+import { executeImport } from '../tags/import.js';
+import { executeParameters } from '../tags/parameters.js';
+import { executeExpr } from '../tags/expr.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -78,11 +81,30 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         await executeExecute(session, element);
         break;
         
+      case 'import':
+        await executeImport(session, element);
+        break;
+        
+      case 'parameters':
+        await executeParameters(session, element);
+        break;
+        
+      case 'expr':
+        await executeExpr(session, element);
+        break;
+        
       default:
-        // Unknown tag - just process children
-        for (const child of element.children) {
-          await integrate(session, child);
-          if (session.isReturn || session.isBreak) break;
+        // Unknown tag - check if it's a subroutine name
+        const subroutine = getSubroutine(session, element.tag);
+        if (subroutine) {
+          // Treat unknown tag as subroutine call
+          await executeCall(session, element);
+        } else {
+          // Really unknown - just process children
+          for (const child of element.children) {
+            await integrate(session, child);
+            if (session.isReturn || session.isBreak) break;
+          }
         }
     }
   } finally {

@@ -19,6 +19,11 @@ export async function execute(source: string, config: DiracConfig = {}): Promise
   const parser = new DiracParser();
   const session = createSession(config);
   
+  // Set current file if provided in config
+  if (config.filePath) {
+    session.currentFile = config.filePath;
+  }
+  
   const ast = parser.parse(source);
   await integrate(session, ast);
   

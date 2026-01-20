@@ -18,7 +18,18 @@ import {
 import { integrateChildren } from '../runtime/interpreter.js';
 
 export async function executeCall(session: DiracSession, element: DiracElement): Promise<void> {
-  const name = element.attributes.name || element.attributes.subroutine;
+  // Support both <call name="FOO" /> and direct <FOO /> syntax
+  // For <call> tag, use name/subroutine attribute
+  // For direct syntax, use element.tag
+  let name: string;
+  
+  if (element.tag === 'call') {
+    // Explicit <call> tag - use name or subroutine attribute
+    name = element.attributes.name || element.attributes.subroutine || '';
+  } else {
+    // Direct tag syntax - use tag name itself, ignore name attribute
+    name = element.tag;
+  }
   
   if (!name) {
     throw new Error('<call> requires name or subroutine attribute');
@@ -53,6 +64,9 @@ async function executeCallInternal(
   const wasReturn = session.isReturn;
   session.isReturn = false;
   
+  // Push caller element onto parameter stack for <parameters select="*|@*|@attr"/> access
+  pushParameters(session, [callElement]);
+  
   try {
     // Bind parameters
     const paramElements = callElement.children.filter(c => c.tag === 'parameters');
@@ -64,6 +78,9 @@ async function executeCallInternal(
     await integrateChildren(session, subroutine);
     
   } finally {
+    // Pop parameter stack
+    popParameters(session);
+    
     // Clean up scope (keep visible variables)
     session.varBoundary = oldBoundary;
     cleanToBoundary(session);

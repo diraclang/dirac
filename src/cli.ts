@@ -56,6 +56,9 @@ async function main() {
       console.error(`[Dirac] Executing ${fullPath}`);
     }
     
+    // Pass file path to config for import resolution
+    config.filePath = fullPath;
+    
     const result = await execute(source, config);
     process.stdout.write(result);
     

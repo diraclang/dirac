@@ -23,6 +23,11 @@ export class DiracParser {
   }
   
   parse(source: string): DiracElement {
+    // Strip shebang line if present
+    if (source.startsWith('#!')) {
+      source = source.replace(/^#!.*\n/, '');
+    }
+    
     const result = this.parser.parse(source);
     // With preserveOrder, result is an array
     if (!Array.isArray(result) || result.length === 0) {

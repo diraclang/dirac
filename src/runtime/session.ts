@@ -4,7 +4,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
-import type { DiracSession, DiracConfig, Variable, Subroutine } from '../types/index.js';
+import type { DiracSession, DiracConfig, Variable, Subroutine, DiracElement } from '../types/index.js';
 
 export function createSession(config: DiracConfig = {}): DiracSession {
   const anthropicKey = config.apiKey || process.env.ANTHROPIC_API_KEY;
