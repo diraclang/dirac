@@ -6,17 +6,23 @@
 
 import 'dotenv/config';
 import { readFileSync } from 'fs';
-import { resolve } from 'path';
+import { resolve, extname } from 'path';
 import { execute } from './index.js';
+import { BraKetParser } from './runtime/braket-parser.js';
 
 async function main() {
   const args = process.argv.slice(2);
   
   if (args.length === 0) {
-    console.error('Usage: dirac <file.di>');
+    console.error('Usage: dirac <file.di|file.bk>');
+    console.error('');
+    console.error('File formats:');
+    console.error('  .di               XML notation (verbose)');
+    console.error('  .bk               Bra-ket notation (compact)');
     console.error('');
     console.error('Options:');
     console.error('  --debug           Enable debug output');
+    console.error('  --emit-xml        Output intermediate XML (for .bk files)');
     console.error('  --model <name>    Set default LLM model');
     console.error('  --max-llm <n>     Maximum LLM calls (default: 100)');
     console.error('  --max-depth <n>   Maximum recursion depth (default: 50)');
@@ -26,12 +32,15 @@ async function main() {
   // Parse options
   const config: any = {};
   let filePath: string | undefined;
+  let emitXml = false;
   
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
     
     if (arg === '--debug') {
       config.debug = true;
+    } else if (arg === '--emit-xml') {
+      emitXml = true;
     } else if (arg === '--model' && i + 1 < args.length) {
       config.model = args[++i];
     } else if (arg === '--max-llm' && i + 1 < args.length) {
@@ -50,7 +59,25 @@ async function main() {
   
   try {
     const fullPath = resolve(process.cwd(), filePath);
-    const source = readFileSync(fullPath, 'utf-8');
+    let source = readFileSync(fullPath, 'utf-8');
+    const ext = extname(fullPath);
+    
+    // Convert bra-ket notation to XML if needed
+    if (ext === '.bk') {
+      if (config.debug) {
+        console.error(`[Dirac] Compiling bra-ket notation to XML`);
+      }
+      
+      const braketParser = new BraKetParser();
+      const xml = braketParser.parse(source);
+      
+      if (emitXml) {
+        console.log(xml);
+        return;
+      }
+      
+      source = xml;
+    }
     
     if (config.debug) {
       console.error(`[Dirac] Executing ${fullPath}`);

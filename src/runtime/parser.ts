@@ -72,11 +72,17 @@ export class DiracParser {
     if (Array.isArray(children)) {
       for (const child of children) {
         if (child['#text']) {
-          // Text node
+          // Text node - add as child AND to element.text for backward compat
+          element.children.push({
+            tag: '',
+            text: child['#text'],
+            attributes: {},
+            children: []
+          });
+          // Also set element.text if not set (for simple text-only elements)
           if (!element.text) {
             element.text = child['#text'];
           } else {
-            // Append if multiple text nodes
             element.text += child['#text'];
           }
         } else if (child['#comment']) {

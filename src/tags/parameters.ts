@@ -4,7 +4,7 @@
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { getCurrentParameters, emit } from '../runtime/session.js';
+import { getCurrentParameters, emit, setVariable } from '../runtime/session.js';
 import { integrate } from '../runtime/interpreter.js';
 
 export async function executeParameters(session: DiracSession, element: DiracElement): Promise<void> {
@@ -53,15 +53,21 @@ export async function executeParameters(session: DiracSession, element: DiracEle
       emit(session, attrs);
       
     } else {
-      // Select specific attribute
+      // Select specific attribute - automatically create variable with that name
       const value = caller.attributes[attrName];
       
       if (session.debug) {
-        console.error(`[PARAMETERS] Selecting attribute @${attrName} = ${value}`);
+        console.error(`[PARAMETERS] Setting variable '${attrName}' = '${value}'`);
       }
       
       if (value !== undefined) {
-        emit(session, value);
+        // Automatically create variable (like defvar)
+        setVariable(session, attrName, value, false);
+      }
+      
+      // Execute children if any (for additional processing)
+      for (const child of element.children) {
+        await integrate(session, child);
       }
     }
     

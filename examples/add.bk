@@ -1,0 +1,11 @@
+<add|
+  |parameters select=@x>
+  |parameters select=@y>
+  |expr op=plus>
+    |arg>
+      |variable name=x>
+    |arg>
+      |variable name=y>
+
+|output>5 + 3 = 
+|add x=5 y=3>

@@ -1,0 +1,7 @@
+<greet|
+  |parameters select=@name>
+  |output>Hello, |variable name=name>!
+
+|greet name=Alice>
+|output>
+|greet name=Bob>

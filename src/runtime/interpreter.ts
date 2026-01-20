@@ -5,6 +5,7 @@
 import type { DiracElement, DiracSession } from '../types/index.js';
 import { substituteVariables, emit, getSubroutine } from './session.js';
 import { executeDefvar } from '../tags/defvar.js';
+import { executeVariable } from '../tags/variable.js';
 import { executeAssign } from '../tags/assign.js';
 import { executeOutput } from '../tags/output.js';
 import { executeSubroutine } from '../tags/subroutine.js';
@@ -43,6 +44,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
     switch (element.tag.toLowerCase()) {
       case 'defvar':
         executeDefvar(session, element);
+        break;
+        
+      case 'variable':
+        executeVariable(session, element);
         break;
         
       case 'assign':

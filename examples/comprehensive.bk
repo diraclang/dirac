@@ -1,0 +1,29 @@
+|output>Bra-Ket Notation Demo
+
+<factorial|
+  |parameters select=@n>
+    |variable name=n>
+  |if>
+    |expr op=eq>
+      |arg>
+        |variable name=n>
+      |arg>1
+    |output>1
+    |expr op=times>
+      |arg>
+        |variable name=n>
+      |arg>
+        |factorial>
+          |expr op=minus>
+            |arg>
+              |variable name=n>
+            |arg>1
+
+|output>Factorial of 5 = 
+|factorial n=5>
+|output>
+
+<format|
+  |output>Name: |variable name=name>, Age: |variable name=age>
+
+|format name=Alice age=30>
