@@ -18,6 +18,7 @@ import { executeExecute } from '../tags/execute.js';
 import { executeImport } from '../tags/import.js';
 import { executeParameters } from '../tags/parameters.js';
 import { executeExpr } from '../tags/expr.js';
+import { executeSystem } from '../tags/system.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -96,6 +97,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'expr':
         await executeExpr(session, element);
+        break;
+        
+      case 'system':
+        await executeSystem(session, element);
         break;
         
       default:

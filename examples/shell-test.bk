@@ -1,9 +1,10 @@
 <listfiles|
-  |execute>
+  |parameters select=@dir>
+  |system>
     ls -la |variable name=dir>
     echo "Files in |variable name=dir>:"
     find |variable name=dir> -name "*.bk"
 
-|variable name=mydir> examples
 |output>Listing files in directory:
-|listfiles dir=mydir>
+|output>
+|listfiles dir=examples>
