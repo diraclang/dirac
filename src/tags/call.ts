@@ -64,8 +64,24 @@ async function executeCallInternal(
   const wasReturn = session.isReturn;
   session.isReturn = false;
   
+  // Substitute variables in call element attributes before pushing to parameter stack
+  const substitutedElement: DiracElement = {
+    tag: callElement.tag,
+    attributes: {},
+    children: callElement.children
+  };
+  
+  // Process each attribute for {variable} substitution
+  for (const [key, value] of Object.entries(callElement.attributes)) {
+    if (typeof value === 'string') {
+      substitutedElement.attributes[key] = substituteVariables(session, value);
+    } else {
+      substitutedElement.attributes[key] = value;
+    }
+  }
+  
   // Push caller element onto parameter stack for <parameters select="*|@*|@attr"/> access
-  pushParameters(session, [callElement]);
+  pushParameters(session, [substitutedElement]);
   
   try {
     // Bind parameters

@@ -10,12 +10,12 @@ export function createSession(config: DiracConfig = {}): DiracSession {
   const anthropicKey = config.apiKey || process.env.ANTHROPIC_API_KEY;
   const openaiKey = process.env.OPENAI_API_KEY;
   
-  // Prefer OpenAI if available, fallback to Anthropic
+  // Prefer Anthropic if available, fallback to OpenAI
   let llmClient: any;
-  if (openaiKey) {
-    llmClient = new OpenAI({ apiKey: openaiKey });
-  } else if (anthropicKey) {
+  if (anthropicKey) {
     llmClient = new Anthropic({ apiKey: anthropicKey });
+  } else if (openaiKey) {
+    llmClient = new OpenAI({ apiKey: openaiKey });
   }
   
   return {
@@ -152,11 +152,16 @@ export function substituteVariables(session: DiracSession, text: string): string
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'");
   
-  // Then substitute variables
-  return decoded.replace(/\$\{?(\w+)\}?/g, (match, varName) => {
-    const value = getVariable(session, varName);
-    return value !== undefined ? String(value) : match;
-  });
+  // Substitute both ${var}/$var and {var} patterns
+  return decoded
+    .replace(/\$\{?(\w+)\}?/g, (match, varName) => {
+      const value = getVariable(session, varName);
+      return value !== undefined ? String(value) : match;
+    })
+    .replace(/\{(\w+)\}/g, (match, varName) => {
+      const value = getVariable(session, varName);
+      return value !== undefined ? String(value) : match;
+    });
 }
 
 // Output management
