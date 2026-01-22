@@ -105,11 +105,19 @@ export function cleanToBoundary(session: DiracSession): void {
 
 // Subroutine management (maps to subroutine functions in MASK)
 
-export function registerSubroutine(session: DiracSession, name: string, element: DiracElement): void {
+export function registerSubroutine(
+  session: DiracSession, 
+  name: string, 
+  element: DiracElement,
+  description?: string,
+  parameters?: any[]
+): void {
   session.subroutines.push({
     name,
     element,
     boundary: session.subBoundary,
+    description,
+    parameters,
   });
 }
 
@@ -186,4 +194,24 @@ export function popParameters(session: DiracSession): DiracElement[] | undefined
 
 export function getCurrentParameters(session: DiracSession): DiracElement[] | undefined {
   return session.parameterStack[session.parameterStack.length - 1];
+}
+
+// Reflection/Introspection API
+
+export function getAvailableSubroutines(session: DiracSession): Array<{
+  name: string;
+  description?: string;
+  parameters?: Array<{
+    name: string;
+    type?: string;
+    required?: boolean;
+    description?: string;
+    enum?: string[];
+  }>;
+}> {
+  return session.subroutines.map(sub => ({
+    name: sub.name,
+    description: sub.description,
+    parameters: sub.parameters,
+  }));
 }

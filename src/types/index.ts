@@ -23,6 +23,17 @@ export interface Variable {
 }
 
 /**
+ * Parameter metadata for introspection
+ */
+export interface ParameterMetadata {
+  name: string;
+  type?: string;
+  required?: boolean;
+  description?: string;
+  enum?: string[];
+}
+
+/**
  * Subroutine info - maps to Subroutine in MASK
  */
 export interface Subroutine {
@@ -30,6 +41,9 @@ export interface Subroutine {
   element: DiracElement;
   boundary: number;  // scope boundary marker
   extends?: string;  // parent subroutine
+  // Metadata for reflection/introspection
+  description?: string;
+  parameters?: ParameterMetadata[];
 }
 
 /**

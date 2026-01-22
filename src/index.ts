@@ -3,9 +3,11 @@
  */
 
 export { DiracParser } from './runtime/parser.js';
-export { createSession, getOutput } from './runtime/session.js';
+export { createSession, getOutput, getAvailableSubroutines } from './runtime/session.js';
 export { integrate } from './runtime/interpreter.js';
-export type { DiracSession, DiracConfig, DiracElement } from './types/index.js';
+export { createLLMAdapter, executeUserCommand } from './utils/llm-adapter.js';
+export type { DiracSession, DiracConfig, DiracElement, ParameterMetadata } from './types/index.js';
+export type { LLMPromptGenerator } from './utils/llm-adapter.js';
 
 import { DiracParser } from './runtime/parser.js';
 import { createSession, getOutput } from './runtime/session.js';
