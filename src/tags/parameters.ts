@@ -59,13 +59,11 @@ export async function executeParameters(session: DiracSession, element: DiracEle
       if (session.debug) {
         console.error(`[PARAMETERS] Setting variable '${attrName}' = '${value}'`);
       }
-      
       if (value !== undefined) {
-        // Automatically create variable (like defvar)
         setVariable(session, attrName, value, false);
+        // Debug: print variable stack after setting
+        console.error(`[PARAMETERS] Variable stack after setting '${attrName}':`, JSON.stringify(session.variables));
       }
-      
-      // Execute children if any (for additional processing)
       for (const child of element.children) {
         await integrate(session, child);
       }

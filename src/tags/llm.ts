@@ -9,6 +9,10 @@ import { integrate } from '../runtime/interpreter.js';
 import { DiracParser } from '../runtime/parser.js';
 
 export async function executeLLM(session: DiracSession, element: DiracElement): Promise<void> {
+    // Log the full prompt for debugging
+    if (session.debug || process.env.DIRAC_LOG_PROMPT === '1') {
+      console.error('[LLM] Full prompt sent to LLM:\n' + prompt + '\n');
+    }
   if (!session.llmClient) {
     throw new Error('<LLM> requires API key (set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env file)');
   }
@@ -32,28 +36,38 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
   const maxTokens = parseInt(element.attributes.maxTokens || '4096', 10);
   
   // Build prompt from children or text
-  let prompt = '';
-  
+  let userPrompt = '';
   if (element.children.length > 0) {
     // Execute children to build prompt
     const beforeOutput = session.output.length;
-    
     for (const child of element.children) {
       await integrate(session, child);
     }
-    
     // Collect output from children
     const childOutput = session.output.slice(beforeOutput);
-    prompt = childOutput.join('');
-    
+    userPrompt = childOutput.join('');
     // Remove child output from main output
     session.output = session.output.slice(0, beforeOutput);
-    
   } else if (element.text) {
-    prompt = substituteVariables(session, element.text);
+    userPrompt = substituteVariables(session, element.text);
   } else {
     throw new Error('<LLM> requires prompt content');
   }
+
+  // Reflect subroutines for system prompt
+  const { getAvailableSubroutines } = await import('../runtime/session.js');
+  const subroutines = getAvailableSubroutines(session);
+  let systemPrompt = 'You are an expert Dirac command generator.\nAvailable subroutines:';
+  for (const sub of subroutines) {
+    systemPrompt += `\n- <${sub.name} />: ${sub.description || ''}`;
+    if (sub.parameters && sub.parameters.length > 0) {
+      systemPrompt += ' Parameters: ' + sub.parameters.map(p => `${p.name} (${p.type || 'string'})`).join(', ');
+    }
+  }
+  systemPrompt += '\nInstructions: Output only valid Dirac XML tags. Do not include explanations or extra text.';
+
+  // Final prompt
+  let prompt = systemPrompt + '\nUser: ' + userPrompt + '\nOutput:';
   
   // Add context if specified
   if (contextVar) {
