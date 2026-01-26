@@ -1,0 +1,4 @@
+# Dirac server configuration
+llmProvider: ollama
+llmModel: llama2 
+# Add other config options as needed

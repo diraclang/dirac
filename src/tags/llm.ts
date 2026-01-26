@@ -8,27 +8,32 @@ import { setVariable, substituteVariables, emit, getVariable } from '../runtime/
 import { integrate } from '../runtime/interpreter.js';
 import { DiracParser } from '../runtime/parser.js';
 
+
 export async function executeLLM(session: DiracSession, element: DiracElement): Promise<void> {
-    // Log the full prompt for debugging
-    if (session.debug || process.env.DIRAC_LOG_PROMPT === '1') {
-      console.error('[LLM] Full prompt sent to LLM:\n' + prompt + '\n');
-    }
   if (!session.llmClient) {
-    throw new Error('<LLM> requires API key (set OPENAI_API_KEY or ANTHROPIC_API_KEY in .env file)');
+    throw new Error('<LLM> requires API key (set OPENAI_API_KEY, ANTHROPIC_API_KEY, or LLM_PROVIDER=ollama in .env file)');
   }
-  
+
   // Check limits
   if (session.limits.currentLLMCalls >= session.limits.maxLLMCalls) {
     throw new Error('Maximum LLM calls exceeded');
   }
-  
+
   session.limits.currentLLMCalls++;
-  
+
   // Detect provider from client type
-  const isOpenAI = session.llmClient.constructor.name === 'OpenAI';
-  const defaultModel = isOpenAI ? 'gpt-4-turbo-preview' : 'claude-sonnet-4-20250514';
-  
+  const providerName = session.llmClient.constructor.name;
+  const isOpenAI = providerName === 'OpenAI';
+  const isOllama = providerName === 'OllamaProvider';
+  const defaultModel = isOpenAI
+    ? 'gpt-4.1-2025-04-14'
+    : isOllama
+      ? 'llama2'
+      : 'claude-sonnet-4-20250514';
+  console.log('LLM Provider:', providerName);
+
   const model = element.attributes.model || process.env.DEFAULT_MODEL || defaultModel;
+  console.log('LLM Model:', model);
   const outputVar = element.attributes.output;
   const contextVar = element.attributes.context;
   const executeMode = element.attributes.execute === 'true'; // NEW: seamless execution mode
@@ -54,26 +59,53 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
     throw new Error('<LLM> requires prompt content');
   }
 
-  // Reflect subroutines for system prompt
-  const { getAvailableSubroutines } = await import('../runtime/session.js');
-  const subroutines = getAvailableSubroutines(session);
-  let systemPrompt = 'You are an expert Dirac command generator.\nAvailable subroutines:';
-  for (const sub of subroutines) {
-    systemPrompt += `\n- <${sub.name} />: ${sub.description || ''}`;
-    if (sub.parameters && sub.parameters.length > 0) {
-      systemPrompt += ' Parameters: ' + sub.parameters.map(p => `${p.name} (${p.type || 'string'})`).join(', ');
+  const noExtra = element.attributes.noextra === 'true';
+  let prompt: string;
+  if (noExtra) {
+    prompt = userPrompt;
+    if (session.debug || process.env.DIRAC_LOG_PROMPT === '1') {
+      console.error('[LLM] Full prompt sent to LLM (noextra):\n' + prompt + '\n');
     }
-  }
-  systemPrompt += '\nInstructions: Output only valid Dirac XML tags. Do not include explanations or extra text.';
+  } else {
+    // Reflect subroutines for system prompt
+    const { getAvailableSubroutines } = await import('../runtime/session.js');
+    const subroutines = getAvailableSubroutines(session);
+    if (session.debug) {
+      console.error('[LLM] Subroutines available at prompt composition:',
+        subroutines.map(s => ({ name: s.name, description: s.description, parameters: s.parameters })));
+    }
+    let systemPrompt = `Dirac is a XML based language, you define the subroutine like
+\`\`\`xml
+<subroutine name=background >
+ <parameters select="@color" />
+ <paint_the_color_somewhere />
+</subroutine>
+\`\`\`
+then you call it like
+\`\`\`xml
+<background color="blue" />
+\`\`\`
+`;
+    systemPrompt += 'Now, You are an expert Dirac XML code generator.\nAllowed Dirac XML tags (use ONLY these tags):';
+    for (const sub of subroutines) {
+      systemPrompt += `\n- <${sub.name} />: ${sub.description || ''}`;
+      if (sub.parameters && sub.parameters.length > 0) {
+        systemPrompt += ' Parameters: ' + sub.parameters.map(p => `${p.name} (${p.type || 'string'})`).join(', ');
+      }
+    }
+    systemPrompt += '\nDo NOT invent or use any tags not listed above. For example, do NOT use <changeBackground> or <set-background>. Only use the allowed tags.\nInstructions: Output only valid Dirac XML tags from the list above. Do not include explanations or extra text.';
+    systemPrompt += '\nAfter generating your answer, check the command/tag list again and ensure every tag you use is in the list above. If any tag is not in the list, do not output it—regenerate your answer using only allowed tags.';
 
-  // Final prompt
-  let prompt = systemPrompt + '\nUser: ' + userPrompt + '\nOutput:';
-  
-  // Add context if specified
-  if (contextVar) {
-    const contextValue = getVariable(session, contextVar);
-    if (contextValue) {
-      prompt = `Context: ${contextValue}\n\n${prompt}`;
+    prompt = systemPrompt + '\nUser: ' + userPrompt + '\nOutput:';
+    if (session.debug || process.env.DIRAC_LOG_PROMPT === '1') {
+      console.error('[LLM] Full prompt sent to LLM:\n' + prompt + '\n');
+    }
+    // Add context if specified
+    if (contextVar) {
+      const contextValue = getVariable(session, contextVar);
+      if (contextValue) {
+        prompt = `Context: ${contextValue}\n\n${prompt}`;
+      }
     }
   }
   
@@ -83,7 +115,6 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
   
   try {
     let result: string;
-    
     if (isOpenAI) {
       // Call OpenAI API
       const response = await session.llmClient.chat.completions.create({
@@ -97,9 +128,14 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
           },
         ],
       });
-      
       result = response.choices[0]?.message?.content || '';
-      
+    } else if (isOllama) {
+      // Call OllamaProvider
+      result = await session.llmClient.complete(prompt, {
+        model,
+        temperature,
+        max_tokens: maxTokens,
+      });
     } else {
       // Call Anthropic API
       const response = await session.llmClient.messages.create({
@@ -113,7 +149,6 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
           },
         ],
       });
-      
       const content = response.content[0];
       result = content.type === 'text' ? content.text : '';
     }
@@ -130,13 +165,23 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
       if (session.debug) {
         console.error(`[LLM] Executing response as Dirac code:\n${result}\n`);
       }
-      
-      // Strip markdown code blocks if present
+
+      // Only replace triple backtick code blocks if replace-tick="true" is set
+      const replaceTick = element.attributes['replace-tick'] === 'true';
       let diracCode = result.trim();
-      if (diracCode.startsWith('```')) {
-        diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
+      if (replaceTick && diracCode.startsWith('```')) {
+        // Check for bash, xml, html, dirac, or no language
+        const match = diracCode.match(/^```(\w+)?\n?/m);
+        if (match && match[1] === 'bash') {
+          // Find closing triple backticks
+          const endIdx = diracCode.indexOf('```', 3);
+          let bashContent = diracCode.slice(match[0].length, endIdx).trim();
+          diracCode = `<system>${bashContent}</system>`;
+        } else {
+          // Remove opening and closing backticks for xml/html/dirac/none
+          diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
+        }
       }
-      
       try {
         // Parse and execute the LLM's output as Dirac code
         const parser = new DiracParser();
@@ -158,3 +203,5 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
     throw new Error(`LLM error: ${error instanceof Error ? error.message : String(error)}`);
   }
 }
+
+

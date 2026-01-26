@@ -1,0 +1,4 @@
+# Dirac server configuration
+llmProvider: openai 
+llmModel: gpt-4.1-2025-04-14 
+# Add other config options as needed

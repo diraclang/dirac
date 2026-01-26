@@ -96,4 +96,6 @@ export interface DiracConfig {
   maxLLMCalls?: number;
   maxDepth?: number;
   filePath?: string;  // Current file path for imports
+  llmProvider?: string;
+  llmModel?: string;
 }

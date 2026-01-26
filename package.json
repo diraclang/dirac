@@ -29,6 +29,7 @@
     "openai": "^6.16.0"
   },
   "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
     "@types/node": "^20.11.0",
     "tsup": "^8.0.1",
     "tsx": "^4.7.0",

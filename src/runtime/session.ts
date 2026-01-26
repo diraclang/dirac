@@ -4,20 +4,31 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
+import { OllamaProvider } from '../llm/ollama.js';
 import type { DiracSession, DiracConfig, Variable, Subroutine, DiracElement } from '../types/index.js';
 
 export function createSession(config: DiracConfig = {}): DiracSession {
-  const anthropicKey = config.apiKey || process.env.ANTHROPIC_API_KEY;
-  const openaiKey = process.env.OPENAI_API_KEY;
-  
-  // Prefer Anthropic if available, fallback to OpenAI
+  const anthropicKey =  process.env.ANTHROPIC_API_KEY;
+  const openaiKey = config.apiKey || process.env.OPENAI_API_KEY;
+  const llmProvider = config.llmProvider || process.env.LLM_PROVIDER;
+  const ollamaModel = config.llmModel || process.env.LLM_MODEL || 'llama2';
+
   let llmClient: any;
-  if (anthropicKey) {
-    llmClient = new Anthropic({ apiKey: anthropicKey });
-  } else if (openaiKey) {
-    llmClient = new OpenAI({ apiKey: openaiKey });
+  switch (llmProvider) {
+    case 'ollama':
+      llmClient = new OllamaProvider({ model: ollamaModel });
+      break;
+    case 'anthropic':
+      if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY required for Anthropic provider');
+      llmClient = new Anthropic({ apiKey: anthropicKey });
+      break;
+    case 'openai':
+      if (!openaiKey) throw new Error('OPENAI_API_KEY required for OpenAI provider');
+      llmClient = new OpenAI({ apiKey: openaiKey });
+      break;
+    default:
+      throw new Error('No valid LLM provider configured. Set llmProvider in config or LLM_PROVIDER env.');
   }
-  
   return {
     variables: [],
     subroutines: [],

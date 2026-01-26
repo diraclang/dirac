@@ -38,6 +38,43 @@ Example of an agentic workflow:
 <execute source="fileList"/>  <!-- LLM-generated code runs here -->
 ```
 
+
+## Neural-Symbolic AI: Bridging Symbolic Reasoning and Neural Networks
+
+Dirac is not just agentic—it’s also a natural fit for **neural-symbolic AI**. Its bra/ket-inspired knowledge representation allows you to express and connect symbolic logic and neural computation in a unified language.
+
+**Example: Aristotle’s Syllogism**
+
+- All humans are mortal.
+- Socrates is a human.
+- Therefore, Socrates is mortal.
+
+In Dirac’s bra/ket notation, this can be represented as:
+- `|mortal⟩⟨human|` (all humans are mortal)
+- `|human⟩⟨Socrates|` (Socrates is a human)
+
+When you ask `|Socrates⟩`, chaining these together yields `|mortal⟩`.
+
+From a **neural network** perspective, these bra/ket pairs are like matrices (or tensors), and the input `|Socrates⟩` is a vector. The network applies transformations—possibly nonlinear—to produce an output.
+
+From a **symbolic AI** perspective, these are like Dirac subroutines:
+```xml
+<subroutine name="human">
+  <mortal/>
+</subroutine>
+```
+Or, in Dirac’s shorthand:
+```
+<human|
+  |mortal>
+```
+
+**Dirac bridges these worlds:**  
+- As a symbolic language, it lets you define and chain logical relationships explicitly.
+- As a bridge to neural networks, it enables LLMs and other neural models to participate in these chains, providing generative, nonlinear reasoning when needed.
+
+Dirac is the missing link for building systems where **symbolic structure and neural intelligence work together**—making it ideal for the next generation of explainable, powerful AI.
+
 The LLM sees real system state, generates appropriate code, and that code executes—all in one flow.
 
 ## Key Features

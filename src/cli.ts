@@ -5,7 +5,8 @@
  */
 
 import 'dotenv/config';
-import { readFileSync } from 'fs';
+import fs from 'fs';
+import yaml from 'js-yaml';
 import { resolve, extname } from 'path';
 import { execute } from './index.js';
 import { BraKetParser } from './runtime/braket-parser.js';
@@ -33,22 +34,38 @@ async function main() {
   const config: any = {};
   let filePath: string | undefined;
   let emitXml = false;
-  
+  let configFile: string | undefined;
+
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
-    
+
     if (arg === '--debug') {
       config.debug = true;
     } else if (arg === '--emit-xml') {
       emitXml = true;
     } else if (arg === '--model' && i + 1 < args.length) {
       config.model = args[++i];
+    } else if (arg === '--provider' && i + 1 < args.length) {
+      config.llmProvider = args[++i];
+    } else if ((arg === '-f' || arg === '--config') && i + 1 < args.length) {
+      configFile = args[++i];
     } else if (arg === '--max-llm' && i + 1 < args.length) {
       config.maxLLMCalls = parseInt(args[++i], 10);
     } else if (arg === '--max-depth' && i + 1 < args.length) {
       config.maxDepth = parseInt(args[++i], 10);
     } else if (!arg.startsWith('--')) {
       filePath = arg;
+    }
+  }
+
+  // Load config from YAML file if specified
+  if (configFile) {
+    try {
+      const loadedConfig = yaml.load(fs.readFileSync(resolve(configFile), 'utf8')) || {};
+      Object.assign(config, loadedConfig);
+    } catch (err) {
+      console.error('Failed to load config file:', err);
+      process.exit(1);
     }
   }
   
@@ -59,7 +76,7 @@ async function main() {
   
   try {
     const fullPath = resolve(process.cwd(), filePath);
-    let source = readFileSync(fullPath, 'utf-8');
+    let source = fs.readFileSync(fullPath, 'utf-8');
     const ext = extname(fullPath);
     
     // Convert bra-ket notation to XML if needed

@@ -4,7 +4,7 @@
   <output>Getting file listing from ${dir}...</output>
   <output>&#10;</output>
   
-  <llm output="fileList">
+  <llm noextra="true" output="fileList">
     <system>ls -lh ${dir} | head -10</system>
     
     Above is a directory listing. Please analyze it and tell me:
