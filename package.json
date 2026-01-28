@@ -26,6 +26,7 @@
     "@anthropic-ai/sdk": "^0.30.1",
     "dotenv": "^17.2.3",
     "fast-xml-parser": "^4.3.5",
+    "js-yaml": "^4.1.1",
     "openai": "^6.16.0"
   },
   "devDependencies": {
