@@ -7,7 +7,7 @@ import type { DiracSession, DiracElement } from '../types/index.js';
 import { getCurrentParameters, emit, setVariable } from '../runtime/session.js';
 import { integrate } from '../runtime/interpreter.js';
 
-export async function executeParameters(session: DiracSession, element: DiracElement): Promise<void> {
+export async function executeParameters(session: DiracSession, element: DiracElement): Promise<string | void> {
   const select = element.attributes.select;
   
   if (!select) {
@@ -28,15 +28,19 @@ export async function executeParameters(session: DiracSession, element: DiracEle
   const caller = params[0];
   
   if (select === '*') {
-    // Select all child elements - execute them
+    // Select all child elements - execute them and RETURN output
     if (session.debug) {
       console.error(`[PARAMETERS] Selecting all children (${caller.children.length} elements)`);
     }
-    
+    // Save current output buffer
+    const prevOutput = session.output;
+    session.output = [];
     for (const child of caller.children) {
       await integrate(session, child);
     }
-    
+    const captured = session.output.join('');
+    session.output = prevOutput;
+    return captured;
   } else if (select.startsWith('@')) {
     // Select attribute(s)
     const attrName = select.slice(1); // Remove '@'
