@@ -74,7 +74,13 @@ async function main() {
     }
   }
 
-  // Load config from YAML file if specified
+  // Load config from YAML file if specified, or use ./config.yml if present
+  if (!configFile) {
+    const defaultConfigPath = resolve(process.cwd(), 'config.yml');
+    if (fs.existsSync(defaultConfigPath)) {
+      configFile = defaultConfigPath;
+    }
+  }
   if (configFile) {
     try {
       const loadedConfig = yaml.load(fs.readFileSync(resolve(configFile), 'utf8')) || {};
