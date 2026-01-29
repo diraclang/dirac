@@ -5,6 +5,7 @@
  */
 
 import 'dotenv/config';
+import pkg from '../package.json' assert { type: 'json' };
 import fs from 'fs';
 import yaml from 'js-yaml';
 import { resolve, extname } from 'path';
@@ -13,20 +14,35 @@ import { BraKetParser } from './runtime/braket-parser.js';
 
 async function main() {
   const args = process.argv.slice(2);
-  
+
+  // --help option
+  if (args.includes('--help') || args.includes('-h')) {
+    console.log('Usage: dirac <file.di|file.bk>');
+    console.log('');
+    console.log('File formats:');
+    console.log('  .di               XML notation (verbose)');
+    console.log('  .bk               Bra-ket notation (compact)');
+    console.log('');
+    console.log('Options:');
+    console.log('  --help, -h        Show this help message');
+    console.log('  --version, -v     Show version');
+    console.log('  --debug           Enable debug output');
+    console.log('  --emit-xml        Output intermediate XML (for .bk files)');
+    console.log('  --model <name>    Set default LLM model');
+    console.log('  --max-llm <n>     Maximum LLM calls (default: 100)');
+    console.log('  --max-depth <n>   Maximum recursion depth (default: 50)');
+    process.exit(0);
+  }
+
+  // --version option
+  if (args.includes('--version') || args.includes('-v')) {
+    console.log(pkg.version);
+    process.exit(0);
+  }
+
   if (args.length === 0) {
     console.error('Usage: dirac <file.di|file.bk>');
-    console.error('');
-    console.error('File formats:');
-    console.error('  .di               XML notation (verbose)');
-    console.error('  .bk               Bra-ket notation (compact)');
-    console.error('');
-    console.error('Options:');
-    console.error('  --debug           Enable debug output');
-    console.error('  --emit-xml        Output intermediate XML (for .bk files)');
-    console.error('  --model <name>    Set default LLM model');
-    console.error('  --max-llm <n>     Maximum LLM calls (default: 100)');
-    console.error('  --max-depth <n>   Maximum recursion depth (default: 50)');
+    console.error('Try dirac --help for more information.');
     process.exit(1);
   }
   
