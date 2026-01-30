@@ -30,10 +30,10 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
     : isOllama
       ? 'llama2'
       : 'claude-sonnet-4-20250514';
-  console.log('LLM Provider:', providerName);
+
 
   const model = element.attributes.model || process.env.DEFAULT_MODEL || defaultModel;
-  console.log('LLM Model:', model);
+
   const outputVar = element.attributes.output;
   const contextVar = element.attributes.context;
   const executeMode = element.attributes.execute === 'true'; // NEW: seamless execution mode

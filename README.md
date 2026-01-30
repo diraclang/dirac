@@ -230,7 +230,7 @@ We're building toward a world where:
 
 ## Community
 
-- **GitHub**: [wangzhi63/dirac](https://github.com/wangzhi63/dirac)
+- **GitHub**: [diraclang/dirac](https://github.com/diraclang/dirac)
 - **npm**: [dirac-lang](https://www.npmjs.com/package/dirac-lang)
 - **License**: MIT
 - **Status**: Active development (v0.1.0)

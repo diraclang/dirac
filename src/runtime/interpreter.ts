@@ -19,6 +19,7 @@ import { executeImport } from '../tags/import.js';
 import { executeParameters } from '../tags/parameters.js';
 import { executeExpr } from '../tags/expr.js';
 import { executeSystem } from '../tags/system.js';
+import { executeRequireModule } from '../tags/require_module.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -44,15 +45,15 @@ export async function integrate(session: DiracSession, element: DiracElement): P
     // Dispatch to tag handlers
     switch (element.tag.toLowerCase()) {
       case 'defvar':
-        executeDefvar(session, element);
+        await executeDefvar(session, element);
         break;
         
       case 'variable':
-        executeVariable(session, element);
+        await executeVariable(session, element);
         break;
         
       case 'assign':
-        executeAssign(session, element);
+        await executeAssign(session, element);
         break;
         
       case 'output':
@@ -60,7 +61,7 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         break;
         
       case 'subroutine':
-        executeSubroutine(session, element);
+        await executeSubroutine(session, element);
         break;
         
       case 'call':
@@ -101,6 +102,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'system':
         await executeSystem(session, element);
+        break;
+        
+      case 'require_module':
+        await executeRequireModule(session, element);
         break;
         
       default:
