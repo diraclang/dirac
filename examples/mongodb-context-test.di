@@ -9,13 +9,13 @@
   <defvar name="myllmcontext" />
  
   <defvar name="mongo_output" >
-  <MONGODB database="betting" collection="events" action="count">{ "type.name": "Pass" }</MONGODB>
+  <MONGODB database="betting" collection="events" action="count"  >{ }</MONGODB>
   </defvar>
 
   <output>I have : <variable name="mongo_output" />: records</output>  
 
-  <llm execute="true" context="myllmcontext"> My mongodb for database: betting, and collection events has :<variable name="mongo_output" />: records
-   can you pull a few records from it, give me the command to retrieve it </llm>
+  <llm execute="true" context="myllmcontext"> I have a mongodb, the database name is betting,\n and the collection name is events,
+   can you pull 5 records from it, give me the command to retrieve it </llm>
 
   The context was used: <variable name="myllmcontext" />
 

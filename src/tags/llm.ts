@@ -89,8 +89,7 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
     }
     systemPrompt = `Dirac is a XML based language, you define the subroutine like
 \`\`\`xml
-<subroutine name=background >
- <parameters select="@color" />
+<subroutine name=background param-color="string">
  <paint_the_color_somewhere />
 </subroutine>
 \`\`\`
@@ -100,12 +99,18 @@ then you call it like
 \`\`\`
 `;
     systemPrompt += 'Now, You are an expert Dirac XML code generator.\nAllowed Dirac XML tags (use ONLY these tags):';
-    for (const sub of subroutines) {
-      systemPrompt += `\n- <${sub.name} />: ${sub.description || ''}`;
-      if (sub.parameters && sub.parameters.length > 0) {
-        systemPrompt += ' Parameters: ' + sub.parameters.map(p => `${p.name} (${p.type || 'string'})`).join(', ');
-      }
+for (const sub of subroutines) {
+  systemPrompt += `\n- ${sub.name} : ${sub.description || ''}`;
+  systemPrompt += `\n\tEx: <${sub.name}`;
+  if (sub.parameters && sub.parameters.length > 0) {
+    for (const p of sub.parameters) {
+      systemPrompt += ` ${p.name}="${p.example || 'string'}"`;
     }
+  }
+  let example = sub.meta?.body?.example || '';
+   example = example.replace(/&quot;/g, '"').replace(/&#58;/g, ':'); 
+  systemPrompt += '>'+example+'</' + sub.name + '>';
+}
     systemPrompt += '\nDo NOT invent or use any tags not listed above. For example, do NOT use <changeBackground> or <set-background>. Only use the allowed tags.\nInstructions: Output only valid Dirac XML tags from the list above. Do not include explanations or extra text.';
     systemPrompt += '\nAfter generating your answer, check the command/tag list again and ensure every tag you use is in the list above. If any tag is not in the list, do not output it—regenerate your answer using only allowed tags.';
 

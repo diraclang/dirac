@@ -121,7 +121,8 @@ export function registerSubroutine(
   name: string, 
   element: DiracElement,
   description?: string,
-  parameters?: any[]
+  parameters?: any[],
+  meta?: Record<string, string>
 ): void {
   session.subroutines.push({
     name,
@@ -129,6 +130,7 @@ export function registerSubroutine(
     boundary: session.subBoundary,
     description,
     parameters,
+    meta,
   });
 }
 
@@ -224,5 +226,6 @@ export function getAvailableSubroutines(session: DiracSession): Array<{
     name: sub.name,
     description: sub.description,
     parameters: sub.parameters,
+    meta: sub.meta,
   }));
 }

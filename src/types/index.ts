@@ -31,6 +31,7 @@ export interface ParameterMetadata {
   required?: boolean;
   description?: string;
   enum?: string[];
+  example?: string;
 }
 
 /**
@@ -44,6 +45,7 @@ export interface Subroutine {
   // Metadata for reflection/introspection
   description?: string;
   parameters?: ParameterMetadata[];
+  meta?: Record<string, string>;
 }
 
 /**
