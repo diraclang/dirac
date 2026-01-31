@@ -71,13 +71,22 @@ async function executeCallInternal(
     children: callElement.children
   };
   
-  // Process each attribute for {variable} substitution
+  // Process each attribute for variable substitution (only for attributes)
+  function substituteAttribute(session, value) {
+    if (typeof value !== 'string') return value;
+    // Substitute both $var and ${var}
+    return value
+      .replace(/\$\{(\w+)\}/g, (match, varName) => {
+        const v = getVariable(session, varName);
+        return v !== undefined ? String(v) : match;
+      })
+      .replace(/\$(\w+)/g, (match, varName) => {
+        const v = getVariable(session, varName);
+        return v !== undefined ? String(v) : match;
+      });
+  }
   for (const [key, value] of Object.entries(callElement.attributes)) {
-    if (typeof value === 'string') {
-      substitutedElement.attributes[key] = substituteVariables(session, value);
-    } else {
-      substitutedElement.attributes[key] = value;
-    }
+    substitutedElement.attributes[key] = substituteAttribute(session, value);
   }
   
   // Push caller element onto parameter stack for <parameters select="*|@*|@attr"/> access
@@ -94,7 +103,7 @@ async function executeCallInternal(
           // Priority: call attribute > param-* default > empty string
           let value = '';
           if (callElement.attributes && callElement.attributes[paramName] !== undefined) {
-            value = callElement.attributes[paramName];
+            value = substituteAttribute(session, callElement.attributes[paramName]);
           } else {
             // Always treat last colon-separated part as default value (if >3 fields)
             const parts = attrValue.split(':');
