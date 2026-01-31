@@ -1,3 +1,6 @@
+// Utility: Substitute both $var and ${var} in a string using session variables
+import { substituteAttribute } from '../runtime/session.js';
+
 /**
  * <call> tag - invoke subroutine
  * Maps to mask_call_integrate in MASK
@@ -71,20 +74,7 @@ async function executeCallInternal(
     children: callElement.children
   };
   
-  // Process each attribute for variable substitution (only for attributes)
-  function substituteAttribute(session, value) {
-    if (typeof value !== 'string') return value;
-    // Substitute both $var and ${var}
-    return value
-      .replace(/\$\{(\w+)\}/g, (match, varName) => {
-        const v = getVariable(session, varName);
-        return v !== undefined ? String(v) : match;
-      })
-      .replace(/\$(\w+)/g, (match, varName) => {
-        const v = getVariable(session, varName);
-        return v !== undefined ? String(v) : match;
-      });
-  }
+// Utility: Substitute both $var and ${var} in a string using session variables
   for (const [key, value] of Object.entries(callElement.attributes)) {
     substitutedElement.attributes[key] = substituteAttribute(session, value);
   }

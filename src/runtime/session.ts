@@ -1,3 +1,16 @@
+// Substitute both $var and ${var} in a string using session variables
+export function substituteAttribute(session: DiracSession, value: any): string {
+  if (typeof value !== 'string') return value;
+  return value
+    .replace(/\$\{(\w+)\}/g, (match, varName) => {
+      const v = getVariable(session, varName);
+      return v !== undefined ? String(v) : match;
+    })
+    .replace(/\$(\w+)/g, (match, varName) => {
+      const v = getVariable(session, varName);
+      return v !== undefined ? String(v) : match;
+    });
+}
 /**
  * Session management - maps to MASK session functions
  */

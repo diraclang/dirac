@@ -8,8 +8,18 @@
  <output><parameters select="*" /></output>
  </subroutine>
 
- <test color="red" />
+<defvar name="index" value="1" />
 
+
+<loop count="2" var="i" >
+ i:<variable name="i" />&#10;
+ <if test="$i == 0" >
+   <test color="red" />
+</if>
+<if test="$i > 0" >
+   <test color="blue" />
+</if>
+</loop>
 
 
 </dirac>
