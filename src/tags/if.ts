@@ -4,7 +4,7 @@
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { substituteVariables, getVariable } from '../runtime/session.js';
+import { substituteVariables, getVariable, substituteAttribute } from '../runtime/session.js';
 import { integrateChildren } from '../runtime/interpreter.js';
 
 export async function executeIf(session: DiracSession, element: DiracElement): Promise<void> {
@@ -23,7 +23,8 @@ export async function executeIf(session: DiracSession, element: DiracElement): P
 
 function evaluateCondition(session: DiracSession, test: string): boolean {
   // Substitute variables first
-  const substituted = substituteVariables(session, test);
+  // Use attribute-style substitution for test condition
+  const substituted = substituteAttribute(session, test);
   
   // Simple condition evaluation (can be enhanced later)
   // Supports: ==, !=, <, >, <=, >=
@@ -33,22 +34,25 @@ function evaluateCondition(session: DiracSession, test: string): boolean {
   for (const op of operators) {
     const parts = substituted.split(op);
     if (parts.length === 2) {
-      const left = parts[0].trim();
-      const right = parts[1].trim();
-      
+      let left = parts[0], right = parts[1];
+      left = left.trim();
+      right = right.trim();
+      const leftNum = parseFloat(left);
+      const rightNum = parseFloat(right);
+      const bothNumbers = !isNaN(leftNum) && !isNaN(rightNum);
       switch (op) {
         case '==':
-          return left === right;
+          return bothNumbers ? leftNum === rightNum : left === right;
         case '!=':
-          return left !== right;
+          return bothNumbers ? leftNum !== rightNum : left !== right;
         case '<':
-          return parseFloat(left) < parseFloat(right);
+          return leftNum < rightNum;
         case '>':
-          return parseFloat(left) > parseFloat(right);
+          return leftNum > rightNum;
         case '<=':
-          return parseFloat(left) <= parseFloat(right);
+          return leftNum <= rightNum;
         case '>=':
-          return parseFloat(left) >= parseFloat(right);
+          return leftNum >= rightNum;
       }
     }
   }

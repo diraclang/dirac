@@ -64,7 +64,11 @@ export async function executeParameters(session: DiracSession, element: DiracEle
         console.error(`[PARAMETERS] Setting variable '${attrName}' = '${value}'`);
       }
       if (value !== undefined) {
-        setVariable(session, attrName, value, false);
+        // Only set variable if not already set in current boundary
+        const alreadySet = session.variables.slice(session.varBoundary).some(v => v.name === attrName);
+        if (!alreadySet) {
+          setVariable(session, attrName, value, false);
+        }
       }
       for (const child of element.children) {
         await integrate(session, child);

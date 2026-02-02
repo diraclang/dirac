@@ -1,6 +1,6 @@
 # Dirac server configuration
-llmProvider: ollama
-llmModel: llama2 
+llmProvider: ollama 
+llmModel: llama3.1:8b 
 # Add other config options as needed
 
 MONGODB_URI: "mongodb://localhost:27017"

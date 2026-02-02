@@ -39,7 +39,7 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
   const executeMode = element.attributes.execute === 'true'; // NEW: seamless execution mode
   const temperature = parseFloat(element.attributes.temperature || '1.0');
   const maxTokens = parseInt(element.attributes.maxTokens || '4096', 10);
-  
+
   // Build prompt from children or text
   let userPrompt = '';
   if (element.children.length > 0) {
@@ -59,8 +59,21 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
     throw new Error('<LLM> requires prompt content');
   }
 
+  // FIFO dialog history support
+  let dialogHistory = [];
+  if (contextVar) {
+    const existing = getVariable(session, contextVar);
+    if (Array.isArray(existing)) {
+      dialogHistory = [...existing];
+    } else if (existing) {
+      // If context is a string, treat as system message
+      dialogHistory = [{ role: 'system', content: String(existing) }];
+    }
+  }
+
   const noExtra = element.attributes.noextra === 'true';
   let prompt: string;
+  let systemPrompt = '';
   if (noExtra) {
     prompt = userPrompt;
     if (session.debug || process.env.DIRAC_LOG_PROMPT === '1') {
@@ -74,10 +87,9 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
       console.error('[LLM] Subroutines available at prompt composition:',
         subroutines.map(s => ({ name: s.name, description: s.description, parameters: s.parameters })));
     }
-    let systemPrompt = `Dirac is a XML based language, you define the subroutine like
+    systemPrompt = `Dirac is a XML based language, you define the subroutine like
 \`\`\`xml
-<subroutine name=background >
- <parameters select="@color" />
+<subroutine name=background param-color="string">
  <paint_the_color_somewhere />
 </subroutine>
 \`\`\`
@@ -87,12 +99,18 @@ then you call it like
 \`\`\`
 `;
     systemPrompt += 'Now, You are an expert Dirac XML code generator.\nAllowed Dirac XML tags (use ONLY these tags):';
-    for (const sub of subroutines) {
-      systemPrompt += `\n- <${sub.name} />: ${sub.description || ''}`;
-      if (sub.parameters && sub.parameters.length > 0) {
-        systemPrompt += ' Parameters: ' + sub.parameters.map(p => `${p.name} (${p.type || 'string'})`).join(', ');
-      }
+for (const sub of subroutines) {
+  systemPrompt += `\n- ${sub.name} : ${sub.description || ''}`;
+  systemPrompt += `\n\tEx: <${sub.name}`;
+  if (sub.parameters && sub.parameters.length > 0) {
+    for (const p of sub.parameters) {
+      systemPrompt += ` ${p.name}="${p.example || 'string'}"`;
     }
+  }
+  let example = sub.meta?.body?.example || '';
+   example = example.replace(/&quot;/g, '"').replace(/&#58;/g, ':'); 
+  systemPrompt += '>'+example+'</' + sub.name + '>';
+}
     systemPrompt += '\nDo NOT invent or use any tags not listed above. For example, do NOT use <changeBackground> or <set-background>. Only use the allowed tags.\nInstructions: Output only valid Dirac XML tags from the list above. Do not include explanations or extra text.';
     systemPrompt += '\nAfter generating your answer, check the command/tag list again and ensure every tag you use is in the list above. If any tag is not in the list, do not output it—regenerate your answer using only allowed tags.';
 
@@ -100,13 +118,11 @@ then you call it like
     if (session.debug || process.env.DIRAC_LOG_PROMPT === '1') {
       console.error('[LLM] Full prompt sent to LLM:\n' + prompt + '\n');
     }
-    // Add context if specified
-    if (contextVar) {
-      const contextValue = getVariable(session, contextVar);
-      if (contextValue) {
-        prompt = `Context: ${contextValue}\n\n${prompt}`;
-      }
-    }
+  }
+
+  // Add the full prompt as a user message to dialogHistory
+  if (contextVar) {
+    dialogHistory.push({ role: 'user', content: noExtra ? userPrompt : prompt });
   }
   
   if (session.debug) {
@@ -116,38 +132,29 @@ then you call it like
   try {
     let result: string;
     if (isOpenAI) {
-      // Call OpenAI API
+      // Call OpenAI API with full dialog history
       const response = await session.llmClient.chat.completions.create({
         model,
         max_tokens: maxTokens,
         temperature,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
+        messages: dialogHistory,
       });
       result = response.choices[0]?.message?.content || '';
     } else if (isOllama) {
-      // Call OllamaProvider
-      result = await session.llmClient.complete(prompt, {
+      // Call OllamaProvider with dialog history as joined string
+      const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
+      result = await session.llmClient.complete(ollamaPrompt, {
         model,
         temperature,
         max_tokens: maxTokens,
       });
     } else {
-      // Call Anthropic API
+      // Call Anthropic API with full dialog history
       const response = await session.llmClient.messages.create({
         model,
         max_tokens: maxTokens,
         temperature,
-        messages: [
-          {
-            role: 'user',
-            content: prompt,
-          },
-        ],
+        messages: dialogHistory,
       });
       const content = response.content[0];
       result = content.type === 'text' ? content.text : '';
@@ -157,6 +164,12 @@ then you call it like
       console.error(`[LLM] Response length: ${result.length}`);
     }
     
+    // After LLM call, append assistant response to dialogHistory and update context variable
+    if (contextVar) {
+      dialogHistory.push({ role: 'assistant', content: result });
+      setVariable(session, contextVar, dialogHistory, true);
+    }
+
     // Store in variable if requested
     if (outputVar) {
       setVariable(session, outputVar, result, false);

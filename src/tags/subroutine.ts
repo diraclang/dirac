@@ -16,14 +16,21 @@ export function executeSubroutine(session: DiracSession, element: DiracElement):
   // Extract metadata from attributes (no structural changes!)
   const description = element.attributes.description;
   const parameters: ParameterMetadata[] = [];
-  
+  const meta: Record<string, any> = {};
+
   // Parse param- prefixed attributes for metadata
-  // e.g., param-color="string:required:Color name:red|blue|green"
+  function parseMetaField(metaString: string) {
+    const parts = metaString.split(':');
+    return {
+      type: parts[0] || 'string',
+      required: parts[1] === 'required',
+      description: parts[2] || undefined,
+      example: parts[3] || undefined
+    };
+  }
   for (const [attrName, attrValue] of Object.entries(element.attributes)) {
     if (attrName.startsWith('param-')) {
-      const paramName = attrName.substring(6); // Remove "param-" prefix
-      
-      // Parse format: "type:required:description:enum1|enum2|..."
+      const paramName = attrName.substring(6);
       const parts = attrValue.split(':');
       const paramMeta: ParameterMetadata = {
         name: paramName,
@@ -31,13 +38,16 @@ export function executeSubroutine(session: DiracSession, element: DiracElement):
         required: parts[1] === 'required',
         description: parts[2] || undefined,
       };
-      
-      // Parse enum if present (after 3rd colon)
-      if (parts[3]) {
+      if (parts.length > 3 && parts[3]) {
         paramMeta.enum = parts[3].split('|');
       }
-      
+      if (parts.length > 4 && parts[4]) {
+        paramMeta.example = parts[4];
+      }
       parameters.push(paramMeta);
+    } else if (attrName.startsWith('meta-')) {
+      const metaName = attrName.substring(5);
+      meta[metaName] = parseMetaField(attrValue);
     }
   }
   
@@ -48,5 +58,13 @@ export function executeSubroutine(session: DiracSession, element: DiracElement):
     children: element.children,
   };
   
-  registerSubroutine(session, name, subroutine, description, parameters.length > 0 ? parameters : undefined);
+  // Pass meta as a field in the subroutine registry, not on the element
+  registerSubroutine(
+    session,
+    name,
+    subroutine,
+    description,
+    parameters.length > 0 ? parameters : undefined,
+    Object.keys(meta).length > 0 ? meta : undefined
+  );
 }

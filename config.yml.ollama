@@ -1,6 +1,6 @@
 # Dirac server configuration
-llmProvider: openai 
-llmModel: gpt-4.1-2025-04-14 
+llmProvider: ollama
+llmModel: llama2 
 # Add other config options as needed
 
 MONGODB_URI: "mongodb://localhost:27017"

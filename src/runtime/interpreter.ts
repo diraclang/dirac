@@ -92,9 +92,13 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         await executeImport(session, element);
         break;
         
-      case 'parameters':
-        await executeParameters(session, element);
+      case 'parameters': {
+        const result = await executeParameters(session, element);
+        if (typeof result === 'string') {
+          emit(session, result);
+        }
         break;
+      }
         
       case 'expr':
         await executeExpr(session, element);

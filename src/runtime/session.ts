@@ -1,3 +1,16 @@
+// Substitute both $var and ${var} in a string using session variables
+export function substituteAttribute(session: DiracSession, value: any): string {
+  if (typeof value !== 'string') return value;
+  return value
+    .replace(/\$\{(\w+)\}/g, (match, varName) => {
+      const v = getVariable(session, varName);
+      return v !== undefined ? String(v) : match;
+    })
+    .replace(/\$(\w+)/g, (match, varName) => {
+      const v = getVariable(session, varName);
+      return v !== undefined ? String(v) : match;
+    });
+}
 /**
  * Session management - maps to MASK session functions
  */
@@ -121,7 +134,8 @@ export function registerSubroutine(
   name: string, 
   element: DiracElement,
   description?: string,
-  parameters?: any[]
+  parameters?: any[],
+  meta?: Record<string, string>
 ): void {
   session.subroutines.push({
     name,
@@ -129,6 +143,7 @@ export function registerSubroutine(
     boundary: session.subBoundary,
     description,
     parameters,
+    meta,
   });
 }
 
@@ -160,8 +175,8 @@ export function cleanSubroutinesToBoundary(session: DiracSession): void {
 // Variable substitution (maps to var_replace functions in MASK)
 
 export function substituteVariables(session: DiracSession, text: string): string {
-  // Decode HTML entities first
-  let decoded = text
+  // Decode HTML entities only; do NOT substitute variables globally
+  return text
     .replace(/&#10;/g, '\n')
     .replace(/&#13;/g, '\r')
     .replace(/&#9;/g, '\t')
@@ -170,17 +185,6 @@ export function substituteVariables(session: DiracSession, text: string): string
     .replace(/&amp;/g, '&')
     .replace(/&quot;/g, '"')
     .replace(/&apos;/g, "'");
-  
-  // Substitute both ${var}/$var and {var} patterns
-  return decoded
-    .replace(/\$\{?(\w+)\}?/g, (match, varName) => {
-      const value = getVariable(session, varName);
-      return value !== undefined ? String(value) : match;
-    })
-    .replace(/\{(\w+)\}/g, (match, varName) => {
-      const value = getVariable(session, varName);
-      return value !== undefined ? String(value) : match;
-    });
 }
 
 // Output management
@@ -224,5 +228,6 @@ export function getAvailableSubroutines(session: DiracSession): Array<{
     name: sub.name,
     description: sub.description,
     parameters: sub.parameters,
+    meta: sub.meta,
   }));
 }

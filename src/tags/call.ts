@@ -1,3 +1,6 @@
+// Utility: Substitute both $var and ${var} in a string using session variables
+import { substituteAttribute } from '../runtime/session.js';
+
 /**
  * <call> tag - invoke subroutine
  * Maps to mask_call_integrate in MASK
@@ -71,32 +74,51 @@ async function executeCallInternal(
     children: callElement.children
   };
   
-  // Process each attribute for {variable} substitution
+// Utility: Substitute both $var and ${var} in a string using session variables
   for (const [key, value] of Object.entries(callElement.attributes)) {
-    if (typeof value === 'string') {
-      substitutedElement.attributes[key] = substituteVariables(session, value);
-    } else {
-      substitutedElement.attributes[key] = value;
-    }
+    substitutedElement.attributes[key] = substituteAttribute(session, value);
   }
   
   // Push caller element onto parameter stack for <parameters select="*|@*|@attr"/> access
   pushParameters(session, [substitutedElement]);
   
   try {
-    // Bind parameters
+    // 1. Set variables from <param-*> attributes if not already set in this boundary
+    for (const [attrName, attrValue] of Object.entries(subroutine.attributes)) {
+      if (attrName.startsWith('param-')) {
+        const paramName = attrName.substring(6);
+        // Check if variable exists in current boundary
+        const alreadySet = session.variables.slice(session.varBoundary).some(v => v.name === paramName);
+        if (!alreadySet) {
+          // Priority: call attribute > param-* default > empty string
+          let value = '';
+          if (callElement.attributes && callElement.attributes[paramName] !== undefined) {
+            value = substituteAttribute(session, callElement.attributes[paramName]);
+          } else {
+            // Always treat last colon-separated part as default value (if >3 fields)
+            const parts = attrValue.split(':');
+            if (parts.length > 3) {
+              value = parts[parts.length - 1];
+            }
+          }
+          setVariable(session, paramName, value, false);
+        }
+      }
+    }
+
+    // 2. Bind parameters from <parameters> if present
     const paramElements = callElement.children.filter(c => c.tag === 'parameters');
     if (paramElements.length > 0) {
       await bindParameters(session, subroutine, paramElements[0]);
     }
-    
-    // Execute subroutine body
+
+    // 3. Execute subroutine body
     await integrateChildren(session, subroutine);
-    
+
   } finally {
     // Pop parameter stack
     popParameters(session);
-    
+
     // Clean up scope (keep visible variables)
     session.varBoundary = oldBoundary;
     cleanToBoundary(session);

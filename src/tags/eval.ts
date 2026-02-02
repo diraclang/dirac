@@ -13,12 +13,12 @@ export async function executeEval(session: DiracSession, element: DiracElement):
   const name = element.attributes.name;
   const exprAttr = element.attributes.expr;
   
-  // Get expression - replace ${var} with var (will be passed as actual JS vars)
+  // Get expression as-is (do not replace ${var})
   let expr: string;
   if (exprAttr) {
-    expr = exprAttr.replace(/\$\{(\w+)\}/g, '$1');
+    expr = exprAttr;
   } else if (element.text) {
-    expr = element.text.replace(/\$\{(\w+)\}/g, '$1');
+    expr = element.text;
   } else {
     throw new Error('<eval> requires expr attribute or text content');
   }
