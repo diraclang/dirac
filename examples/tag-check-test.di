@@ -131,8 +131,9 @@
   -->
 
 <output>Start checking tag for a wrong tag:</output>
-<tag-check>
-  <setBackground color="red" />
+<tag-check execute="true" autocorrect="true" >
+  <background-set color="red" />
 </tag-check>
+
 
 </dirac>

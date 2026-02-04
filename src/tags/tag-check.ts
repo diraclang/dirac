@@ -58,25 +58,106 @@ async function getBestTagMatch(candidate: string, allowed: string[]): Promise<{t
 export async function executeTagCheck(session: DiracSession, element: DiracElement): Promise<void> {
   // Get allowed subroutine names
   const { getAvailableSubroutines } = await import('../runtime/session.js');
-  const allowed = new Set(getAvailableSubroutines(session).map(s => s.name));
+  const subroutines = getAvailableSubroutines(session);
+  const allowed = new Set(subroutines.map(s => s.name));
   console.error('[tag-check] Allowed subroutines:', Array.from(allowed));
+
+  const autocorrect = element.attributes?.autocorrect === "true";
+  const shouldExecute = element.attributes?.execute === "true";
 
   for (const child of element.children) {
     const tagName = child.tag;
     console.error(`[tag-check] Checking tag: <${tagName}>`);
+    let allValid = false;
+    let correctedTag: string | null = null;
+
     if (allowed.has(tagName)) {
-      console.error(`[tag-check] <${tagName}/> is valid.`);
-      emit(session, `<${tagName}/> is valid.`);
+      // Tag name is valid, now check required and unknown parameters
+      const sub = subroutines.find(s => s.name === tagName);
+      let missing: string[] = [];
+      let unknown: string[] = [];
+      let paramNames: string[] = [];
+      if (sub && Array.isArray(sub.parameters)) {
+        paramNames = sub.parameters.map(p => p.name);
+        for (const param of sub.parameters) {
+          if (param.required && !(param.name in child.attributes)) {
+            missing.push(param.name);
+          }
+        }
+        for (const attr in child.attributes) {
+          if (!paramNames.includes(attr)) {
+            unknown.push(attr);
+          }
+        }
+      }
+      if (missing.length > 0) {
+        emit(session, `<${tagName}/> is missing required parameter(s): ${missing.join(', ')}`);
+        console.error(`[tag-check] <${tagName}/> missing required: ${missing.join(', ')}`);
+      }
+      if (unknown.length > 0) {
+        emit(session, `<${tagName}/> has unknown attribute(s): ${unknown.join(', ')}`);
+        console.error(`[tag-check] <${tagName}/> unknown attributes: ${unknown.join(', ')}`);
+      }
+      if (missing.length === 0 && unknown.length === 0) {
+        emit(session, `<${tagName}/> is valid.`);
+        console.error(`[tag-check] <${tagName}/> is valid.`);
+        allValid = true;
+      }
     } else {
       // Find best semantic match
       console.error(`[tag-check] <${tagName}/> not found, searching for best match...`);
       const best = await getBestTagMatch(tagName, Array.from(allowed));
       console.error(`[tag-check] Best match: <${best.tag}> (score: ${best.score})`);
       if (best.score >= SIMILARITY_CUTOFF) {
-        emit(session, `The tag <${tagName}> does not exist. Did you mean <${best.tag}>? (similarity: ${best.score.toFixed(2)})`);
+        if (autocorrect) {
+          emit(session, `The tag <${tagName}> was auto-corrected to <${best.tag}> (similarity: ${best.score.toFixed(2)})`);
+          console.error(`[tag-check] Auto-correcting <${tagName}/> to <${best.tag}>`);
+          correctedTag = best.tag;
+          // Validate parameters for corrected tag
+          const sub = subroutines.find(s => s.name === correctedTag);
+          let missing: string[] = [];
+          let unknown: string[] = [];
+          let paramNames: string[] = [];
+          if (sub && Array.isArray(sub.parameters)) {
+            paramNames = sub.parameters.map(p => p.name);
+            for (const param of sub.parameters) {
+              if (param.required && !(param.name in child.attributes)) {
+                missing.push(param.name);
+              }
+            }
+            for (const attr in child.attributes) {
+              if (!paramNames.includes(attr)) {
+                unknown.push(attr);
+              }
+            }
+          }
+          if (missing.length > 0) {
+            emit(session, `<${correctedTag}/> is missing required parameter(s): ${missing.join(', ')}`);
+            console.error(`[tag-check] <${correctedTag}/> missing required: ${missing.join(', ')}`);
+          }
+          if (unknown.length > 0) {
+            emit(session, `<${correctedTag}/> has unknown attribute(s): ${unknown.join(', ')}`);
+            console.error(`[tag-check] <${correctedTag}/> unknown attributes: ${unknown.join(', ')}`);
+          }
+          if (missing.length === 0 && unknown.length === 0) {
+            allValid = true;
+          }
+        } else {
+          emit(session, `The tag <${tagName}> does not exist. Did you mean <${best.tag}>? (similarity: ${best.score.toFixed(2)})`);
+        }
       } else {
         emit(session, `The tag <${tagName}> does not exist and no similar tag was found.`);
       }
+    }
+    // If all checks pass and execute="true" is present, execute the child tag
+    if (allValid && shouldExecute) {
+      const executeTag = correctedTag || tagName;
+      console.error(`[tag-check] Executing <${executeTag}/> as all checks passed and execute=true.`);
+      // Create a corrected element if tag was auto-corrected
+      const elementToExecute = correctedTag ? { ...child, tag: correctedTag } : child;
+      // Dynamically import interpreter and execute the child tag
+      const { integrate } = await import('../runtime/interpreter.js');
+      await integrate(session, elementToExecute);
     }
   }
 }
