@@ -35,6 +35,23 @@ export interface ParameterMetadata {
 }
 
 /**
+ * Exception info - maps to Exception in MASK
+ */
+export interface Exception {
+  name: string;
+  dom: DiracElement;  // The exception content as a DOM element
+  isBoundary: number;  // Boundary marker for try/catch scope
+}
+
+/**
+ * Current exception container - maps to CurrentException in MASK
+ */
+export interface CurrentException {
+  size: number;
+  exceptions: DiracElement[];  // List of caught exception DOM elements
+}
+
+/**
  * Subroutine info - maps to Subroutine in MASK
  */
 export interface Subroutine {
@@ -64,6 +81,10 @@ export interface DiracSession {
   
   // Parameter stack (for subroutine calls)
   parameterStack: DiracElement[][];
+  
+  // Exception handling (for try/catch/throw)
+  exceptions: Exception[];  // Exception stack
+  currentException: CurrentException;  // Currently caught exceptions
   
   // Output buffer
   output: string[];

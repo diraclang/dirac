@@ -48,6 +48,11 @@ export function createSession(config: DiracConfig = {}): DiracSession {
     varBoundary: 0,
     subBoundary: 0,
     parameterStack: [],
+    exceptions: [],
+    currentException: {
+      size: 0,
+      exceptions: [],
+    },
     output: [],
     llmClient,
     limits: {
@@ -230,4 +235,62 @@ export function getAvailableSubroutines(session: DiracSession): Array<{
     parameters: sub.parameters,
     meta: sub.meta,
   }));
+}
+
+// Exception handling (for try/catch/throw)
+
+export function throwException(session: DiracSession, name: string, dom: DiracElement): void {
+  session.exceptions.push({
+    name,
+    dom,
+    isBoundary: 0,
+  });
+}
+
+export function setExceptionBoundary(session: DiracSession): void {
+  const size = session.exceptions.length;
+  if (size === 0) return;
+  const top = session.exceptions[size - 1];
+  top.isBoundary++;
+}
+
+export function unsetExceptionBoundary(session: DiracSession): void {
+  const size = session.exceptions.length;
+  if (size === 0) return;
+  for (let i = size - 1; i >= 0; i--) {
+    const exception = session.exceptions[i];
+    if (exception.isBoundary > 0) {
+      exception.isBoundary--;
+      break;
+    }
+  }
+}
+
+export function lookupException(session: DiracSession, name: string): number {
+  const size = session.exceptions.length;
+  if (size === 0) return 0;
+  
+  let count = 0;
+  for (let i = size - 1; i >= 0; i--) {
+    const exception = session.exceptions[i];
+    if (exception.isBoundary > 0) break;  // Stop at boundary
+    
+    if (exception.name === name) {
+      // Add to current exception list
+      session.currentException.exceptions.push(exception.dom);
+      session.currentException.size++;
+      count++;
+    }
+  }
+  
+  return count;
+}
+
+export function flushCurrentException(session: DiracSession): void {
+  session.currentException.size = 0;
+  session.currentException.exceptions = [];
+}
+
+export function getCurrentExceptions(session: DiracSession): DiracElement[] {
+  return session.currentException.exceptions;
 }
