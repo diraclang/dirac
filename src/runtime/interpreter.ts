@@ -25,6 +25,7 @@ import { executeThrow } from '../tags/throw.js';
 import { executeTry } from '../tags/try.js';
 import { executeCatch } from '../tags/catch.js';
 import { executeException } from '../tags/exception.js';
+import { executeTestIf } from '../tags/test-if.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -131,6 +132,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
 
       case 'exception':
         await executeException(session, element);
+        break;
+
+      case 'test-if':
+        await executeTestIf(session, element);
         break;
 
       case 'require_module':
