@@ -20,6 +20,7 @@ import { executeParameters } from '../tags/parameters.js';
 import { executeExpr } from '../tags/expr.js';
 import { executeSystem } from '../tags/system.js';
 import { executeRequireModule } from '../tags/require_module.js';
+import { executeTagCheck } from '../tags/tag-check.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -108,6 +109,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         await executeSystem(session, element);
         break;
         
+      case 'tag-check':
+        await executeTagCheck(session, element);
+        break;
+
       case 'require_module':
         await executeRequireModule(session, element);
         break;
