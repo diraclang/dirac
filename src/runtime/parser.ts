@@ -12,7 +12,7 @@ export class DiracParser {
     this.parser = new XMLParser({
       ignoreAttributes: false,
       attributeNamePrefix: '@_',
-      trimValues: true,
+      trimValues: false,  // Preserve whitespace in mixed content
       parseAttributeValue: false,
       parseTagValue: false,
       textNodeName: '#text',

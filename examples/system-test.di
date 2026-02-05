@@ -7,7 +7,7 @@
   
   <!-- Test 2: Command with variable substitution -->
   <defvar name="dir">examples</defvar>
-  <output>Files in ${dir}:</output>
+  <output>Files in <variable name="dir" />:</output>
   <output>&#10;</output>
-  <system>ls -la ${dir} | head -5</system>
+  <system>ls -la <variable name="dir" /> | head -50</system>
 </dirac>
