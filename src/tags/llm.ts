@@ -50,11 +50,11 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
     }
     // Collect output from children
     const childOutput = session.output.slice(beforeOutput);
-    userPrompt = childOutput.join('');
+    userPrompt = childOutput.join('').trim();
     // Remove child output from main output
     session.output = session.output.slice(0, beforeOutput);
   } else if (element.text) {
-    userPrompt = substituteVariables(session, element.text);
+    userPrompt = substituteVariables(session, element.text).trim();
   } else {
     throw new Error('<LLM> requires prompt content');
   }
