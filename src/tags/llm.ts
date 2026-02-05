@@ -121,12 +121,11 @@ for (const sub of subroutines) {
   }
 
   // Add the full prompt as a user message to dialogHistory
-  if (contextVar) {
-    dialogHistory.push({ role: 'user', content: noExtra ? userPrompt : prompt });
-  }
+  dialogHistory.push({ role: 'user', content: noExtra ? userPrompt : prompt });
   
   if (session.debug) {
     console.error(`[LLM] Calling ${model} with prompt length: ${prompt.length}`);
+    console.error(`[LLM] Dialog history length: ${dialogHistory.length} messages`);
   }
   
   try {
