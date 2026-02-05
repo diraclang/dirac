@@ -1,6 +1,6 @@
 {
   "name": "dirac-lang",
-  "version": "0.1.7",
+  "version": "0.1.9",
   "description": "LLM-Augmented Declarative Execution",
   "type": "module",
   "main": "dist/index.js",
@@ -10,8 +10,9 @@
   },
   "scripts": {
     "dev": "tsx src/cli.ts",
-    "build": "tsup src/index.ts src/cli.ts --format esm --dts --clean",
-    "test": "vitest",
+    "build": "tsup src/index.ts src/cli.ts src/test-runner.ts --format esm --dts --clean",
+    "test": "npm run build && node dist/test-runner.js tests",
+    "test:watch": "npm run build && node dist/test-runner.js tests --watch",
     "typecheck": "tsc --noEmit"
   },
   "keywords": [
