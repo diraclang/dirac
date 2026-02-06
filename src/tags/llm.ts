@@ -111,8 +111,13 @@ for (const sub of subroutines) {
    example = example.replace(/&quot;/g, '"').replace(/&#58;/g, ':'); 
   systemPrompt += '>'+example+'</' + sub.name + '>';
 }
-    systemPrompt += '\nDo NOT invent or use any tags not listed above. For example, do NOT use <changeBackground> or <set-background>. Only use the allowed tags.\nInstructions: Output only valid Dirac XML tags from the list above. Do not include explanations or extra text.';
-    systemPrompt += '\nAfter generating your answer, check the command/tag list again and ensure every tag you use is in the list above. If any tag is not in the list, do not output it—regenerate your answer using only allowed tags.';
+    systemPrompt += '\n\nIMPORTANT INSTRUCTIONS:';
+    systemPrompt += '\n1. Output ONLY valid XML tags from the list above';
+    systemPrompt += '\n2. Do NOT include any explanations, descriptions, or extra text';
+    systemPrompt += '\n3. Do NOT use bullet points or formatting - just pure XML';
+    systemPrompt += '\n4. Do NOT invent tags - only use tags from the list above';
+    systemPrompt += '\n5. Start your response directly with the XML tag (e.g., <add ...>)';
+    systemPrompt += '\n\nDouble-check: Does your response contain ONLY XML tags? If not, remove all non-XML text.';
 
     prompt = systemPrompt + '\nUser: ' + userPrompt + '\nOutput:';
     if (session.debug || process.env.DIRAC_LOG_PROMPT === '1') {
@@ -177,56 +182,164 @@ for (const sub of subroutines) {
       const validateTags = element.attributes['validate'] === 'true';
       const autocorrect = element.attributes['autocorrect'] === 'true';
       const maxRetries = parseInt(element.attributes['max-retries'] || '0', 10);
+      const feedbackMode = element.attributes['feedback'] === 'true';
+      const maxIterations = parseInt(element.attributes['max-iterations'] || '3', 10);
+      const replaceTick = element.attributes['replace-tick'] === 'true';
       
       if (session.debug) {
         console.error(`[LLM] Executing response as Dirac code:\n${result}\n`);
         if (validateTags) {
           console.error(`[LLM] Tag validation enabled (autocorrect: ${autocorrect}, max-retries: ${maxRetries})`);
         }
-      }
-
-      // Only replace triple backtick code blocks if replace-tick="true" is set
-      const replaceTick = element.attributes['replace-tick'] === 'true';
-      let diracCode = result.trim();
-      if (replaceTick && diracCode.startsWith('```')) {
-        // Check for bash, xml, html, dirac, or no language
-        const match = diracCode.match(/^```(\w+)?\n?/m);
-        if (match && match[1] === 'bash') {
-          // Find closing triple backticks
-          const endIdx = diracCode.indexOf('```', 3);
-          let bashContent = diracCode.slice(match[0].length, endIdx).trim();
-          diracCode = `<system>${bashContent}</system>`;
-        } else {
-          // Remove opening and closing backticks for xml/html/dirac/none
-          diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
+        if (feedbackMode) {
+          console.error(`[LLM] Feedback mode enabled (max iterations: ${maxIterations})`);
         }
       }
+
+      // Feedback loop: execute, capture output, send back to LLM, repeat
+      let iteration = 0;
       
-      try {
-        // Parse the LLM's output as Dirac code
-        const parser = new DiracParser();
-        let dynamicAST = parser.parse(diracCode);
+      while (iteration < maxIterations && (iteration === 0 || feedbackMode)) {
+        iteration++;
+        if (session.debug && feedbackMode) {
+          console.error(`[LLM] Feedback iteration ${iteration}/${maxIterations}`);
+        }
         
-        // Validate tags if requested
-        if (validateTags) {
-          const { validateDiracCode, applyCorrectedTags } = await import('../utils/tag-validator.js');
-          let validation = await validateDiracCode(session, dynamicAST, { autocorrect });
-          let retryCount = 0;
+        // Only replace triple backtick code blocks if replace-tick="true" is set
+        let diracCode = result.trim();
+        if (replaceTick && diracCode.startsWith('```')) {
+          // Check for bash, xml, html, dirac, or no language
+          const match = diracCode.match(/^```(\w+)?\n?/m);
+          if (match && match[1] === 'bash') {
+            // Find closing triple backticks
+            const endIdx = diracCode.indexOf('```', 3);
+            let bashContent = diracCode.slice(match[0].length, endIdx).trim();
+            diracCode = `<system>${bashContent}</system>`;
+          } else {
+            // Remove opening and closing backticks for xml/html/dirac/none
+            diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
+          }
+        }
+        
+        // Capture output before execution (for feedback)
+        const outputBefore = feedbackMode ? session.output.slice() : [];
+        
+        try {
+          // Parse the LLM's output as Dirac code
+          const parser = new DiracParser();
+          let dynamicAST = parser.parse(diracCode);
           
-          while (!validation.valid && retryCount < maxRetries) {
-            retryCount++;
-            if (session.debug) {
-              console.error(`[LLM] Validation failed (attempt ${retryCount}/${maxRetries}):`, validation.errorMessages);
+          // Validate tags if requested
+          if (validateTags) {
+            const { validateDiracCode, applyCorrectedTags } = await import('../utils/tag-validator.js');
+            let validation = await validateDiracCode(session, dynamicAST, { autocorrect });
+            let retryCount = 0;
+            
+            while (!validation.valid && retryCount < maxRetries) {
+              retryCount++;
+              if (session.debug) {
+                console.error(`[LLM] Validation failed (attempt ${retryCount}/${maxRetries}):`, validation.errorMessages);
+              }
+              
+              // Build error feedback for LLM
+              const errorFeedback = validation.errorMessages.join('\n');
+              const retryPrompt = `Your previous response had the following errors:\n${errorFeedback}\n\nPlease fix these errors and generate valid Dirac XML again. Remember to only use the allowed tags.`;
+              
+              // Add error feedback to dialog history
+              dialogHistory.push({ role: 'user', content: retryPrompt });
+              
+              // Retry LLM call
+              if (isOpenAI) {
+                const response = await session.llmClient.chat.completions.create({
+                  model,
+                  max_tokens: maxTokens,
+                  temperature,
+                  messages: dialogHistory,
+                });
+                result = response.choices[0]?.message?.content || '';
+              } else if (isOllama) {
+                const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
+                result = await session.llmClient.complete(ollamaPrompt, {
+                  model,
+                  temperature,
+                  max_tokens: maxTokens,
+                });
+              } else {
+                const response = await session.llmClient.messages.create({
+                  model,
+                  max_tokens: maxTokens,
+                  temperature,
+                  messages: dialogHistory,
+                });
+                const content = response.content[0];
+                result = content.type === 'text' ? content.text : '';
+              }
+              
+              // Add new response to dialog history
+              dialogHistory.push({ role: 'assistant', content: result });
+              
+              // Update context variable if present
+              if (contextVar) {
+                setVariable(session, contextVar, dialogHistory, true);
+              }
+              
+              if (session.debug) {
+                console.error(`[LLM] Retry ${retryCount} response:\n${result}\n`);
+              }
+              
+              // Clean up and parse the new response
+              diracCode = result.trim();
+              if (replaceTick && diracCode.startsWith('```')) {
+                const match = diracCode.match(/^```(\w+)?\n?/m);
+                if (match && match[1] === 'bash') {
+                  const endIdx = diracCode.indexOf('```', 3);
+                  let bashContent = diracCode.slice(match[0].length, endIdx).trim();
+                  diracCode = `<system>${bashContent}</system>`;
+                } else {
+                  diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
+                }
+              }
+              
+              dynamicAST = parser.parse(diracCode);
+              validation = await validateDiracCode(session, dynamicAST, { autocorrect });
             }
             
-            // Build error feedback for LLM
-            const errorFeedback = validation.errorMessages.join('\n');
-            const retryPrompt = `Your previous response had the following errors:\n${errorFeedback}\n\nPlease fix these errors and generate valid Dirac XML again. Remember to only use the allowed tags.`;
+            if (!validation.valid) {
+              throw new Error(`Tag validation failed after ${maxRetries} retries:\n${validation.errorMessages.join('\n')}`);
+            }
             
-            // Add error feedback to dialog history
-            dialogHistory.push({ role: 'user', content: retryPrompt });
+            // Apply auto-corrections if enabled
+            if (autocorrect) {
+              dynamicAST = applyCorrectedTags(dynamicAST, validation.results);
+              if (session.debug) {
+                console.error('[LLM] Applied auto-corrections to tags');
+              }
+            }
+          }
+          
+          // Execute the validated (and possibly corrected) code
+          await integrate(session, dynamicAST);
+          
+          // If feedback mode, capture execution output and send back to LLM
+          if (feedbackMode) {
+            const outputAfter = session.output.slice();
+            const executionOutput = outputAfter.slice(outputBefore.length).join('');
             
-            // Retry LLM call
+            if (session.debug) {
+              console.error(`[LLM] Execution output (${executionOutput.length} chars):\n${executionOutput}\n`);
+            }
+            
+            // Build feedback prompt
+            const feedbackPrompt = `The code executed successfully. Here is the output:\n\`\`\`\n${executionOutput}\n\`\`\`\n\nPlease review the output carefully. If the output is correct and complete, respond with ONLY the word "DONE" and nothing else. If the output is incorrect or incomplete, generate corrected Dirac XML code.`;
+            
+            if (session.debug) {
+              console.error(`[LLM] Feedback prompt:\n${feedbackPrompt}\n`);
+            }
+            
+            // Add feedback to dialog history
+            dialogHistory.push({ role: 'user', content: feedbackPrompt });
+            
+            // Get LLM's assessment
             if (isOpenAI) {
               const response = await session.llmClient.chat.completions.create({
                 model,
@@ -253,7 +366,7 @@ for (const sub of subroutines) {
               result = content.type === 'text' ? content.text : '';
             }
             
-            // Add new response to dialog history
+            // Add response to dialog history
             dialogHistory.push({ role: 'assistant', content: result });
             
             // Update context variable if present
@@ -262,48 +375,33 @@ for (const sub of subroutines) {
             }
             
             if (session.debug) {
-              console.error(`[LLM] Retry ${retryCount} response:\n${result}\n`);
+              console.error(`[LLM] Feedback response:\n${result}\n`);
             }
             
-            // Clean up and parse the new response
-            diracCode = result.trim();
-            if (replaceTick && diracCode.startsWith('```')) {
-              const match = diracCode.match(/^```(\w+)?\n?/m);
-              if (match && match[1] === 'bash') {
-                const endIdx = diracCode.indexOf('```', 3);
-                let bashContent = diracCode.slice(match[0].length, endIdx).trim();
-                diracCode = `<system>${bashContent}</system>`;
-              } else {
-                diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
+            // Check if LLM says we're done (check at start of response)
+            const responseStart = result.trim().substring(0, 100).toUpperCase();
+            if (responseStart.startsWith('DONE') || result.trim().toLowerCase().includes('looks correct') || result.trim().toLowerCase().includes('looks good')) {
+              if (session.debug) {
+                console.error(`[LLM] Feedback loop terminating - LLM indicated completion\n`);
               }
+              break;
             }
             
-            dynamicAST = parser.parse(diracCode);
-            validation = await validateDiracCode(session, dynamicAST, { autocorrect });
+            // Otherwise, continue to next iteration with new LLM response
+          } else {
+            // No feedback mode, exit after first execution
+            break;
           }
           
-          if (!validation.valid) {
-            throw new Error(`Tag validation failed after ${maxRetries} retries:\n${validation.errorMessages.join('\n')}`);
+        } catch (parseError) {
+          // If parsing fails, treat as plain text
+          if (session.debug) {
+            console.error(`[LLM] Failed to parse as Dirac, treating as text: ${parseError}`);
           }
-          
-          // Apply auto-corrections if enabled
-          if (autocorrect) {
-            dynamicAST = applyCorrectedTags(dynamicAST, validation.results);
-            if (session.debug) {
-              console.error('[LLM] Applied auto-corrections to tags');
-            }
-          }
+          emit(session, result);
+          break; // Exit feedback loop on parse error
         }
-        
-        // Execute the validated (and possibly corrected) code
-        await integrate(session, dynamicAST);
-      } catch (parseError) {
-        // If parsing fails, treat as plain text
-        if (session.debug) {
-          console.error(`[LLM] Failed to parse as Dirac, treating as text: ${parseError}`);
-        }
-        emit(session, result);
-      }
+      } // end while loop
     } else {
       // Otherwise emit to output as text
       emit(session, result);
