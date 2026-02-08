@@ -9,6 +9,7 @@ import { substituteAttribute } from '../runtime/session.js';
 import type { DiracSession, DiracElement } from '../types/index.js';
 import { 
   getSubroutine, 
+  getParentSubroutine,
   setBoundary, 
   popToBoundary,
   cleanToBoundary,
@@ -43,29 +44,102 @@ export async function executeCall(session: DiracSession, element: DiracElement):
     throw new Error(`Subroutine '${name}' not found`);
   }
   
-  // Handle extension (parent subroutine)
-  const extendsName = subroutine.attributes.extends;
-  if (extendsName) {
-    const parent = getSubroutine(session, extendsName);
-    if (parent) {
-      // Call parent first
-      await executeCallInternal(session, parent, element);
+  // Handle extension (parent subroutine) using recursive descent
+  const extendAttr = subroutine.attributes.extend;
+  const extendsAttr = subroutine.attributes.extends;
+  
+  if (extendAttr !== undefined || extendsAttr !== undefined) {
+    // This subroutine extends another - use recursive descent to build stack
+    const baseSubroutine = await registerExtendChain(session, subroutine, name);
+    // Execute the ultimate base subroutine with extend flag set
+    await executeCallInternal(session, baseSubroutine, element, true);
+  } else {
+    // No extension - normal subroutine call
+    await executeCallInternal(session, subroutine, element, false);
+  }
+}
+
+/**
+ * Recursive descent for extend mechanism:
+ * 1. Recursively descend to ultimate parent (no extend)
+ * 2. Register base's nested subroutines
+ * 3. As recursion unwinds, register each level's subroutines (latest on top of stack)
+ * 4. Return the ultimate base to be executed
+ */
+async function registerExtendChain(
+  session: DiracSession,
+  subroutine: DiracElement,
+  currentName: string
+): Promise<DiracElement> {
+  const { executeSubroutine } = await import('./subroutine.js');
+  
+  // Determine parent name
+  const extendsAttr = subroutine.attributes.extends;
+  let parentName: string;
+  
+  if (extendsAttr) {
+    // extends="parentName" - use explicit parent name
+    parentName = extendsAttr;
+  } else {
+    // extend (no value) - use same name, search for earlier definition
+    parentName = currentName;
+  }
+  
+  // Get parent, skipping current definition if using same name
+  const parent = getParentSubroutine(session, parentName, parentName === currentName);
+  
+  if (!parent) {
+    // No parent found - shouldn't happen, but handle gracefully
+    return subroutine;
+  }
+  
+  // Check if parent also extends
+  const parentExtendAttr = parent.attributes.extend;
+  const parentExtendsAttr = parent.attributes.extends;
+  
+  let baseSubroutine: DiracElement;
+  
+  if (parentExtendAttr !== undefined || parentExtendsAttr !== undefined) {
+    // Parent extends - recursively process parent first
+    baseSubroutine = await registerExtendChain(session, parent, parentName);
+  } else {
+    // Parent doesn't extend - this is the ultimate base
+    // Register base's nested subroutines (bottom of stack)
+    for (const child of parent.children) {
+      if (child.tag === 'subroutine') {
+        executeSubroutine(session, child);
+      }
+    }
+    baseSubroutine = parent;
+  }
+  
+  // After parent chain is processed, register current level's nested subroutines
+  // These go on top and override parent's definitions
+  for (const child of subroutine.children) {
+    if (child.tag === 'subroutine') {
+      executeSubroutine(session, child);
     }
   }
   
-  // Call this subroutine
-  await executeCallInternal(session, subroutine, element);
+  return baseSubroutine;
 }
 
 async function executeCallInternal(
   session: DiracSession, 
   subroutine: DiracElement,
-  callElement: DiracElement
+  callElement: DiracElement,
+  isExtendExecution: boolean = false
 ): Promise<void> {
   // Set boundary for local scope
   const oldBoundary = setBoundary(session);
   const wasReturn = session.isReturn;
   session.isReturn = false;
+  
+  // For extend execution, skip subroutine registration during body execution
+  const oldSkipFlag = session.skipSubroutineRegistration;
+  if (isExtendExecution) {
+    session.skipSubroutineRegistration = true;
+  }
   
   // Substitute variables in call element attributes before pushing to parameter stack
   const substitutedElement: DiracElement = {
@@ -116,6 +190,9 @@ async function executeCallInternal(
     await integrateChildren(session, subroutine);
 
   } finally {
+    // Restore skip flag
+    session.skipSubroutineRegistration = oldSkipFlag;
+    
     // Pop parameter stack
     popParameters(session);
 

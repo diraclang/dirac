@@ -63,6 +63,7 @@ export function createSession(config: DiracConfig = {}): DiracSession {
     },
     isReturn: false,
     isBreak: false,
+    skipSubroutineRegistration: false,
     debug: config.debug || false,
   };
 }
@@ -156,6 +157,34 @@ export function getSubroutine(session: DiracSession, name: string): DiracElement
   // Search from end (most recent) to beginning
   for (let i = session.subroutines.length - 1; i >= 0; i--) {
     if (session.subroutines[i].name === name) {
+      return session.subroutines[i].element;
+    }
+  }
+  return undefined;
+}
+
+export function getParentSubroutine(
+  session: DiracSession, 
+  name: string, 
+  currentElement?: DiracElement
+): DiracElement | undefined {
+  // Search from end, finding parent of currentElement
+  // If currentElement provided, skip until we find it, then return next match
+  // If not provided, just return most recent
+  
+  let foundCurrent = currentElement === undefined;
+  
+  for (let i = session.subroutines.length - 1; i >= 0; i--) {
+    if (session.subroutines[i].name === name) {
+      if (!foundCurrent) {
+        // Check if this is the current element
+        if (session.subroutines[i].element === currentElement) {
+          foundCurrent = true;
+          continue; // Skip current, look for parent
+        }
+        continue; // Not current yet, keep searching
+      }
+      // Found current, this is the parent
       return session.subroutines[i].element;
     }
   }
