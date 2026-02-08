@@ -1,6 +1,6 @@
 # Dirac server configuration
 llmProvider: ollama 
-llmModel: deepseek-r1:8b 
+llmModel: llama3.2:3b 
 
 embeddingServer:
  host: "localhost"
