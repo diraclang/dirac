@@ -85,8 +85,8 @@ async function registerExtendChain(
     parentName = currentName;
   }
   
-  // Get parent, skipping current definition if using same name
-  const parent = getParentSubroutine(session, parentName, parentName === currentName);
+  // Get parent, passing current subroutine if using same name
+  const parent = getParentSubroutine(session, parentName, parentName === currentName ? subroutine : undefined);
   
   if (!parent) {
     // No parent found - shouldn't happen, but handle gracefully
