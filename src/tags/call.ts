@@ -135,6 +135,10 @@ async function executeCallInternal(
   const wasReturn = session.isReturn;
   session.isReturn = false;
   
+  // Track current subroutine name for available-subroutines
+  const oldSubroutineName = session.currentSubroutineName;
+  session.currentSubroutineName = callElement.tag;
+  
   // For extend execution, skip subroutine registration during body execution
   const oldSkipFlag = session.skipSubroutineRegistration;
   if (isExtendExecution) {

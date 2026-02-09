@@ -106,6 +106,7 @@ export interface DiracSession {
   
   // Extend mechanism
   skipSubroutineRegistration: boolean;
+  currentSubroutineName?: string;  // Track currently executing subroutine for available-subroutines
   
   // Debugging
   debug: boolean;

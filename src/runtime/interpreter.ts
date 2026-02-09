@@ -27,6 +27,8 @@ import { executeCatch } from '../tags/catch.js';
 import { executeException } from '../tags/exception.js';
 import { executeTestIf } from '../tags/test-if.js';
 import { executeAvailableSubroutines } from '../tags/available-subroutines.js';
+import { executeForeach } from '../tags/foreach.js';
+import { executeAttr } from '../tags/attr.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -141,6 +143,14 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'available-subroutines':
         await executeAvailableSubroutines(session, element);
+        break;
+        
+      case 'foreach':
+        await executeForeach(session, element);
+        break;
+        
+      case 'attr':
+        await executeAttr(session, element);
         break;
 
       case 'require_module':
