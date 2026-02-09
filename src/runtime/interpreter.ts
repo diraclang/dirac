@@ -147,6 +147,15 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         await executeRequireModule(session, element);
         break;
         
+      case 'dirac':
+      case 'DIRAC-ROOT':
+        // Container tags - just execute children
+        for (const child of element.children) {
+          await integrate(session, child);
+          if (session.isReturn || session.isBreak) break;
+        }
+        break;
+        
       default:
         // Unknown tag - check if it's a subroutine name
         const subroutine = getSubroutine(session, element.tag);
