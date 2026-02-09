@@ -7,6 +7,11 @@ import type { DiracSession, DiracElement, ParameterMetadata } from '../types/ind
 import { registerSubroutine } from '../runtime/session.js';
 
 export function executeSubroutine(session: DiracSession, element: DiracElement): void {
+  // Skip registration if we're in extend mode (nested subroutines already registered)
+  if (session.skipSubroutineRegistration) {
+    return;
+  }
+  
   const name = element.attributes.name;
   
   if (!name) {

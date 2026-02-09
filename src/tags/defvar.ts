@@ -14,6 +14,7 @@ export async function executeDefvar(session: DiracSession, element: DiracElement
   const valueAttr = element.attributes.value;
   const visibleAttr = element.attributes.visible || 'false';
   const literal = 'literal' in element.attributes;
+  const trim = 'trim' in element.attributes; // Support trim attribute to remove leading/trailing whitespace
 
   if (!name) {
     throw new Error('<defvar> requires name attribute');
@@ -50,6 +51,11 @@ export async function executeDefvar(session: DiracSession, element: DiracElement
     value = substituteVariables(session, element.text);
   } else {
     value = '';
+  }
+
+  // Apply trim if requested
+  if (trim && typeof value === 'string') {
+    value = value.trim();
   }
 
   setVariable(session, name, value, visible);

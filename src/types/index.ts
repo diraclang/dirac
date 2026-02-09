@@ -104,6 +104,9 @@ export interface DiracSession {
   isReturn: boolean;
   isBreak: boolean;
   
+  // Extend mechanism
+  skipSubroutineRegistration: boolean;
+  
   // Debugging
   debug: boolean;
   
