@@ -5,3 +5,5 @@ dist/
 .env.local
 .env.bak
 .DS_Store
+config.yml
+config.yml.*

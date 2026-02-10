@@ -1,9 +1,6 @@
 # Dirac server configuration
-llmProvider: ollama 
-llmModel: llama3.2:3b 
-
-embeddingServer:
- host: "localhost"
- port: 11434
+llmProvider: anthropic 
+llmModel: claude-sonnet-4-20250514
+# Add other config options as needed
 
 MONGODB_URI: "mongodb://localhost:27017"
