@@ -1,6 +1,12 @@
 # Dirac server configuration
 llmProvider: anthropic 
 llmModel: claude-sonnet-4-20250514
-# Add other config options as needed
 
+# Embedding server configuration (for tag-check similarity matching)
+embeddingServer:
+  host: localhost
+  port: 11434  # Default Ollama port
+  model: embeddinggemma  # Ollama embedding model (also: nomic-embed-text, mxbai-embed-large, all-minilm, etc.)
+
+# MongoDB configuration
 MONGODB_URI: "mongodb://localhost:27017"

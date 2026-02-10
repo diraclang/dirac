@@ -33,10 +33,10 @@ export class TestRunner {
   constructor(testDir: string = 'tests', configPath?: string) {
     this.testDir = testDir;
     
-    // Load default config
-    const defaultConfigPath = configPath || path.resolve(process.cwd(), 'config.yml');
-    if (fs.existsSync(defaultConfigPath)) {
-      this.config = yaml.load(fs.readFileSync(defaultConfigPath, 'utf8')) || {};
+    // For tests, always use ollama as the default provider (no API keys needed)
+    // Unless a specific test config is provided
+    if (configPath && fs.existsSync(configPath)) {
+      this.config = yaml.load(fs.readFileSync(configPath, 'utf8')) || {};
     } else {
       this.config = { llmProvider: 'ollama', llmModel: 'llama2' };
     }
