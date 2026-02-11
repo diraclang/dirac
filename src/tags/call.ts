@@ -200,9 +200,9 @@ async function executeCallInternal(
     // Pop parameter stack
     popParameters(session);
 
-    // Clean up scope (keep visible variables)
-    session.varBoundary = oldBoundary;
+    // Clean up scope (keep visible variables) BEFORE restoring boundary
     cleanToBoundary(session);
+    session.varBoundary = oldBoundary;
     session.isReturn = wasReturn;
   }
 }
