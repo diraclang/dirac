@@ -1,6 +1,6 @@
 {
   "name": "dirac-lang",
-  "version": "0.1.18",
+  "version": "0.1.19",
   "description": "LLM-Augmented Declarative Execution",
   "type": "module",
   "main": "dist/index.js",
