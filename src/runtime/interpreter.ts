@@ -26,6 +26,9 @@ import { executeTry } from '../tags/try.js';
 import { executeCatch } from '../tags/catch.js';
 import { executeException } from '../tags/exception.js';
 import { executeTestIf } from '../tags/test-if.js';
+import { executeAvailableSubroutines } from '../tags/available-subroutines.js';
+import { executeForeach } from '../tags/foreach.js';
+import { executeAttr } from '../tags/attr.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -137,9 +140,30 @@ export async function integrate(session: DiracSession, element: DiracElement): P
       case 'test-if':
         await executeTestIf(session, element);
         break;
+        
+      case 'available-subroutines':
+        await executeAvailableSubroutines(session, element);
+        break;
+        
+      case 'foreach':
+        await executeForeach(session, element);
+        break;
+        
+      case 'attr':
+        await executeAttr(session, element);
+        break;
 
       case 'require_module':
         await executeRequireModule(session, element);
+        break;
+        
+      case 'dirac':
+      case 'DIRAC-ROOT':
+        // Container tags - just execute children
+        for (const child of element.children) {
+          await integrate(session, child);
+          if (session.isReturn || session.isBreak) break;
+        }
         break;
         
       default:

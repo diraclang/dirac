@@ -1,5 +1,6 @@
 <!-- TEST: parameters_basic -->
-<!-- This test requires HTTP request context, skipping for unit tests -->
+<!-- EXPECT: Skipped -->
 <dirac>
+  <!-- This test requires HTTP request context, skipped for now -->
   <output>Skipped</output>
 </dirac>

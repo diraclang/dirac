@@ -15,20 +15,27 @@ const SIMILARITY_CUTOFF = 0.75;
 
 // Helper: get embedding server config from config.yml
 function getEmbeddingServerConfig() {
-  const config = yaml.load(fs.readFileSync('config.yml', 'utf8')) as any;
-  const host = config.embeddingServer?.host || 'localhost';
-  const port = config.embeddingServer?.port || 11435;
-  return { host, port };
+  try {
+    const configPath = process.env.DIRAC_CONFIG || 'config.yml';
+    const config = yaml.load(fs.readFileSync(configPath, 'utf8')) as any;
+    const host = config.embeddingServer?.host || 'localhost';
+    const port = config.embeddingServer?.port || 11434;
+    const model = config.embeddingServer?.model || 'embeddinggemma';
+    return { host, port, model };
+  } catch (e) {
+    // Fallback to defaults if config file not found
+    return { host: 'localhost', port: 11434, model: 'embeddinggemma' };
+  }
 }
 
 // Helper: call Ollama embedding API directly
 async function getEmbeddings(tags: string[]): Promise<number[][]> {
-  const { host, port } = getEmbeddingServerConfig();
+  const { host, port, model } = getEmbeddingServerConfig();
   return await Promise.all(tags.map(async tag => {
     const response = await fetch(`http://${host}:${port}/api/embeddings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'embeddinggemma', prompt: tag })
+      body: JSON.stringify({ model, prompt: tag })
     });
     const data = await response.json();
     return data.embedding;
@@ -67,6 +74,12 @@ export async function executeTagCheck(session: DiracSession, element: DiracEleme
 
   for (const child of element.children) {
     const tagName = child.tag;
+    
+    // Skip text nodes (empty tag names) and whitespace
+    if (!tagName || tagName.trim() === '') {
+      continue;
+    }
+    
     console.error(`[tag-check] Checking tag: <${tagName}>`);
     let allValid = false;
     let correctedTag: string | null = null;

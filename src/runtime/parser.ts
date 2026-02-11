@@ -28,6 +28,10 @@ export class DiracParser {
       source = source.replace(/^#!.*\n/, '');
     }
     
+    // Always wrap in DIRAC-ROOT to ensure valid XML with single root
+    // This allows files with comments, multiple elements, or no root
+    source = `<DIRAC-ROOT>\n${source}\n</DIRAC-ROOT>`;
+    
     const result = this.parser.parse(source);
     // With preserveOrder, result is an array
     if (!Array.isArray(result) || result.length === 0) {

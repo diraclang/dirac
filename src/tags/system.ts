@@ -5,7 +5,7 @@
 
 import type { DiracSession, DiracElement } from '../types/index.js';
 import { substituteVariables, emit } from '../runtime/session.js';
-import { exec } from 'child_process';
+import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { integrate } from '../runtime/interpreter.js';
 
@@ -43,10 +43,33 @@ export async function executeSystem(session: DiracSession, element: DiracElement
     return;
   }
   
+  // Check for background attribute
+  const backgroundAttr = element.attributes?.background;
+  const isBackground = backgroundAttr === 'true';
+  
   if (session.debug) {
-    console.error(`[SYSTEM] Executing: ${command}`);
+    console.error(`[SYSTEM] Executing${isBackground ? ' (background)' : ''}: ${command}`);
   }
   
+  // Background mode - spawn and don't wait
+  if (isBackground) {
+    const child = spawn(command, {
+      detached: true,
+      stdio: 'ignore',
+      shell: true,
+    });
+    
+    // Unref so parent can exit without waiting
+    child.unref();
+    
+    if (session.debug) {
+      console.error(`[SYSTEM] Background process started with PID: ${child.pid}`);
+    }
+    
+    return;
+  }
+  
+  // Foreground mode - wait for completion (original behavior)
   try {
     const { stdout, stderr } = await execAsync(command, {
       encoding: 'utf-8',

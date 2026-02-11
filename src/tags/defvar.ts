@@ -14,7 +14,8 @@ export async function executeDefvar(session: DiracSession, element: DiracElement
   const valueAttr = element.attributes.value;
   const visibleAttr = element.attributes.visible || 'false';
   const literal = 'literal' in element.attributes;
-  const trim = 'trim' in element.attributes; // Support trim attribute to remove leading/trailing whitespace
+  const trimAttr = element.attributes.trim;
+  const trim = trimAttr !== 'false'; // Trim by default unless explicitly set to false
 
   if (!name) {
     throw new Error('<defvar> requires name attribute');
@@ -27,8 +28,10 @@ export async function executeDefvar(session: DiracSession, element: DiracElement
   if (valueAttr !== undefined) {
     value = substituteVariables(session, valueAttr);
   } else if (literal) {
-    // Literal mode: take text or XML as-is
-    if (element.text) {
+    // Literal mode: serialize children to XML text without executing
+    if (element.children && element.children.length > 0) {
+      value = serializeToXml(element.children);
+    } else if (element.text) {
       value = substituteVariables(session, element.text);
     } else {
       value = '';
@@ -59,4 +62,54 @@ export async function executeDefvar(session: DiracSession, element: DiracElement
   }
 
   setVariable(session, name, value, visible);
+}
+
+function serializeToXml(children: DiracElement[]): string {
+  let xml = '';
+  
+  for (const child of children) {
+    if (!child.tag || child.tag === '') {
+      // Text node
+      xml += child.text || '';
+    } else {
+      // Element node
+      xml += `<${child.tag}`;
+      
+      // Add attributes
+      for (const [attrName, attrValue] of Object.entries(child.attributes)) {
+        xml += ` ${attrName}="${escapeXml(attrValue)}"`;
+      }
+      
+      // Self-closing or with children
+      if (child.children.length === 0 && !child.text) {
+        xml += ' />';
+      } else {
+        xml += '>';
+        
+        // Only add text content if there are no children
+        // (if there are children, text is stored in text node children)
+        if (child.text && child.children.length === 0) {
+          xml += escapeXml(child.text);
+        }
+        
+        // Add children (which may include text nodes)
+        if (child.children.length > 0) {
+          xml += serializeToXml(child.children);
+        }
+        
+        xml += `</${child.tag}>`;
+      }
+    }
+  }
+  
+  return xml;
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }

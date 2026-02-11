@@ -85,8 +85,8 @@ async function registerExtendChain(
     parentName = currentName;
   }
   
-  // Get parent, skipping current definition if using same name
-  const parent = getParentSubroutine(session, parentName, parentName === currentName);
+  // Get parent, passing current subroutine if using same name
+  const parent = getParentSubroutine(session, parentName, parentName === currentName ? subroutine : undefined);
   
   if (!parent) {
     // No parent found - shouldn't happen, but handle gracefully
@@ -134,6 +134,10 @@ async function executeCallInternal(
   const oldBoundary = setBoundary(session);
   const wasReturn = session.isReturn;
   session.isReturn = false;
+  
+  // Track current subroutine name for available-subroutines
+  const oldSubroutineName = session.currentSubroutineName;
+  session.currentSubroutineName = callElement.tag;
   
   // For extend execution, skip subroutine registration during body execution
   const oldSkipFlag = session.skipSubroutineRegistration;
@@ -196,9 +200,9 @@ async function executeCallInternal(
     // Pop parameter stack
     popParameters(session);
 
-    // Clean up scope (keep visible variables)
-    session.varBoundary = oldBoundary;
+    // Clean up scope (keep visible variables) BEFORE restoring boundary
     cleanToBoundary(session);
+    session.varBoundary = oldBoundary;
     session.isReturn = wasReturn;
   }
 }

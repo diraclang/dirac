@@ -1,0 +1,5 @@
+# Test configuration for verifying embedding config works
+embeddingServer:
+  host: localhost
+  port: 11434
+  model: nomic-embed-text  # Different model to test config loading

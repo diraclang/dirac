@@ -23,23 +23,26 @@ export interface ValidationResult {
 // Helper: get embedding server config from config.yml
 function getEmbeddingServerConfig() {
   try {
-    const config = yaml.load(fs.readFileSync('config.yml', 'utf8')) as any;
+    const configPath = process.env.DIRAC_CONFIG || 'config.yml';
+    const config = yaml.load(fs.readFileSync(configPath, 'utf8')) as any;
     const host = config.embeddingServer?.host || 'localhost';
-    const port = config.embeddingServer?.port || 11435;
-    return { host, port };
-  } catch {
-    return { host: 'localhost', port: 11435 };
+    const port = config.embeddingServer?.port || 11434;
+    const model = config.embeddingServer?.model || 'embeddinggemma';
+    return { host, port, model };
+  } catch (e) {
+    // Fallback to defaults if config file not found
+    return { host: 'localhost', port: 11434, model: 'embeddinggemma' };
   }
 }
 
 // Helper: call Ollama embedding API directly
 async function getEmbeddings(tags: string[]): Promise<number[][]> {
-  const { host, port } = getEmbeddingServerConfig();
+  const { host, port, model } = getEmbeddingServerConfig();
   return await Promise.all(tags.map(async tag => {
     const response = await fetch(`http://${host}:${port}/api/embeddings`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ model: 'embeddinggemma', prompt: tag })
+      body: JSON.stringify({ model, prompt: tag })
     });
     const data = await response.json();
     return data.embedding;
@@ -179,7 +182,8 @@ export async function validateDiracCode(
   
   // Recursively validate all elements
   async function validateElement(element: DiracElement) {
-    if (element.tag && element.tag !== 'dirac' && element.tag !== '') {
+    // Skip text nodes, whitespace-only tags, and root wrapper tags
+    if (element.tag && element.tag !== 'dirac' && element.tag !== 'DIRAC-ROOT' && element.tag.trim() !== '') {
       const result = await validateTag(session, element, options);
       results.push(result);
       
