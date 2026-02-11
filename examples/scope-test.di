@@ -18,9 +18,9 @@
   <output></output>
   
   <!-- Define variables in main scope -->
-  <defvar name="x" trim="true">value-x</defvar>
-  <defvar name="y" trim="true">value-y</defvar>
-  <defvar name="z" trim="true">value-z</defvar>
+  <defvar name="x">value-x</defvar>
+  <defvar name="y">value-y</defvar>
+  <defvar name="z">value-z</defvar>
   
   <output>Variables defined in main scope:</output>
   <output>  x = <variable name="x" /></output>

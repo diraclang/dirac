@@ -18,7 +18,7 @@ Color changed to: red -->
   </subroutine>
 
   <!-- Test: tag-check should auto-correct similar tag names and execute -->
-  <defvar name="result" trim="true">
+  <defvar name="result">
     <tag-check execute="true" autocorrect="true">
       <background-set color="red" />
     </tag-check>

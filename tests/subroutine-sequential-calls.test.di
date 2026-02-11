@@ -15,9 +15,9 @@ x=a y=b z=c -->
   </subroutine>
 
   <!-- Define main scope variables -->
-  <defvar name="x" trim="true">a</defvar>
-  <defvar name="y" trim="true">b</defvar>
-  <defvar name="z" trim="true">c</defvar>
+  <defvar name="x">a</defvar>
+  <defvar name="y">b</defvar>
+  <defvar name="z">c</defvar>
   
   <!-- Verify initial state -->
   <output>x=<variable name="x" /> y=<variable name="y" /> z=<variable name="z" /></output>

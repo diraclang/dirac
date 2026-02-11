@@ -14,7 +14,8 @@ export async function executeDefvar(session: DiracSession, element: DiracElement
   const valueAttr = element.attributes.value;
   const visibleAttr = element.attributes.visible || 'false';
   const literal = 'literal' in element.attributes;
-  const trim = 'trim' in element.attributes; // Support trim attribute to remove leading/trailing whitespace
+  const trimAttr = element.attributes.trim;
+  const trim = trimAttr !== 'false'; // Trim by default unless explicitly set to false
 
   if (!name) {
     throw new Error('<defvar> requires name attribute');

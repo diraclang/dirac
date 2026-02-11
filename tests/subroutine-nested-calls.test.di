@@ -18,9 +18,9 @@ main after outer: a=x b=y c=z -->
   </subroutine>
 
   <!-- Define main scope variables -->
-  <defvar name="a" trim="true">x</defvar>
-  <defvar name="b" trim="true">y</defvar>
-  <defvar name="c" trim="true">z</defvar>
+  <defvar name="a">x</defvar>
+  <defvar name="b">y</defvar>
+  <defvar name="c">z</defvar>
   
   <output>main: a=<variable name="a" /> b=<variable name="b" /> c=<variable name="c" /></output>
   
