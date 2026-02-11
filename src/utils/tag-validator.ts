@@ -182,8 +182,8 @@ export async function validateDiracCode(
   
   // Recursively validate all elements
   async function validateElement(element: DiracElement) {
-    // Skip text nodes and whitespace-only tags
-    if (element.tag && element.tag !== 'dirac' && element.tag.trim() !== '') {
+    // Skip text nodes, whitespace-only tags, and root wrapper tags
+    if (element.tag && element.tag !== 'dirac' && element.tag !== 'DIRAC-ROOT' && element.tag.trim() !== '') {
       const result = await validateTag(session, element, options);
       results.push(result);
       
