@@ -86,12 +86,13 @@ function serializeToXml(children: DiracElement[]): string {
       } else {
         xml += '>';
         
-        // Add text content if present
-        if (child.text) {
+        // Only add text content if there are no children
+        // (if there are children, text is stored in text node children)
+        if (child.text && child.children.length === 0) {
           xml += escapeXml(child.text);
         }
         
-        // Add children
+        // Add children (which may include text nodes)
         if (child.children.length > 0) {
           xml += serializeToXml(child.children);
         }
