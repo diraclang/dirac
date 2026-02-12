@@ -48,6 +48,9 @@ export async function executeEval(session: DiracSession, element: DiracElement):
       return params && params[0] ? params[0] : null;
     };
     
+    // Add session object for orchestration (reserved identifier in eval context)
+    context.session = session;
+    
     let result: any;
     // Execute as async function to support top-level await
     const func = new AsyncFunction(...Object.keys(context), expr);
