@@ -29,6 +29,7 @@ import { executeTestIf } from '../tags/test-if.js';
 import { executeAvailableSubroutines } from '../tags/available-subroutines.js';
 import { executeForeach } from '../tags/foreach.js';
 import { executeAttr } from '../tags/attr.js';
+import { executeEnvironment } from '../tags/environment.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -151,6 +152,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'attr':
         await executeAttr(session, element);
+        break;
+        
+      case 'environment':
+        await executeEnvironment(session, element);
         break;
 
       case 'require_module':
