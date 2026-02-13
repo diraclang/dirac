@@ -65,20 +65,43 @@ export async function executeInput(session: DiracSession, element: DiracElement)
  * Read all stdin content at once
  */
 async function readAllStdin(): Promise<string> {
+  // Remove any existing listeners to avoid conflicts
+  process.stdin.removeAllListeners('data');
+  process.stdin.removeAllListeners('end');
+  process.stdin.removeAllListeners('error');
+  
   return new Promise((resolve, reject) => {
     const chunks: Buffer[] = [];
     
-    process.stdin.on('data', (chunk) => {
+    const onData = (chunk: Buffer) => {
       chunks.push(chunk);
-    });
+    };
     
-    process.stdin.on('end', () => {
-      resolve(Buffer.concat(chunks).toString('utf-8'));
-    });
+    const onEnd = () => {
+      const result = Buffer.concat(chunks).toString('utf-8');
+      
+      // Clean up listeners
+      process.stdin.removeListener('data', onData);
+      process.stdin.removeListener('end', onEnd);
+      process.stdin.removeListener('error', onError);
+      
+      resolve(result);
+    };
     
-    process.stdin.on('error', (err) => {
+    const onError = (err: Error) => {
+      // Clean up listeners
+      process.stdin.removeListener('data', onData);
+      process.stdin.removeListener('end', onEnd);
+      process.stdin.removeListener('error', onError);
+      
       reject(err);
-    });
+    };
+    
+    process.stdin.on('data', onData);
+    process.stdin.on('end', onEnd);
+    process.stdin.on('error', onError);
+    
+    process.stdin.resume();
   });
 }
 
