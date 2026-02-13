@@ -81,22 +81,96 @@ export class TestRunner {
     };
 
     try {
-      const parser = new DiracParser();
-      const ast = parser.parse(cleanContent);
-      const session = createSession({ ...this.config, filePath });
-      await integrate(session, ast);
-      const output = getOutput(session);
-      
-      result.actualOutput = output;
+      // Check if there's a stdin input file for this test
+      const stdinFile = filePath.replace('.test.di', '.txt');
+      let stdinData: string | undefined;
+      if (fs.existsSync(stdinFile)) {
+        stdinData = fs.readFileSync(stdinFile, 'utf-8');
+      }
+
+      // If stdin data exists, we need to mock stdin
+      // Since we can't replace process.stdin directly, we'll use a workaround:
+      // temporarily store data in a place the input tag can access it
+      if (stdinData !== undefined) {
+        // Save original methods
+        const originalOn = process.stdin.on.bind(process.stdin);
+        const originalResume = process.stdin.resume.bind(process.stdin);
+        const originalRemoveAllListeners = process.stdin.removeAllListeners.bind(process.stdin);
+        const originalRemoveListener = process.stdin.removeListener.bind(process.stdin);
+        
+        // Mock stdin methods
+        const listeners: { [key: string]: Function[] } = {};
+        
+        (process.stdin as any).on = function(event: string, callback: Function) {
+          if (!listeners[event]) listeners[event] = [];
+          listeners[event].push(callback);
+          return this;
+        };
+        
+        (process.stdin as any).removeAllListeners = function(event?: string) {
+          if (event) {
+            delete listeners[event];
+          } else {
+            Object.keys(listeners).forEach(k => delete listeners[k]);
+          }
+          return this;
+        };
+        
+        (process.stdin as any).removeListener = function(event: string, callback: Function) {
+          if (listeners[event]) {
+            listeners[event] = listeners[event].filter(fn => fn !== callback);
+          }
+          return this;
+        };
+        
+        (process.stdin as any).resume = function() {
+          // Simulate data event
+          setImmediate(() => {
+            if (listeners['data']) {
+              listeners['data'].forEach(fn => fn(Buffer.from(stdinData!, 'utf-8')));
+            }
+            // Simulate end event
+            setImmediate(() => {
+              if (listeners['end']) {
+                listeners['end'].forEach(fn => fn());
+              }
+            });
+          });
+          return this;
+        };
+        
+        try {
+          const parser = new DiracParser();
+          const ast = parser.parse(cleanContent);
+          const session = createSession({ ...this.config, filePath });
+          await integrate(session, ast);
+          const output = getOutput(session);
+          result.actualOutput = output;
+        } finally {
+          // Restore original methods
+          (process.stdin as any).on = originalOn;
+          (process.stdin as any).resume = originalResume;
+          (process.stdin as any).removeAllListeners = originalRemoveAllListeners;
+          (process.stdin as any).removeListener = originalRemoveListener;
+        }
+      } else {
+        // Normal test without stdin
+        const parser = new DiracParser();
+        const ast = parser.parse(cleanContent);
+        const session = createSession({ ...this.config, filePath });
+        await integrate(session, ast);
+        const output = getOutput(session);
+        result.actualOutput = output;
+      }
 
       if (metadata.expectError) {
         // Expected an error but got success
         result.passed = false;
-        result.error = `Expected error but test succeeded. Output: ${output}`;
+        result.error = `Expected error but test succeeded. Output: ${result.actualOutput}`;
       } else if (metadata.expected !== undefined) {
         // Check if output matches expected
         // Normalize whitespace for comparison (collapse multiple spaces/newlines)
-        const normalizedActual = output.replace(/\s+/g, ' ').trim();
+        const normalizedActual = result.actualOutput!.replace(/\s+/g, ' ').trim();
         const normalizedExpected = metadata.expected.replace(/\s+/g, ' ').trim();
         
         if (normalizedActual === normalizedExpected) {
