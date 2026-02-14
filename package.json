@@ -8,6 +8,18 @@
   "bin": {
     "dirac": "dist/cli.js"
   },
+  "exports": {
+    ".": "./dist/index.js",
+    "./lib": "./lib/index.di",
+    "./lib/math": "./lib/math.di",
+    "./lib/advanced-math": "./lib/advanced-math.di",
+    "./lib/fileops": "./lib/fileops.di",
+    "./lib/mongodb": "./lib/mongodb.di"
+  },
+  "files": [
+    "dist/",
+    "lib/"
+  ],
   "scripts": {
     "dev": "tsx src/cli.ts",
     "build": "tsup src/index.ts src/cli.ts src/test-runner.ts --format esm --dts --clean",
