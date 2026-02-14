@@ -1,6 +1,6 @@
 {
   "name": "dirac-lang",
-  "version": "0.1.26",
+  "version": "0.1.27",
   "description": "LLM-Augmented Declarative Execution",
   "type": "module",
   "main": "dist/index.js",
@@ -9,16 +9,10 @@
     "dirac": "dist/cli.js"
   },
   "exports": {
-    ".": "./dist/index.js",
-    "./lib": "./lib/index.di",
-    "./lib/math": "./lib/math.di",
-    "./lib/advanced-math": "./lib/advanced-math.di",
-    "./lib/fileops": "./lib/fileops.di",
-    "./lib/mongodb": "./lib/mongodb.di"
+    ".": "./dist/index.js"
   },
   "files": [
-    "dist/",
-    "lib/"
+    "dist/"
   ],
   "scripts": {
     "dev": "tsx src/cli.ts",
