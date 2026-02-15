@@ -36,15 +36,6 @@
   - File: `src/tags/loop.ts`, possibly `src/runtime/session.ts` for scope stack
   - Related to: dirac-json array operations, PACKAGE_FINDING subroutine
 
-- [ ] **Loop count variable substitution**: Support dynamic count in `<loop>`
-  - **Why**: Cannot iterate based on array length or computed values
-  - **Current limitation**: `<loop count="${n}">` does NOT work - only literal numbers supported
-  - **Problem**: Cannot do `<defvar name="len"><array name="x"><length/></array></defvar><loop count="${len}">`
-  - **Workaround**: Use `<foreach>` for dynamic iteration, or hardcode loop counts
-  - **Solution**: Enhance `substituteVariables()` in loop.ts to resolve variables before parseInt
-  - **File**: `src/tags/loop.ts` - line ~18 where count is parsed
-  - **Note**: Already documented in loop.ts header comments
-
 - [ ] **Array operations in dirac-json**: Implement `<array>` subroutines
   - **Why**: Need declarative array manipulation for loops and data structures
   - **Location**: Should be in `dirac-json` package (arrays are JSON structures)
@@ -164,6 +155,27 @@
   - Type inference, union types, custom types
 
 ## ✅ Completed
+
+- [x] **Loop count variable substitution** (v0.1.30)
+  - Changed from substituteVariables() to substituteAttribute() in loop.ts
+  - Now supports: `<loop count="${n}">` for dynamic iteration
+  - Works with array length: `<defvar name="len"><array><length/></array></defvar><loop count="${len}">`
+  - Added unit test: loop-variable-count.test.di
+  - 54 tests passing
+
+- [x] **Break tag for loop control** (v0.1.29)
+  - Implemented `<break>` tag to exit loops early
+  - Works with both `<loop>` and `<foreach>`
+  - Supports conditional breaks with `<test-if>`
+  - Added 3 unit tests: basic, conditional, nested loops
+  - All 53 tests passing
+
+- [x] **Array operations in dirac-json** (v0.1.0)
+  - Published dirac-json package with nested subroutine pattern
+  - Operations: push, pop, shift, unshift, get, length
+  - JSON operations: parse, get, stringify
+  - Non-destructive iteration with get(index)
+  - In-place array mutation working correctly
 
 - [x] **Math library type fixes** (v0.1.26)
   - Added Number() conversions to prevent string concatenation
