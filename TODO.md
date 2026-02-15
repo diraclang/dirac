@@ -1,8 +1,90 @@
 # DIRAC Lang - TODO
 
+## ⚠️ Critical Architecture Issues
+
+### `<eval>` Variable Injection Namespace Conflicts
+- **Issue**: Parameters are injected directly into JavaScript scope, causing conflicts with Node.js built-ins
+- **Example**: `param-path="string"` conflicts with Node.js `path` module
+- **Impact**: Affects all libraries using `<eval>` with parameters
+- **Documentation**: See `EVAL-SCOPE.md` for detailed analysis and migration plan
+- **Short-term fix**: Use prefixed camelCase names (`jsonPath`, `filePath`, not `path`)
+- **Long-term fix**: Introduce `<eval-safe>` tag with namespace object in v1.0.0
+- **Status**: Documented, fixing conflicts incrementally in libraries
+
 ## 🔴 High Priority
 
 ### Pending
+- [ ] **Multi-language `<eval>` support**: Enable execution of Python, Ruby, Go, etc. within DIRAC
+  - **Why**: Position DIRAC as a polyglot integration layer - uniform LLM interface for multiple languages
+  - **Vision**: DIRAC becomes the "glue language" that orchestrates JavaScript, Python, system APIs, and services
+  - **Strategic importance**: LLMs can generate code in any language, DIRAC executes it seamlessly
+  - **Syntax**: `<eval name="result" language="python|javascript|ruby|go">code</eval>`
+  - **Default**: `language="javascript"` (backward compatible)
+  - **Implementation options**:
+    1. **Phase 1 (Simple)**: Shell out via `child_process` - `python3 -c`, `ruby -e`, `go run`
+       - Pass session variables as JSON
+       - Capture stdout as result
+       - ~50 lines of code in `src/tags/eval.ts`
+    2. **Phase 2 (Production)**: HTTP microservices for each language
+       - Python service: FastAPI with `/eval` endpoint
+       - Persistent environments, better performance
+       - Support for long-running computations
+    3. **Phase 3 (Advanced)**: WebAssembly for true embedded execution
+       - Python via Pyodide, Ruby via ruby.wasm
+       - No subprocess overhead, runs in-process
+  - **Example use cases**:
+    ```xml
+    <!-- Data analysis in Python -->
+    <eval name="stats" language="python">
+    import numpy as np
+    result = {'mean': np.mean(data), 'std': np.std(data)}
+    </eval>
+    
+    <!-- System automation in Go -->
+    <eval name="files" language="go">
+    files, _ := ioutil.ReadDir("/tmp")
+    result := len(files)
+    </eval>
+    
+    <!-- String processing in Ruby -->
+    <eval name="clean" language="ruby">
+    result = text.gsub(/[^a-z0-9]/i, '_')
+    </eval>
+    ```
+  - **Variable passing**: Session variables available in all languages
+  - **Return values**: All languages return to DIRAC session via JSON serialization
+  - **Architecture**: DIRAC as integration layer between LLMs and polyglot execution
+  - **File**: `src/tags/eval.ts` - add language detection and routing
+  - **Related**: Python port project (dirac-python), microservices architecture
+
+- [ ] **PACKAGE_FINDING implementation**: Complete autonomous package discovery system
+  - **Why**: Enable semantic package search and auto-installation for DIRAC libraries
+  - **Status**: Core dependencies completed (visible="subroutine" ✅, import variable substitution ✅, import path resolution ✅)
+  - **Components needed**:
+    1. **Vector embedding support with multiple providers**:
+       - Use Ollama (local) or OpenAI for generating embeddings
+       - Check `src/tags/llm.ts` for Ollama integration pattern
+       - Make embedding provider configurable (LLM_PROVIDER env var)
+       - Support both text-embedding-3-small (OpenAI) and local Ollama models
+    2. **Bidirectional database operations** (in dirac-rdbms):
+       - **Query/Retrieve**: POSTGRES_VECTOR_SEARCH for semantic package search
+       - **Populate/Insert**: POSTGRES_INSERT_PACKAGE to add new packages with embeddings
+       - Need subroutines to populate package registry table
+       - Need embedding generation for package descriptions (batch operation)
+    3. **End-to-end workflow**:
+       - User provides natural language query ("array operations")
+       - Generate embedding using configured provider (Ollama/OpenAI)
+       - Query PostgreSQL+pgvector for similar packages
+       - Parse results, extract package names
+       - Install packages dynamically with npm
+       - Import packages with `<import src="${pkg}" />`
+       - Imported subroutines persist with visible="subroutine"
+  - **Files**: 
+    - `dirac-rdbms/lib/postgres.di` (fix embedding provider flexibility)
+    - New: POSTGRES_INSERT_PACKAGE, POSTGRES_BATCH_EMBED subroutines
+    - Example: package-finding.di demonstration
+  - **Related**: dirac-rdbms vector search, dynamic imports, npm integration
+
 - [ ] **JSON path operations**: Implement `<json>` tag with path syntax
   - **Why**: Replace verbose `<eval>JSON.parse(...)</eval>` patterns with declarative syntax
   - **Syntax**: `<json path="a.b.c"><variable name="jsonVar" /></json>`
@@ -186,14 +268,14 @@
 
 ## ✅ Completed
 
-- [x] **Import relative path resolution** (v0.1.31)
+- [x] **Import relative path resolution** (v0.1.32)
   - Fixed import paths to resolve relative to the importing file, not the executable
   - Set `session.currentFile` in createSession() from config.filePath
   - Updated test files to use correct relative paths (../examples instead of ./examples)
   - All 57 tests passing
   - Enables proper module organization and nested imports
 
-- [x] **Variable substitution in import src** (v0.1.31)
+- [x] **Variable substitution in import src** (v0.1.32)
   - Added substituteAttribute() call in import tag for dynamic imports
   - Now supports `<import src="${varname}" />` pattern
   - Essential for PACKAGE_FINDING dynamic module loading
@@ -304,5 +386,5 @@ Each project has its own detailed TODO.md:
 
 ## Notes
 - **Last updated**: 2026-02-14
-- **Current version**: 0.1.31
+- **Current version**: 0.1.32
 - **Branch**: feature/26.1-devel
