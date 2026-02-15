@@ -12,9 +12,10 @@ export async function executeAvailableSubroutines(
   // Get all subroutines from current boundary to top of stack
   const availableSubroutines = new Map<string, DiracElement>();
   
-  // Get the name of the currently executing subroutine from the boundary
-  const currentSubroutineName = session.subBoundary < session.subroutines.length
-    ? session.subroutines[session.subBoundary].name
+  // Get the name of the currently executing subroutine from BEFORE the boundary
+  // The boundary marks where NEW subroutines start, so the current one is at boundary-1
+  const currentSubroutineName = session.subBoundary > 0 && session.subBoundary <= session.subroutines.length
+    ? session.subroutines[session.subBoundary - 1].name
     : null;
   
   // Read from top of stack (most recent) backwards to boundary

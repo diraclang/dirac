@@ -1,8 +1,5 @@
 <!-- TEST: available-subroutines with foreach and attr -->
-<!-- EXPECT: - show-subroutines: 
-- greet: Greets someone
-- gender: Returns gender identity
-- age: Returns the person age -->
+<!-- EXPECT: <subroutines>  <subroutine name="greet" description="Greets someone" />  <subroutine name="gender" description="Returns gender identity" />  <subroutine name="age" description="Returns the person age" /></subroutines> -->
 <dirac>
 <subroutine name="TestSuite">
   <subroutine name="age" description="Returns the person age">
@@ -17,15 +14,7 @@
     <output>Hello!</output>
   </subroutine>
 
-  <subroutine name="show-subroutines">
-    <defvar name="subs"><available-subroutines /></defvar>
-    <foreach from="$subs" as="sub" xpath="//subroutine">
-      <output>- <attr name="name" from="$sub" />: <attr name="description" from="$sub" />
-</output>
-    </foreach>
-  </subroutine>
-
-  <show-subroutines />
+  <available-subroutines />
 </subroutine>
 
 <TestSuite />

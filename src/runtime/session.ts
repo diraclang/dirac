@@ -146,15 +146,17 @@ export function registerSubroutine(
   element: DiracElement,
   description?: string,
   parameters?: any[],
-  meta?: Record<string, string>
+  meta?: Record<string, string>,
+  visible?: boolean
 ): void {
   session.subroutines.push({
     name,
     element,
     boundary: session.subBoundary,
+    visible,
     description,
     parameters,
-    meta,
+    meta
   });
 }
 
@@ -206,9 +208,19 @@ export function popSubroutinesToBoundary(session: DiracSession): void {
   session.subroutines = session.subroutines.slice(0, session.subBoundary);
 }
 
-export function cleanSubroutinesToBoundary(session: DiracSession): void {
-  // For now, same as pop (visibility not implemented for subroutines yet)
-  popSubroutinesToBoundary(session);
+export function cleanSubroutinesToBoundary(session: DiracSession, callerSubroutine?: DiracElement): void {
+  // Check if caller has visible="subroutine" or visible="both"
+  const keepNested = callerSubroutine?.attributes.visible === 'subroutine' || 
+                     callerSubroutine?.attributes.visible === 'both';
+  
+  if (keepNested) {
+    // Keep all subroutines registered during this call (they persist)
+    // Just update the boundary to include them
+    session.subBoundary = session.subroutines.length;
+  } else {
+    // Pop subroutines back to boundary (default behavior)
+    session.subroutines = session.subroutines.slice(0, session.subBoundary);
+  }
 }
 
 // Variable substitution (maps to var_replace functions in MASK)

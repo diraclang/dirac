@@ -20,6 +20,7 @@ export function executeSubroutine(session: DiracSession, element: DiracElement):
   
   // Extract metadata from attributes (no structural changes!)
   const description = element.attributes.description;
+  const visible = element.attributes.visible === 'subroutine' || element.attributes.visible === 'both';
   const parameters: ParameterMetadata[] = [];
   const meta: Record<string, any> = {};
 
@@ -70,6 +71,7 @@ export function executeSubroutine(session: DiracSession, element: DiracElement):
     subroutine,
     description,
     parameters.length > 0 ? parameters : undefined,
-    Object.keys(meta).length > 0 ? meta : undefined
+    Object.keys(meta).length > 0 ? meta : undefined,
+    visible
   );
 }
