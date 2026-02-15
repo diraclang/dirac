@@ -28,7 +28,10 @@ import { executeException } from '../tags/exception.js';
 import { executeTestIf } from '../tags/test-if.js';
 import { executeAvailableSubroutines } from '../tags/available-subroutines.js';
 import { executeForeach } from '../tags/foreach.js';
+import { executeBreak } from '../tags/break.js';
 import { executeAttr } from '../tags/attr.js';
+import { executeEnvironment } from '../tags/environment.js';
+import { executeInput } from '../tags/input.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -79,6 +82,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'loop':
         await executeLoop(session, element);
+        break;
+        
+      case 'break':
+        await executeBreak(session, element);
         break;
         
       case 'if':
@@ -151,6 +158,14 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'attr':
         await executeAttr(session, element);
+        break;
+        
+      case 'environment':
+        await executeEnvironment(session, element);
+        break;
+        
+      case 'input':
+        await executeInput(session, element);
         break;
 
       case 'require_module':

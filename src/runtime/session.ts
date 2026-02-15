@@ -26,22 +26,27 @@ export function createSession(config: DiracConfig = {}): DiracSession {
   const llmProvider = config.llmProvider || process.env.LLM_PROVIDER;
   const ollamaModel = config.llmModel || process.env.LLM_MODEL || 'llama2';
 
-  let llmClient: any;
-  switch (llmProvider) {
-    case 'ollama':
-      llmClient = new OllamaProvider({ model: ollamaModel });
-      break;
-    case 'anthropic':
-      if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY required for Anthropic provider');
-      llmClient = new Anthropic({ apiKey: anthropicKey });
-      break;
-    case 'openai':
-      if (!openaiKey) throw new Error('OPENAI_API_KEY required for OpenAI provider');
-      llmClient = new OpenAI({ apiKey: openaiKey });
-      break;
-    default:
-      throw new Error('No valid LLM provider configured. Set llmProvider in config or LLM_PROVIDER env.');
+  // LLM client is now optional - only created if provider is specified
+  let llmClient: any = null;
+  
+  if (llmProvider) {
+    switch (llmProvider) {
+      case 'ollama':
+        llmClient = new OllamaProvider({ model: ollamaModel });
+        break;
+      case 'anthropic':
+        if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY required for Anthropic provider');
+        llmClient = new Anthropic({ apiKey: anthropicKey });
+        break;
+      case 'openai':
+        if (!openaiKey) throw new Error('OPENAI_API_KEY required for OpenAI provider');
+        llmClient = new OpenAI({ apiKey: openaiKey });
+        break;
+      default:
+        throw new Error(`Unknown LLM provider: ${llmProvider}. Use 'ollama', 'anthropic', or 'openai'.`);
+    }
   }
+  
   return {
     variables: [],
     subroutines: [],
@@ -65,6 +70,7 @@ export function createSession(config: DiracConfig = {}): DiracSession {
     isBreak: false,
     skipSubroutineRegistration: false,
     debug: config.debug || false,
+    currentFile: config.filePath, // Set current file from config for proper relative import resolution
   };
 }
 
@@ -141,15 +147,17 @@ export function registerSubroutine(
   element: DiracElement,
   description?: string,
   parameters?: any[],
-  meta?: Record<string, string>
+  meta?: Record<string, string>,
+  visible?: boolean
 ): void {
   session.subroutines.push({
     name,
     element,
     boundary: session.subBoundary,
+    visible,
     description,
     parameters,
-    meta,
+    meta
   });
 }
 
@@ -201,9 +209,19 @@ export function popSubroutinesToBoundary(session: DiracSession): void {
   session.subroutines = session.subroutines.slice(0, session.subBoundary);
 }
 
-export function cleanSubroutinesToBoundary(session: DiracSession): void {
-  // For now, same as pop (visibility not implemented for subroutines yet)
-  popSubroutinesToBoundary(session);
+export function cleanSubroutinesToBoundary(session: DiracSession, callerSubroutine?: DiracElement): void {
+  // Check if caller has visible="subroutine" or visible="both"
+  const keepNested = callerSubroutine?.attributes.visible === 'subroutine' || 
+                     callerSubroutine?.attributes.visible === 'both';
+  
+  if (keepNested) {
+    // Keep all subroutines registered during this call (they persist)
+    // Just update the boundary to include them
+    session.subBoundary = session.subroutines.length;
+  } else {
+    // Pop subroutines back to boundary (default behavior)
+    session.subroutines = session.subroutines.slice(0, session.subBoundary);
+  }
 }
 
 // Variable substitution (maps to var_replace functions in MASK)

@@ -15,6 +15,8 @@ import * as ifTag from './if';
 import * as importTag from './import';
 import * as mongodb from './mongodb';
 import * as requireModule from './require_module';
+import * as environment from './environment';
+import * as input from './input';
 
 export default {
   ...system,
@@ -34,4 +36,6 @@ export default {
   ...importTag,
   ...mongodb,
   ...requireModule,
+  ...environment,
+  ...input,
 };

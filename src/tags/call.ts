@@ -13,6 +13,8 @@ import {
   setBoundary, 
   popToBoundary,
   cleanToBoundary,
+  setSubroutineBoundary,
+  cleanSubroutinesToBoundary,
   pushParameters,
   popParameters,
   substituteVariables,
@@ -130,8 +132,9 @@ async function executeCallInternal(
   callElement: DiracElement,
   isExtendExecution: boolean = false
 ): Promise<void> {
-  // Set boundary for local scope
+  // Set boundary for local scope (variables AND subroutines)
   const oldBoundary = setBoundary(session);
+  const oldSubBoundary = setSubroutineBoundary(session);
   const wasReturn = session.isReturn;
   session.isReturn = false;
   
@@ -200,9 +203,12 @@ async function executeCallInternal(
     // Pop parameter stack
     popParameters(session);
 
-    // Clean up scope (keep visible variables) BEFORE restoring boundary
+    // Clean up scope (keep visible variables and subroutines) BEFORE restoring boundary
     cleanToBoundary(session);
+    cleanSubroutinesToBoundary(session, subroutine);
+    
     session.varBoundary = oldBoundary;
+    session.subBoundary = oldSubBoundary;
     session.isReturn = wasReturn;
   }
 }

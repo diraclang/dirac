@@ -11,7 +11,7 @@ import { DiracParser } from '../runtime/parser.js';
 
 export async function executeLLM(session: DiracSession, element: DiracElement): Promise<void> {
   if (!session.llmClient) {
-    throw new Error('<LLM> requires API key (set OPENAI_API_KEY, ANTHROPIC_API_KEY, or LLM_PROVIDER=ollama in .env file)');
+    throw new Error('<llm> tag requires LLM configuration. Set LLM_PROVIDER (ollama/anthropic/openai) and appropriate API keys in environment or config.yml');
   }
 
   // Check limits

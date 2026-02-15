@@ -1,6 +1,6 @@
 {
   "name": "dirac-lang",
-  "version": "0.1.20",
+  "version": "0.1.32",
   "description": "LLM-Augmented Declarative Execution",
   "type": "module",
   "main": "dist/index.js",
@@ -8,6 +8,12 @@
   "bin": {
     "dirac": "dist/cli.js"
   },
+  "exports": {
+    ".": "./dist/index.js"
+  },
+  "files": [
+    "dist/"
+  ],
   "scripts": {
     "dev": "tsx src/cli.ts",
     "build": "tsup src/index.ts src/cli.ts src/test-runner.ts --format esm --dts --clean",

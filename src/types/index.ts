@@ -59,6 +59,7 @@ export interface Subroutine {
   element: DiracElement;
   boundary: number;  // scope boundary marker
   extends?: string;  // parent subroutine
+  visible?: boolean;  // if true, nested subroutines persist after call
   // Metadata for reflection/introspection
   description?: string;
   parameters?: ParameterMetadata[];
