@@ -1,6 +1,20 @@
 /**
  * <loop> tag - iteration
  * Maps to mask_tag_loop in MASK
+ * 
+ * Usage:
+ *   <loop count="5">...</loop>           - loops 5 times, var 'i' = 0..4
+ *   <loop count="3" var="idx">...</loop> - loops 3 times, var 'idx' = 0..2
+ * 
+ * Attributes:
+ *   count - number of iterations (literal number only, not variable substitution)
+ *   var   - loop variable name (default: 'i')
+ * 
+ * Loop Control:
+ *   <break /> - exit loop early
+ * 
+ * Note: count attribute does NOT support variable substitution (e.g., count="${n}")
+ *       Use literal numbers only. For dynamic iteration, use <foreach> instead.
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';

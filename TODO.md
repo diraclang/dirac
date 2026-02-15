@@ -13,6 +13,49 @@
 ## 🟡 Medium Priority
 
 ### Pending
+- [ ] **Nested subroutine registration order**: Fix execution order in subroutine body
+  - **Why**: Nested `<subroutine>` definitions must be registered BEFORE other statements execute
+  - **Current behavior**: Subroutine body executes children sequentially - nested subroutines register when encountered
+  - **Problem**: If `<parameters select="*" />` comes before nested `<subroutine>` tags, it tries to call unregistered subroutines
+  - **Example issue**: `<subroutine name="array"><parameters select="*" /><subroutine name="push">...</subroutine></subroutine>`
+  - **Workaround**: Place `<parameters select="*" />` AFTER all nested subroutine definitions
+  - **Proper fix**: Pre-scan subroutine body and register all nested `<subroutine>` tags first, then execute other statements
+  - **Location**: `src/tags/call.ts` - `executeCallInternal()` or `integrateChildren()`
+  - **Impact**: Affects any pattern with nested subroutines (array operations, factory pattern, method objects)
+  - **Related**: dirac-json array implementation, test-extend3-trouble.di pattern
+  - **Note**: `session.skipSubroutineRegistration` flag exists but only for extend mechanism
+
+- [ ] **Loop body scope**: Ensure `<loop>` creates proper scope for `<defvar>`
+  - **Why**: Variables defined inside loop (like from `<array><pop/>`) need isolated scope per iteration
+  - **Current state**: Loop shares session scope across iterations (no scope isolation)
+  - **Problem**: `<defvar name="item">` in one iteration affects next iteration
+  - **Needed for**: `<loop><defvar name="item"><array name="x"><pop/></array></defvar>...</loop>`
+  - **Solution**: Add scope stack (pushScope/popScope) for loop body
+  - Each iteration should: pushScope() → execute body → popScope()
+  - Related: Subroutine calls likely need this too (check if they have scope isolation)
+  - File: `src/tags/loop.ts`, possibly `src/runtime/session.ts` for scope stack
+  - Related to: dirac-json array operations, PACKAGE_FINDING subroutine
+
+- [ ] **Loop count variable substitution**: Support dynamic count in `<loop>`
+  - **Why**: Cannot iterate based on array length or computed values
+  - **Current limitation**: `<loop count="${n}">` does NOT work - only literal numbers supported
+  - **Problem**: Cannot do `<defvar name="len"><array name="x"><length/></array></defvar><loop count="${len}">`
+  - **Workaround**: Use `<foreach>` for dynamic iteration, or hardcode loop counts
+  - **Solution**: Enhance `substituteVariables()` in loop.ts to resolve variables before parseInt
+  - **File**: `src/tags/loop.ts` - line ~18 where count is parsed
+  - **Note**: Already documented in loop.ts header comments
+
+- [ ] **Array operations in dirac-json**: Implement `<array>` subroutines
+  - **Why**: Need declarative array manipulation for loops and data structures
+  - **Location**: Should be in `dirac-json` package (arrays are JSON structures)
+  - Structure: `<array name="varname"><pop/></array>` or subroutine calls
+  - Operations needed: `<pop/>`, `<push>value</push>`, `<shift/>`, `<length/>`
+  - Internal: Store as JavaScript arrays in session variables
+  - Construction: `<defvar name="arr"><arg>1</arg><arg>2</arg></defvar>` or JSON string
+  - Use case: Package installation loop in PACKAGE_FINDING
+  - Package: dirac-json (to be created or added to existing dirac-stdlib)
+  - Related: JSON.parse/stringify, object manipulation
+
 - [ ] **Subroutine `visible` attribute**: Control scope persistence
   - **Why**: Enable factory pattern, modules, and closures in declarative XML
   - Syntax: `<subroutine name="x" visible="both|variable|subroutine">`
