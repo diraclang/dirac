@@ -3,6 +3,25 @@
 ## 🔴 High Priority
 
 ### Pending
+- [ ] **JSON path operations**: Implement `<json>` tag with path syntax
+  - **Why**: Replace verbose `<eval>JSON.parse(...)</eval>` patterns with declarative syntax
+  - **Syntax**: `<json path="a.b.c"><variable name="jsonVar" /></json>`
+  - **Operations**: Get nested values, set values, array indexing
+  - **Examples**: 
+    - Get: `<json path="user.name"><variable name="data" /></json>`
+    - Array: `<json path="items[0].title"><variable name="data" /></json>`
+    - Set: `<json path="user.age" value="25"><variable name="data" /></json>`
+  - **Use case**: PACKAGE_FINDING mock test currently uses messy `JSON.parse(packages)[i]`
+  - **Related**: dirac-json package, array operations
+  - **File**: New tag `src/tags/json.ts` or in dirac-json library
+
+- [ ] **CLI `-c` option**: Execute inline DIRAC code from command line
+  - **Why**: Quick testing, one-liners, scripting without creating files
+  - **Syntax**: `dirac -c '<dirac><output>Hello</output></dirac>'`
+  - **Use case**: Testing snippets, CI/CD scripts, shell integration
+  - **File**: `src/cli.ts`
+  - **Related**: Testing, developer experience
+
 - [ ] **Type coercion system**: Implement proper type declaration and coercion for parameters
   - **Why**: XML attributes are always strings; need automatic conversion to prevent "1"+"2"="12"
   - Currently all XML attributes come in as strings
@@ -143,6 +162,17 @@
   - Could use: Levenshtein distance, fuzzy matching, or lightweight model
   - High desirability for better DX
 
+## 🟢 Low Priority
+
+### Pending
+- [ ] **Rename `<eval>` to `<execute language="javascript">`**: More descriptive syntax
+  - **Why**: Better clarity - `<eval>` suggests expression evaluation, but it's full JS execution
+  - **Note**: `<execute>` is currently reserved for executing DIRAC scripts
+  - **Current**: `<eval name="result">JavaScript code</eval>`
+  - **Proposed**: Keep `<eval>` as-is since `<execute>` has different meaning
+  - **Status**: Low priority - current syntax works fine
+  - **Alternative**: Document that `<eval>` is for JavaScript, `<execute>` is for DIRAC
+
 - [ ] **Separate stdlib package**: Consider moving stdlib to `@dirac/stdlib` or similar
   - **Why**: Allow independent versioning and optional dependencies
   - Would allow independent versioning
@@ -155,6 +185,27 @@
   - Type inference, union types, custom types
 
 ## ✅ Completed
+
+- [x] **Import relative path resolution** (v0.1.31)
+  - Fixed import paths to resolve relative to the importing file, not the executable
+  - Set `session.currentFile` in createSession() from config.filePath
+  - Updated test files to use correct relative paths (../examples instead of ./examples)
+  - All 57 tests passing
+  - Enables proper module organization and nested imports
+
+- [x] **Variable substitution in import src** (v0.1.31)
+  - Added substituteAttribute() call in import tag for dynamic imports
+  - Now supports `<import src="${varname}" />` pattern
+  - Essential for PACKAGE_FINDING dynamic module loading
+  - Added unit test: import-variable-substitution.test.di
+
+- [x] **Subroutine `visible` attribute** (v0.1.31)
+  - Implemented `visible="subroutine"` to keep nested subroutines after parent returns
+  - Added boundary tracking in session.ts: setSubroutineBoundary(), cleanSubroutinesToBoundary()
+  - Fixed available-subroutines boundary bug (subBoundary-1 is current subroutine)
+  - Added 2 unit tests: visible-subroutine.test.di, visible-subroutine-cleanup.test.di
+  - All 56 tests passing
+  - Use case: PACKAGE_FINDING pattern where imported packages persist
 
 - [x] **Loop count variable substitution** (v0.1.30)
   - Changed from substituteVariables() to substituteAttribute() in loop.ts
@@ -225,7 +276,7 @@ Each project has its own detailed TODO.md:
 
 - **dirac-rdbms** (`/Users/zhiwang/diraclang/dirac-rdbms/`)  
   Relational database library (PostgreSQL, MySQL, SQLite). See: `dirac-rdbms/TODO.md`
-  - 🔴 HIGH: PostgreSQL support
+  - ✅ COMPLETED: PostgreSQL support with pgvector for semantic search
   - 🔴 HIGH: MySQL support
   - 🔴 HIGH: SQLite support
 
@@ -253,5 +304,5 @@ Each project has its own detailed TODO.md:
 
 ## Notes
 - **Last updated**: 2026-02-14
-- **Current version**: 0.1.26
+- **Current version**: 0.1.31
 - **Branch**: feature/26.1-devel

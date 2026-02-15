@@ -8,6 +8,7 @@ import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { DiracParser } from '../runtime/parser.js';
 import { integrate } from '../runtime/interpreter.js';
+import { substituteAttribute } from '../runtime/session.js';
 
 /**
  * Resolve import path - supports relative paths and node_modules packages
@@ -79,11 +80,14 @@ function resolveImportPath(src: string, currentDir: string): string {
 }
 
 export async function executeImport(session: DiracSession, element: DiracElement): Promise<void> {
-  const src = element.attributes.src;
+  const srcAttr = element.attributes.src;
   
-  if (!src) {
+  if (!srcAttr) {
     throw new Error('<import> requires src attribute');
   }
+  
+  // Substitute variables in src attribute (e.g., ${pkg})
+  const src = substituteAttribute(session, srcAttr);
   
   // Get the current file's directory (if available in session)
   const currentDir = session.currentFile ? dirname(session.currentFile) : process.cwd();

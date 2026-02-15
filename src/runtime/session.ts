@@ -70,6 +70,7 @@ export function createSession(config: DiracConfig = {}): DiracSession {
     isBreak: false,
     skipSubroutineRegistration: false,
     debug: config.debug || false,
+    currentFile: config.filePath, // Set current file from config for proper relative import resolution
   };
 }
 
