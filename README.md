@@ -255,3 +255,31 @@ npm install -g dirac-lang
 ---
 
 *"In the quantum realm, a bra meets a ket to produce reality. In Dirac, a declaration meets an LLM to produce execution."*
+
+## PAUL: The Human-Friendly Dirac Dialect
+
+Dirac’s XML-based language is designed for robust machine execution and symbolic reasoning. For human authors, we introduce **PAUL** (Programming AI Utility Language)—a concise, bra/ket-inspired notation for writing Dirac programs quickly and intuitively.
+
+- PAUL uses bra/ket syntax and positional arguments for readability.
+- It is ideal for human editing, rapid prototyping, and LLM prompts.
+- PAUL scripts are typically saved with the `.bk` extension.
+- The Dirac interpreter translates PAUL to XML Dirac for execution.
+
+**Example:**
+
+PAUL (.bk):
+```
+|greet Alice>
+```
+
+Dirac XML (.di):
+```xml
+<greet name="Alice" />
+```
+
+**Note:**
+- PAUL relies on conventions for mapping positional arguments to named parameters.
+- For machine execution, always convert PAUL to XML Dirac.
+- The `.bk` extension is recommended for PAUL scripts.
+
+PAUL is the human-centric dialect of Dirac—optimized for clarity, speed, and LLM interaction.

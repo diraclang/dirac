@@ -11,7 +11,7 @@ import { DiracParser } from '../runtime/parser.js';
 
 export async function executeLLM(session: DiracSession, element: DiracElement): Promise<void> {
   if (!session.llmClient) {
-    throw new Error('<llm> tag requires LLM configuration. Set LLM_PROVIDER (ollama/anthropic/openai) and appropriate API keys in environment or config.yml');
+    throw new Error('<llm> tag requires LLM configuration. Set LLM_PROVIDER (ollama/anthropic/openai/custom) and appropriate API keys in environment or config.yml');
   }
 
   // Check limits
@@ -25,11 +25,14 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
   const providerName = session.llmClient.constructor.name;
   const isOpenAI = providerName === 'OpenAI';
   const isOllama = providerName === 'OllamaProvider';
+  const isCustom = providerName === 'CustomLLMProvider';
   const defaultModel = isOpenAI
     ? 'gpt-4.1-2025-04-14'
     : isOllama
       ? 'llama2'
-      : 'claude-sonnet-4-20250514';
+      : isCustom
+        ? 'custom-model'
+        : 'claude-sonnet-4-20250514';
 
 
   const model = element.attributes.model || process.env.DEFAULT_MODEL || defaultModel;
@@ -152,6 +155,15 @@ for (const sub of subroutines) {
         temperature,
         max_tokens: maxTokens,
       });
+    } else if (isCustom) {
+      // Call CustomLLMProvider with dialog history
+      const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+      result = await session.llmClient.complete(customPrompt, {
+        model,
+        temperature,
+        max_tokens: maxTokens,
+        messages: dialogHistory,
+      });
     } else {
       // Call Anthropic API with full dialog history
       const response = await session.llmClient.messages.create({
@@ -264,6 +276,14 @@ for (const sub of subroutines) {
                   temperature,
                   max_tokens: maxTokens,
                 });
+              } else if (isCustom) {
+                const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+                result = await session.llmClient.complete(customPrompt, {
+                  model,
+                  temperature,
+                  max_tokens: maxTokens,
+                  messages: dialogHistory,
+                });
               } else {
                 const response = await session.llmClient.messages.create({
                   model,
@@ -354,6 +374,14 @@ for (const sub of subroutines) {
                 model,
                 temperature,
                 max_tokens: maxTokens,
+              });
+            } else if (isCustom) {
+              const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+              result = await session.llmClient.complete(customPrompt, {
+                model,
+                temperature,
+                max_tokens: maxTokens,
+                messages: dialogHistory,
               });
             } else {
               const response = await session.llmClient.messages.create({

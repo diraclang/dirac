@@ -1,6 +1,10 @@
 # Dirac server configuration
-llmProvider: anthropic 
-llmModel: claude-sonnet-4-20250514
+#llmProvider: anthropic 
+#llmModel: claude-sonnet-4-20250514
+
+# Custom LLM server URL (when llmProvider is 'custom')
+llmProvider: custom
+customLLMUrl: http://localhost:5001
 
 # Embedding server configuration (for tag-check similarity matching)
 embeddingServer:

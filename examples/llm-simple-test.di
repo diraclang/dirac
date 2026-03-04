@@ -4,7 +4,7 @@
   <output>&#10;</output>
   
   <LLM output="response" maxTokens="50" noextra="true">
-Say hello
+   what is dirac language.
   </LLM>
   
   <output>Response: <variable name="response" /></output>

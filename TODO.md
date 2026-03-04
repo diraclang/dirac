@@ -111,6 +111,18 @@
   - Consider: automatic coercion based on `param-x="number"` declaration
   - Alternative: explicit `<cast>` tag or type attribute
 
+- [ ] **DIRAC script syntax/semantics checker**: Validate tags and attributes in DIRAC scripts
+  - **Why**: Help users catch mistakes in tag names, required/optional attributes, and structure before execution
+  - **What**: Given a DIRAC script, check for invalid tags, missing/invalid attributes, and suggest corrections
+  - **How**: 
+    - Parse XML and validate against known DIRAC tags and their attribute schemas
+    - For each error, annotate the script with a comment on the problematic line
+    - Suggest the most likely correction (e.g., correct tag/attribute name, required attribute, etc.)
+    - Optionally, support both syntax (XML well-formedness) and semantic (DIRAC tag/attribute) checks
+  - **Output**: The script with inline comments for errors and suggestions
+  - **Use case**: LLMs, users, and CI can quickly validate DIRAC scripts for correctness
+  - **File**: New utility, e.g., `src/tools/validate.ts` or as a CLI command
+
 ## 🟡 Medium Priority
 
 ### Pending

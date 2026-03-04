@@ -18,6 +18,7 @@ export function substituteAttribute(session: DiracSession, value: any): string {
 import Anthropic from '@anthropic-ai/sdk';
 import OpenAI from 'openai';
 import { OllamaProvider } from '../llm/ollama.js';
+import { CustomLLMProvider } from '../llm/custom.js';
 import type { DiracSession, DiracConfig, Variable, Subroutine, DiracElement } from '../types/index.js';
 
 export function createSession(config: DiracConfig = {}): DiracSession {
@@ -42,8 +43,12 @@ export function createSession(config: DiracConfig = {}): DiracSession {
         if (!openaiKey) throw new Error('OPENAI_API_KEY required for OpenAI provider');
         llmClient = new OpenAI({ apiKey: openaiKey });
         break;
+      case 'custom':
+        const customBaseUrl = config.customLLMUrl || process.env.CUSTOM_LLM_URL || 'http://localhost:5001';
+        llmClient = new CustomLLMProvider({ baseUrl: customBaseUrl, model: ollamaModel });
+        break;
       default:
-        throw new Error(`Unknown LLM provider: ${llmProvider}. Use 'ollama', 'anthropic', or 'openai'.`);
+        throw new Error(`Unknown LLM provider: ${llmProvider}. Use 'ollama', 'anthropic', 'openai', or 'custom'.`);
     }
   }
   
