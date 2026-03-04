@@ -72,7 +72,7 @@ export class BraKetParser {
       // Ket: |tag attrs>
       if (line.type === 'ket') {
         const indent = '  '.repeat(line.indent);
-        const attrs = line.attrs ? ` ${this.convertAttributes(line.attrs)}` : '';
+        const attrs = line.attrs ? ` ${this.convertKetAttributes(line.attrs, line.tag || '')}` : '';
         
         // Check if next line is more indented (has children/content)
         const nextLine = this.currentLine + 1 < this.lines.length 
@@ -291,6 +291,100 @@ export class BraKetParser {
       // Quote it
       return `${attrName}="${value}"`;
     }).join(' ');
+  }
+
+  /**
+   * Convert ket attribute syntax to XML, supporting positional arguments
+   * Detects unnamed values and marks them as _positional-N for runtime resolution
+   * 
+   * Examples:
+   *   |greeting zhi>              → <call name="greeting" _positional-0="zhi"/>
+   *   |add 5 10>                 → <call name="add" _positional-0="5" _positional-1="10"/>
+   *   |add x=5 y=10>             → <call name="add" x="5" y="10"/>  (named, no change)
+   *   |output>Hello              → <output>Hello</output>  (text content, no params)
+   */
+  private convertKetAttributes(attrs: string, tagName: string): string {
+    if (!attrs) return '';
+
+    // Check if attrs contains only values without = (positional args)
+    // Split carefully respecting quotes
+    const parts = this.parseAttributeParts(attrs);
+    
+    // Detect if we have any positional arguments (values without =)
+    const hasPositional = parts.some(part => !part.includes('='));
+    
+    if (!hasPositional) {
+      // All named attributes, use standard conversion
+      return this.convertAttributes(attrs);
+    }
+    
+    // Has positional arguments - mark them with _positional-N
+    let positionalIndex = 0;
+    return parts.map(part => {
+      const match = part.match(/^([a-zA-Z_][a-zA-Z0-9_-]*)=(.+)$/);
+      
+      if (match) {
+        // Named attribute
+        const [, name, value] = match;
+        const quotedValue = this.quoteValue(value);
+        return `${name}=${quotedValue}`;
+      } else {
+        // Positional argument
+        const quotedValue = this.quoteValue(part);
+        return `_positional-${positionalIndex++}=${quotedValue}`;
+      }
+    }).join(' ');
+  }
+
+  /**
+   * Parse attribute string into parts, respecting quotes
+   */
+  private parseAttributeParts(attrs: string): string[] {
+    const parts: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    let quoteChar = '';
+
+    for (let i = 0; i < attrs.length; i++) {
+      const char = attrs[i];
+      
+      if ((char === '"' || char === "'") && (i === 0 || attrs[i - 1] !== '\\')) {
+        if (!inQuotes) {
+          inQuotes = true;
+          quoteChar = char;
+          current += char;
+        } else if (char === quoteChar) {
+          inQuotes = false;
+          current += char;
+        } else {
+          current += char;
+        }
+      } else if (char === ' ' && !inQuotes) {
+        if (current.trim()) {
+          parts.push(current.trim());
+          current = '';
+        }
+      } else {
+        current += char;
+      }
+    }
+    
+    if (current.trim()) {
+      parts.push(current.trim());
+    }
+
+    return parts;
+  }
+
+  /**
+   * Quote a value if not already quoted
+   */
+  private quoteValue(value: string): string {
+    if ((value.startsWith('"') && value.endsWith('"')) ||
+        (value.startsWith("'") && value.endsWith("'"))) {
+      return value;
+    }
+    return `"${value}"`;
   }
 
   /**

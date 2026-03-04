@@ -160,6 +160,9 @@ async function executeCallInternal(
     substitutedElement.attributes[key] = substituteAttribute(session, value);
   }
   
+  // Resolve positional arguments to actual parameter names
+  resolvePositionalArguments(substitutedElement, subroutine);
+  
   // Push caller element onto parameter stack for <parameters select="*|@*|@attr"/> access
   pushParameters(session, [substitutedElement]);
   
@@ -173,8 +176,9 @@ async function executeCallInternal(
         if (!alreadySet) {
           // Priority: call attribute > param-* default > empty string
           let value = '';
-          if (callElement.attributes && callElement.attributes[paramName] !== undefined) {
-            value = substituteAttribute(session, callElement.attributes[paramName]);
+          // Use substitutedElement (which has resolved positional args) instead of callElement
+          if (substitutedElement.attributes && substitutedElement.attributes[paramName] !== undefined) {
+            value = substitutedElement.attributes[paramName]; // Already substituted above
           } else {
             // Always treat last colon-separated part as default value (if >3 fields)
             const parts = attrValue.split(':');
@@ -261,5 +265,53 @@ async function bindParameters(
       value = substituteVariables(session, defaultValue);
       setVariable(session, paramName, value, false);
     }
+  }
+}
+
+/**
+ * Resolve positional arguments (_positional-N) to actual parameter names
+ * by looking at the subroutine's param-* attributes in order
+ * 
+ * Example:
+ *   |greeting zhi>  generates: _positional-0="zhi"
+ *   <greeting param-name=String> defines: param-name
+ *   Result: name="zhi"
+ */
+function resolvePositionalArguments(
+  callElement: DiracElement,
+  subroutine: DiracElement
+): void {
+  // Check if call has any positional arguments
+  const positionalAttrs = Object.keys(callElement.attributes)
+    .filter(key => key.startsWith('_positional-'))
+    .sort(); // Sort to ensure correct order: _positional-0, _positional-1, etc.
+  
+  if (positionalAttrs.length === 0) {
+    return; // No positional arguments
+  }
+  
+  // Extract parameter names from subroutine in definition order
+  const paramNames: string[] = [];
+  for (const [attrName] of Object.entries(subroutine.attributes)) {
+    if (attrName.startsWith('param-')) {
+      paramNames.push(attrName.substring(6)); // Remove 'param-' prefix
+    }
+  }
+  
+  // Map positional arguments to parameter names
+  for (let i = 0; i < positionalAttrs.length; i++) {
+    const positionalKey = positionalAttrs[i];
+    const value = callElement.attributes[positionalKey];
+    
+    if (i < paramNames.length) {
+      // Map to actual parameter name
+      callElement.attributes[paramNames[i]] = value;
+    } else {
+      // More positional args than parameters - could warn or error
+      // For now, silently ignore extra positional arguments
+    }
+    
+    // Remove the _positional-N marker
+    delete callElement.attributes[positionalKey];
   }
 }
