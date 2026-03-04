@@ -82,15 +82,18 @@ Hello World
 ```
 
 **Important Notes on Multi-line Input:**
-- You must **manually add spaces** for indentation (2 spaces per level)
-- The shell shows `...` prompt for continuation lines
+- The shell **automatically adds indentation** if you don't provide it
+- It shows how many spaces are expected: `(Indent with 2 spaces, or press Enter...)`
+- You can either:
+  - Type the spaces yourself (e.g., 2 spaces before your line)
+  - Just type the content - shell will add the spaces for you
 - Press **Enter on empty line** to execute the block
 - Press **Ctrl+C** to cancel multi-line input
 
-**Why manual indentation?**
-The shell uses standard `readline` which doesn't support auto-indentation. You need to:
-1. Type spaces at the start of each line
-2. Use 2 spaces per indentation level (to match bra-ket parser)
+**How it works:**
+- When you type `<greeting|` or `|llm>`, the shell expects indented content
+- Next line: if you don't start with spaces, shell adds them automatically
+- This ensures the bra-ket parser receives properly indented input
 
 ## LLM Integration
 
@@ -170,21 +173,28 @@ Goodbye!
 **Key Points:**
 - For single-line commands, just type and press Enter
 - For multi-line (like `<welcome|` or `|llm>`), the shell prompts with `...`
-- Add 2 spaces manually for each indentation level
+- Shell auto-adds indentation if you don't provide it yourself
 - Press Enter on an empty line to execute the accumulated block
 
 ## Tips
 
 1. **Multi-line input**: 
    - The shell detects when you need continuation (bra syntax like `<greeting|`, or ket without content like `|llm>`)
-   - It shows a `...` prompt for continuation
-   - **You must manually type spaces** for indentation (2 spaces = 1 level)
+   - It shows expected indent level in the hint
+   - **Auto-indent**: Just type content without spaces - shell adds them!
+   - **Manual indent**: Or add spaces yourself for more control
    - Press **Enter on empty line** to execute the block
 
-2. **Indentation**: The bra-ket parser expects 2 spaces per indentation level:
+2. **Indentation flexibility**: 
    ```
-   <greeting| name=String
-     |output>Hello        (2 spaces before |output)
+   > |llm>
+   ... (Indent with 2 spaces, or press Enter on empty line to execute)
+   ... create greeting     ← No leading spaces typed
+   ```
+   Shell automatically converts this to:
+   ```
+   |llm>
+     create greeting       ← 2 spaces added by shell
    ```
 
 3. **Cancel input**: Press Ctrl+C to cancel multi-line input, Ctrl+C again to exit.

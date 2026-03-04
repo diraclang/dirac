@@ -30,6 +30,7 @@ export class DiracShell {
   private rl: readline.Interface;
   private inputBuffer: string[] = [];
   private baseIndent: number | null = null;
+  private currentIndent: number = 0;
   private config: DiracConfig;
 
   constructor(config: DiracConfig = {}) {
@@ -92,6 +93,7 @@ export class DiracShell {
         // Cancel multi-line input
         this.inputBuffer = [];
         this.baseIndent = null;
+        this.currentIndent = 0;
         console.log('\n(Input cancelled)');
         this.rl.setPrompt('> ');
         this.rl.prompt();
@@ -119,8 +121,10 @@ export class DiracShell {
       
       // Check if this looks like it needs continuation
       if (this.needsContinuation(input)) {
+        // Set indentation for next line (2 spaces deeper)
+        this.currentIndent = (this.baseIndent || 0) + 2;
         this.rl.setPrompt('... ');
-        console.log('    (Press Enter on empty line to execute, or Ctrl+C to cancel)');
+        console.log(`    (Indent with ${this.currentIndent} spaces, or press Enter on empty line to execute)`);
         this.rl.prompt();
         return;
       }
@@ -129,13 +133,36 @@ export class DiracShell {
       if (input.trim() === '') {
         // Empty line ends multi-line input
         await this.executeBuffer();
+        this.currentIndent = 0;
         this.rl.setPrompt('> ');
         this.rl.prompt();
         return;
       }
       
+      // Prepend the current indentation to the input if it doesn't already have it
+      let processedInput = input;
+      if (this.currentIndent > 0 && indent < this.currentIndent) {
+        // User didn't add the expected indentation, add it for them
+        processedInput = ' '.repeat(this.currentIndent) + input;
+      }
+      
       // Continue accumulating
-      this.inputBuffer.push(input);
+      this.inputBuffer.push(processedInput);
+      
+      // Calculate next indent level based on what user typed
+      const trimmed = input.trim();
+      const currentLineIndent = this.getIndent(processedInput);
+      
+      // Check if this line opens a new block
+      if (trimmed.match(/^<[a-zA-Z_][a-zA-Z0-9_-]*.*\|$/) || 
+          (trimmed.match(/^\|[a-zA-Z_][a-zA-Z0-9_-]*\s*[^>]*?>$/) && !trimmed.match(/>\s*.+$/))) {
+        // Increase indent for next line
+        this.currentIndent = currentLineIndent + 2;
+      } else {
+        // Keep same indent
+        this.currentIndent = currentLineIndent;
+      }
+      
       this.rl.setPrompt('... ');
       this.rl.prompt();
       return;
@@ -230,12 +257,10 @@ Syntax:
   
 Multi-line Input:
   - Type a line that needs continuation (like <greeting| or |llm>)
-  - Shell switches to '...' prompt
-  - Type your content lines (add spaces for indentation manually)
+  - Shell switches to '...' prompt and shows expected indent level
+  - You can type spaces manually, or just type content (shell adds spaces)
   - Press ENTER on an empty line to execute
   - Or press Ctrl+C to cancel
-  
-Note: You must manually add spaces for indentation (2 spaces per level)
 
 Examples:
   |output>Hello World
