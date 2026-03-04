@@ -61,7 +61,7 @@ export class BraKetParser {
 
       // Bra: <name| defines a subroutine
       if (line.type === 'bra') {
-        const attrs = line.attrs ? ` ${this.convertAttributes(line.attrs)}` : '';
+        const attrs = line.attrs ? ` ${this.convertBraAttributes(line.attrs)}` : '';
         output.push(`${'  '.repeat(line.indent)}<subroutine name="${line.tag}"${attrs}>`);
         this.currentLine++;
         this.parseBlock(output, line.indent);
@@ -218,6 +218,78 @@ export class BraKetParser {
 
       // Quote it
       return `${name}="${value}"`;
+    }).join(' ');
+  }
+
+  /**
+   * Convert bra-ket attribute syntax to XML for subroutine definitions
+   * Automatically converts parameter attributes to param-* format
+   * Reserved attributes (description, extends, visible) are kept as-is
+   * 
+   * Examples:
+   *   name=String          → param-name="String"
+   *   x=number y=string    → param-x="number" param-y="string"
+   *   description=Adds     → description="Adds"  (reserved, no prefix)
+   */
+  private convertBraAttributes(attrs: string): string {
+    if (!attrs) return '';
+
+    // Reserved attributes that don't get param- prefix
+    const RESERVED = new Set(['description', 'extends', 'visible']);
+
+    // Split by spaces but respect quoted strings
+    const parts: string[] = [];
+    let current = '';
+    let inQuotes = false;
+    let quoteChar = '';
+
+    for (let i = 0; i < attrs.length; i++) {
+      const char = attrs[i];
+      
+      if ((char === '"' || char === "'") && (i === 0 || attrs[i - 1] !== '\\')) {
+        if (!inQuotes) {
+          inQuotes = true;
+          quoteChar = char;
+          current += char;
+        } else if (char === quoteChar) {
+          inQuotes = false;
+          current += char;
+        } else {
+          current += char;
+        }
+      } else if (char === ' ' && !inQuotes) {
+        if (current.trim()) {
+          parts.push(current.trim());
+          current = '';
+        }
+      } else {
+        current += char;
+      }
+    }
+    
+    if (current.trim()) {
+      parts.push(current.trim());
+    }
+
+    // Convert each attribute
+    return parts.map(part => {
+      const match = part.match(/^([a-zA-Z_][a-zA-Z0-9_-]*)=(.+)$/);
+      if (!match) return part;
+
+      const [, name, value] = match;
+      
+      // Check if this is a reserved attribute
+      const isReserved = RESERVED.has(name);
+      const attrName = isReserved ? name : `param-${name}`;
+      
+      // Already quoted
+      if ((value.startsWith('"') && value.endsWith('"')) ||
+          (value.startsWith("'") && value.endsWith("'"))) {
+        return `${attrName}=${value}`;
+      }
+
+      // Quote it
+      return `${attrName}="${value}"`;
     }).join(' ');
   }
 
