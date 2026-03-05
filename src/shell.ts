@@ -111,6 +111,14 @@ export class DiracShell {
       return;
     }
 
+    // Check if this is Dirac syntax or Unix shell command (only on first line)
+    if (this.inputBuffer.length === 0 && !this.isDiracSyntax(input)) {
+      // Pass to Unix shell
+      await this.executeShellCommand(input);
+      this.rl.prompt();
+      return;
+    }
+
     // Check if we're in multi-line mode
     const indent = this.getIndent(input);
     
@@ -332,6 +340,83 @@ Examples:
       default:
         console.log(`Unknown command: ${command}. Type :help for available commands.`);
     }
+  }
+
+  /**
+   * Check if input contains Dirac bra-ket syntax
+   * Must be careful not to match shell redirects (>, <, <<, >>)
+   */
+  private isDiracSyntax(input: string): boolean {
+    const trimmed = input.trim();
+    
+    // Check for bra syntax: <name| (must have | at the end)
+    // This won't match: < file.txt, ls < input.txt
+    if (trimmed.match(/^<[a-zA-Z_][a-zA-Z0-9_-]*[^<>]*\|$/)) {
+      return true;
+    }
+    
+    // Check for ket syntax: |name> (must start with |)
+    // This won't match: cat file.txt | grep foo
+    if (trimmed.match(/^\|[a-zA-Z_][a-zA-Z0-9_-]*[^|]*>/)) {
+      return true;
+    }
+    
+    // Check for closing tags: </name>
+    if (trimmed.match(/^<\/[a-zA-Z_][a-zA-Z0-9_-]*>$/)) {
+      return true;
+    }
+    
+    // Check for common Dirac XML tags if they appear at start
+    if (trimmed.match(/^<(output|variable|defvar|llm|call|subroutine|if|foreach|test-if)\b/)) {
+      return true;
+    }
+    
+    return false;
+  }
+
+  /**
+   * Execute a Unix shell command
+   */
+  private async executeShellCommand(command: string): Promise<void> {
+    const trimmed = command.trim();
+    
+    // Handle 'cd' specially since it needs to change the Node.js process's cwd
+    const cdMatch = trimmed.match(/^cd\s+(.*)$/);
+    if (cdMatch) {
+      const targetDir = cdMatch[1].trim() || process.env.HOME || '~';
+      
+      try {
+        // Expand ~ to home directory
+        const expandedDir = targetDir.startsWith('~') 
+          ? targetDir.replace(/^~/, process.env.HOME || '~')
+          : targetDir;
+        
+        process.chdir(expandedDir);
+      } catch (err: any) {
+        console.error(`cd: ${err.message}`);
+      }
+      return;
+    }
+    
+    const { spawn } = await import('child_process');
+    
+    return new Promise((resolve) => {
+      // Use the user's shell (or fallback to sh)
+      const shell = process.env.SHELL || '/bin/sh';
+      const child = spawn(shell, ['-c', command], {
+        stdio: 'inherit',
+        cwd: process.cwd(),
+      });
+      
+      child.on('close', () => {
+        resolve();
+      });
+      
+      child.on('error', (err) => {
+        console.error(`Shell error: ${err.message}`);
+        resolve();
+      });
+    });
   }
 
   start(): void {
