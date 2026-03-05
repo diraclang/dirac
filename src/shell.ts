@@ -400,6 +400,9 @@ Examples:
     
     const { spawn } = await import('child_process');
     
+    // Pause readline to allow interactive programs (vi, nano, etc.) to take control
+    this.rl.pause();
+    
     return new Promise((resolve) => {
       // Use the user's shell (or fallback to sh)
       const shell = process.env.SHELL || '/bin/sh';
@@ -409,11 +412,14 @@ Examples:
       });
       
       child.on('close', () => {
+        // Resume readline after command completes
+        this.rl.resume();
         resolve();
       });
       
       child.on('error', (err) => {
         console.error(`Shell error: ${err.message}`);
+        this.rl.resume();
         resolve();
       });
     });
