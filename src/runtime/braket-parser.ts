@@ -388,13 +388,49 @@ export class BraKetParser {
   }
 
   /**
+   * Escape XML special characters in text content
+   */
+  private escapeXml(text: string): string {
+    return text
+      .replace(/&/g, '&amp;')   // Must be first!
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;');
+  }
+
+  /**
    * Convert inline kets within text content
    * Example: "Hello |variable name=x> world" → "Hello <variable name="x"/> world"
+   * Example: "if x < 10 and y > 5" → "if x &lt; 10 and y &gt; 5"
    */
   private convertInlineKets(text: string): string {
-    return text.replace(/\|([a-zA-Z_][a-zA-Z0-9_-]*)\s*([^>]*?)>/g, (match, tag, attrs) => {
+    const parts: string[] = [];
+    let lastIndex = 0;
+    
+    // Find all inline kets: |tag attrs>
+    const ketRegex = /\|([a-zA-Z_][a-zA-Z0-9_-]*)\s*([^>]*?)>/g;
+    let match;
+    
+    while ((match = ketRegex.exec(text)) !== null) {
+      // Add text before this ket (escaped)
+      if (match.index > lastIndex) {
+        const beforeText = text.substring(lastIndex, match.index);
+        parts.push(this.escapeXml(beforeText));
+      }
+      
+      // Add the converted ket (unescaped XML)
+      const [, tag, attrs] = match;
       const attrStr = attrs.trim() ? ` ${this.convertAttributes(attrs.trim())}` : '';
-      return `<${tag}${attrStr}/>`;
-    });
+      parts.push(`<${tag}${attrStr}/>`);
+      
+      lastIndex = ketRegex.lastIndex;
+    }
+    
+    // Add remaining text after last ket (escaped)
+    if (lastIndex < text.length) {
+      const remainingText = text.substring(lastIndex);
+      parts.push(this.escapeXml(remainingText));
+    }
+    
+    return parts.join('');
   }
 }

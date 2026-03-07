@@ -27,6 +27,7 @@ import { executeCatch } from '../tags/catch.js';
 import { executeException } from '../tags/exception.js';
 import { executeTestIf } from '../tags/test-if.js';
 import { executeAvailableSubroutines } from '../tags/available-subroutines.js';
+import { executeListSubroutines } from '../tags/list-subroutines.js';
 import { executeForeach } from '../tags/foreach.js';
 import { executeBreak } from '../tags/break.js';
 import { executeAttr } from '../tags/attr.js';
@@ -150,6 +151,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'available-subroutines':
         await executeAvailableSubroutines(session, element);
+        break;
+        
+      case 'list-subroutines':
+        await executeListSubroutines(session, element);
         break;
         
       case 'foreach':

@@ -63,6 +63,7 @@ async function main() {
             llmProvider: configData.llmProvider,
             llmModel: configData.llmModel,
             customLLMUrl: configData.customLLMUrl,
+            initScript: configData.initScript,
           });
         }
       }
@@ -77,6 +78,7 @@ async function main() {
           shellConfig.llmProvider = shellConfig.llmProvider || configData.llmProvider;
           shellConfig.llmModel = shellConfig.llmModel || configData.llmModel;
           shellConfig.customLLMUrl = shellConfig.customLLMUrl || configData.customLLMUrl;
+          shellConfig.initScript = shellConfig.initScript || configData.initScript;
         } catch (err) {
           // Ignore
         }
@@ -84,7 +86,7 @@ async function main() {
     }
     
     const shell = new DiracShell(shellConfig);
-    shell.start();
+    await shell.start();
     return;
   }
 

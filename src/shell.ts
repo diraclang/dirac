@@ -425,7 +425,7 @@ Examples:
     });
   }
 
-  start(): void {
+  async start(): Promise<void> {
     console.log('Dirac Shell v0.1.0');
     console.log('Type :help for commands, :exit to quit\n');
     
@@ -435,7 +435,38 @@ Examples:
       console.log('Warning: No LLM provider configured. Set LLM_PROVIDER environment variable.\n');
     }
     
+    // Run init script if configured
+    if (this.config.initScript) {
+      await this.runInitScript(this.config.initScript);
+    }
+    
     this.rl.prompt();
+  }
+
+  private async runInitScript(scriptPath: string): Promise<void> {
+    try {
+      // Resolve path relative to cwd
+      const resolvedPath = path.isAbsolute(scriptPath) 
+        ? scriptPath 
+        : path.join(process.cwd(), scriptPath);
+      
+      if (!fs.existsSync(resolvedPath)) {
+        console.log(`Init script not found: ${scriptPath}\n`);
+        return;
+      }
+      
+      console.log(`Loading init script: ${scriptPath}`);
+      const scriptContent = fs.readFileSync(resolvedPath, 'utf-8');
+      
+      // Parse and execute the script
+      const xml = this.braketParser.parse(scriptContent);
+      const ast = this.xmlParser.parse(xml);
+      await integrate(this.session, ast);
+      
+      console.log(`Init script loaded.\n`);
+    } catch (err) {
+      console.error(`Error loading init script: ${err instanceof Error ? err.message : String(err)}\n`);
+    }
   }
 }
 
@@ -455,6 +486,7 @@ async function main() {
         llmProvider: configData.llmProvider || process.env.LLM_PROVIDER,
         llmModel: configData.llmModel || process.env.LLM_MODEL,
         customLLMUrl: configData.customLLMUrl || process.env.CUSTOM_LLM_URL,
+        initScript: configData.initScript,
       };
     } catch (err) {
       console.error('Warning: Could not load config.yml');
@@ -467,7 +499,7 @@ async function main() {
   }
 
   const shell = new DiracShell(config);
-  shell.start();
+  await shell.start();
 }
 
 if (import.meta.url === `file://${process.argv[1]}`) {
