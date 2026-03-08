@@ -256,6 +256,7 @@ Commands:
   :clear          Clear session (reset variables and subroutines)
   :debug          Toggle debug mode
   :config         Show current configuration
+  :reload         Reload config.yml and reinitialize LLM
   :index <path>   Index subroutines from directory
   :search <query> Search indexed subroutines
   :load <query>   Load context (search and import subroutines)
@@ -333,6 +334,20 @@ Examples:
         console.log(`  Debug: ${this.config.debug ? 'ON' : 'OFF'}`);
         if (this.config.customLLMUrl) {
           console.log(`  Custom LLM URL: ${this.config.customLLMUrl}`);
+        }
+        break;
+        
+      case 'reload':
+        try {
+          await this.reloadConfig();
+          console.log('Configuration reloaded successfully');
+          console.log(`  LLM Provider: ${this.config.llmProvider || 'none'}`);
+          console.log(`  LLM Model: ${this.config.llmModel || 'default'}`);
+          if (this.config.customLLMUrl) {
+            console.log(`  Custom LLM URL: ${this.config.customLLMUrl}`);
+          }
+        } catch (error) {
+          console.error('Error reloading config:', error instanceof Error ? error.message : String(error));
         }
         break;
         
@@ -538,6 +553,34 @@ Examples:
     } catch (err) {
       console.error(`Error loading init script: ${err instanceof Error ? err.message : String(err)}\n`);
     }
+  }
+
+  /**
+   * Reload configuration from config.yml
+   */
+  private async reloadConfig(): Promise<void> {
+    const configPath = path.resolve(process.cwd(), 'config.yml');
+    
+    if (!fs.existsSync(configPath)) {
+      throw new Error('config.yml not found in current directory');
+    }
+    
+    const configData = yaml.load(fs.readFileSync(configPath, 'utf-8')) as any;
+    
+    // Update config
+    this.config.llmProvider = configData.llmProvider || process.env.LLM_PROVIDER;
+    this.config.llmModel = configData.llmModel || process.env.LLM_MODEL;
+    this.config.customLLMUrl = configData.customLLMUrl || process.env.CUSTOM_LLM_URL;
+    
+    // Reinitialize the session with new config (keeps variables/subroutines but updates LLM client)
+    const oldVariables = this.session.variables;
+    const oldSubroutines = this.session.subroutines;
+    const oldImportedFiles = this.session.importedFiles;
+    
+    this.session = createSession(this.config);
+    this.session.variables = oldVariables;
+    this.session.subroutines = oldSubroutines;
+    this.session.importedFiles = oldImportedFiles;
   }
 }
 
