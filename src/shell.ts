@@ -260,6 +260,7 @@ Commands:
   :index <path>   Index subroutines from directory
   :search <query> Search indexed subroutines
   :load <query>   Load context (search and import subroutines)
+  :save <name> <file>  Save subroutine to file
   :stats          Show registry statistics
   :exit           Exit shell
 
@@ -401,6 +402,25 @@ Examples:
             }
           } catch (error) {
             console.error('Error loading context:', error instanceof Error ? error.message : String(error));
+          }
+        }
+        break;
+        
+      case 'save':
+        if (args.length < 2) {
+          console.log('Usage: :save <subroutine-name> <file>');
+        } else {
+          const subName = args[0];
+          const fileName = args[1];
+          try {
+            const xml = `<save-subroutine name="${subName}" file="${fileName}" format="xml" />`;
+            const ast = this.xmlParser.parse(xml);
+            await integrate(this.session, ast);
+            if (this.session.output.length > 0) {
+              console.log(this.session.output.join(''));
+            }
+          } catch (error) {
+            console.error('Error saving subroutine:', error instanceof Error ? error.message : String(error));
           }
         }
         break;
