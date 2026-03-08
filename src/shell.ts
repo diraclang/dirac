@@ -256,6 +256,10 @@ Commands:
   :clear          Clear session (reset variables and subroutines)
   :debug          Toggle debug mode
   :config         Show current configuration
+  :index <path>   Index subroutines from directory
+  :search <query> Search indexed subroutines
+  :load <query>   Load context (search and import subroutines)
+  :stats          Show registry statistics
   :exit           Exit shell
 
 Syntax:
@@ -329,6 +333,73 @@ Examples:
         console.log(`  Debug: ${this.config.debug ? 'ON' : 'OFF'}`);
         if (this.config.customLLMUrl) {
           console.log(`  Custom LLM URL: ${this.config.customLLMUrl}`);
+        }
+        break;
+        
+      case 'index':
+        if (args.length === 0) {
+          console.log('Usage: :index <path>');
+        } else {
+          const indexPath = args[0];
+          try {
+            const xml = `<index-subroutines path="${indexPath}" />`;
+            const ast = this.xmlParser.parse(xml);
+            await integrate(this.session, ast);
+            if (this.session.output.length > 0) {
+              console.log(this.session.output.join(''));
+            }
+          } catch (error) {
+            console.error('Error indexing:', error instanceof Error ? error.message : String(error));
+          }
+        }
+        break;
+        
+      case 'search':
+        if (args.length === 0) {
+          console.log('Usage: :search <query>');
+        } else {
+          const query = args.join(' ');
+          try {
+            const xml = `<search-subroutines query="${query}" format="text" />`;
+            const ast = this.xmlParser.parse(xml);
+            await integrate(this.session, ast);
+            if (this.session.output.length > 0) {
+              console.log(this.session.output.join(''));
+            }
+          } catch (error) {
+            console.error('Error searching:', error instanceof Error ? error.message : String(error));
+          }
+        }
+        break;
+        
+      case 'load':
+        if (args.length === 0) {
+          console.log('Usage: :load <query>');
+        } else {
+          const query = args.join(' ');
+          try {
+            const xml = `<load-context query="${query}" limit="5" import="true" />`;
+            const ast = this.xmlParser.parse(xml);
+            await integrate(this.session, ast);
+            if (this.session.output.length > 0) {
+              console.log(this.session.output.join(''));
+            }
+          } catch (error) {
+            console.error('Error loading context:', error instanceof Error ? error.message : String(error));
+          }
+        }
+        break;
+        
+      case 'stats':
+        try {
+          const xml = '<registry-stats />';
+          const ast = this.xmlParser.parse(xml);
+          await integrate(this.session, ast);
+          if (this.session.output.length > 0) {
+            console.log(this.session.output.join(''));
+          }
+        } catch (error) {
+          console.error('Error getting stats:', error instanceof Error ? error.message : String(error));
         }
         break;
 

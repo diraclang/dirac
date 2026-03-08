@@ -28,6 +28,8 @@ import { executeException } from '../tags/exception.js';
 import { executeTestIf } from '../tags/test-if.js';
 import { executeAvailableSubroutines } from '../tags/available-subroutines.js';
 import { executeListSubroutines } from '../tags/list-subroutines.js';
+import { executeIndexSubroutines, executeSearchSubroutines, executeRegistryStats } from '../tags/subroutine-index.js';
+import { executeLoadContext } from '../tags/load-context.js';
 import { executeForeach } from '../tags/foreach.js';
 import { executeBreak } from '../tags/break.js';
 import { executeAttr } from '../tags/attr.js';
@@ -155,6 +157,22 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'list-subroutines':
         await executeListSubroutines(session, element);
+        break;
+        
+      case 'index-subroutines':
+        await executeIndexSubroutines(session, element);
+        break;
+        
+      case 'search-subroutines':
+        await executeSearchSubroutines(session, element);
+        break;
+        
+      case 'registry-stats':
+        await executeRegistryStats(session, element);
+        break;
+        
+      case 'load-context':
+        await executeLoadContext(session, element);
         break;
         
       case 'foreach':
