@@ -1,0 +1,20 @@
+# Dockerfile for Dirac Log Monitoring Service
+FROM node:20-alpine
+
+# Install Dirac
+RUN npm install -g dirac-lang
+
+# Create app directory
+WORKDIR /app
+
+# Copy monitoring script
+COPY monitor-logs.di /app/
+COPY config.yml /app/
+
+# Set environment variables
+ENV LLM_ENABLED=true
+ENV LOG_FILE=/var/log/app.log
+ENV CHECK_INTERVAL=3600
+
+# Run the monitoring service
+CMD ["dirac", "/app/monitor-logs.di"]
