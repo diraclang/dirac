@@ -2,7 +2,7 @@
  * <expr> tag - arithmetic and logical operations
  * Maps to mask_tag_expr in MASK
  * 
- * Supports: plus, minus, times, divide, mod, lt, gt, eq, and, or, not
+ * Supports: plus, minus, times, divide, mod, lt, gt, eq, and, or, not, same, contains
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
@@ -113,6 +113,11 @@ export async function executeExpr(session: DiracSession, element: DiracElement):
     case 'same':
     case 'strcmp':
       result = stringArgs.length >= 2 ? stringArgs[0] === stringArgs[1] : false;
+      break;
+      
+    case 'contains':
+    case 'includes':
+      result = stringArgs.length >= 2 ? stringArgs[0].includes(stringArgs[1]) : false;
       break;
       
     default:
