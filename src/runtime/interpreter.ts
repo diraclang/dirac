@@ -36,6 +36,7 @@ import { executeBreak } from '../tags/break.js';
 import { executeAttr } from '../tags/attr.js';
 import { executeEnvironment } from '../tags/environment.js';
 import { executeInput } from '../tags/input.js';
+import { executeSchedule } from '../tags/schedule.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -194,6 +195,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'input':
         await executeInput(session, element);
+        break;
+        
+      case 'schedule':
+        await executeSchedule(session, element);
         break;
 
       case 'require_module':

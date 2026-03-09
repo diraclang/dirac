@@ -83,8 +83,15 @@ export class DiracShell {
 
     this.rl.on('close', () => {
       this.saveHistory();
-      console.log('\nGoodbye!');
-      process.exit(0);
+      // Stop all scheduled tasks on exit
+      import('./tags/schedule.js').then(({ stopAllScheduledTasks }) => {
+        stopAllScheduledTasks();
+        console.log('\nGoodbye!');
+        process.exit(0);
+      }).catch(() => {
+        console.log('\nGoodbye!');
+        process.exit(0);
+      });
     });
 
     // Handle Ctrl+C
@@ -262,6 +269,9 @@ Commands:
   :load <query>   Load context (search and import subroutines)
   :save <name> <file>  Save subroutine to file
   :stats          Show registry statistics
+  :tasks          List all scheduled tasks
+  :stop <name>    Stop a scheduled task
+  :stopall        Stop all scheduled tasks
   :exit           Exit shell
 
 Syntax:
@@ -435,6 +445,52 @@ Examples:
           }
         } catch (error) {
           console.error('Error getting stats:', error instanceof Error ? error.message : String(error));
+        }
+        break;
+        
+      case 'tasks':
+        try {
+          const { listScheduledTasks } = await import('./tags/schedule.js');
+          const tasks = listScheduledTasks();
+          if (tasks.length === 0) {
+            console.log('No scheduled tasks running.');
+          } else {
+            console.log('\nScheduled Tasks:');
+            for (const task of tasks) {
+              console.log(`  - ${task.name}: every ${task.interval}s`);
+            }
+          }
+        } catch (error) {
+          console.error('Error listing tasks:', error instanceof Error ? error.message : String(error));
+        }
+        break;
+        
+      case 'stop':
+        if (args.length === 0) {
+          console.log('Usage: :stop <task-name>');
+        } else {
+          try {
+            const { stopScheduledTask } = await import('./tags/schedule.js');
+            const taskName = args[0];
+            const stopped = stopScheduledTask(taskName);
+            if (stopped) {
+              console.log(`Stopped task: ${taskName}`);
+            } else {
+              console.log(`Task not found: ${taskName}`);
+            }
+          } catch (error) {
+            console.error('Error stopping task:', error instanceof Error ? error.message : String(error));
+          }
+        }
+        break;
+        
+      case 'stopall':
+        try {
+          const { stopAllScheduledTasks } = await import('./tags/schedule.js');
+          stopAllScheduledTasks();
+          console.log('All scheduled tasks stopped.');
+        } catch (error) {
+          console.error('Error stopping tasks:', error instanceof Error ? error.message : String(error));
         }
         break;
 
