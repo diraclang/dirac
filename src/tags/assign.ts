@@ -10,6 +10,7 @@ import { integrate } from '../runtime/interpreter.js';
 export async function executeAssign(session: DiracSession, element: DiracElement): Promise<void> {
   const name = element.attributes.name;
   const valueAttr = element.attributes.value;
+  const trimAttr = element.attributes.trim;
   
   if (!name) {
     throw new Error('<assign> requires name attribute');
@@ -32,6 +33,11 @@ export async function executeAssign(session: DiracSession, element: DiracElement
     value = substituteVariables(session, element.text);
   } else {
     value = '';
+  }
+  
+  // Trim if requested
+  if (trimAttr === 'true' && typeof value === 'string') {
+    value = value.trim();
   }
   
   // Find existing variable and update it
