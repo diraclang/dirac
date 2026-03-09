@@ -5,8 +5,9 @@
 
 import type { DiracSession, DiracElement } from '../types/index.js';
 import { getVariable, setVariable, substituteVariables } from '../runtime/session.js';
+import { integrate } from '../runtime/interpreter.js';
 
-export function executeAssign(session: DiracSession, element: DiracElement): void {
+export async function executeAssign(session: DiracSession, element: DiracElement): Promise<void> {
   const name = element.attributes.name;
   const valueAttr = element.attributes.value;
   
@@ -18,6 +19,15 @@ export function executeAssign(session: DiracSession, element: DiracElement): voi
   let value: any;
   if (valueAttr !== undefined) {
     value = substituteVariables(session, valueAttr);
+  } else if (element.children && element.children.length > 0) {
+    // Execute children and capture output (like defvar does)
+    const prevOutput = session.output;
+    session.output = [];
+    for (const child of element.children) {
+      await integrate(session, child);
+    }
+    value = session.output.join('');
+    session.output = prevOutput;
   } else if (element.text) {
     value = substituteVariables(session, element.text);
   } else {
