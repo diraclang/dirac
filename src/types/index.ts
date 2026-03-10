@@ -126,4 +126,6 @@ export interface DiracConfig {
   filePath?: string;  // Current file path for imports
   llmProvider?: string;
   llmModel?: string;
+  customLLMUrl?: string;  // Custom LLM server URL
+  initScript?: string;  // Shell init script path (like .bashrc)
 }

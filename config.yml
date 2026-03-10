@@ -2,6 +2,13 @@
 llmProvider: anthropic 
 llmModel: claude-sonnet-4-20250514
 
+# Custom LLM server URL (when llmProvider is 'custom')
+#llmProvider: custom
+#customLLMUrl: http://localhost:5001
+
+# Shell init script (runs on 'dirac shell' startup)
+initScript: shell-init.di
+
 # Embedding server configuration (for tag-check similarity matching)
 embeddingServer:
   host: localhost

@@ -21,6 +21,7 @@ npm test
 ### Control Flow
 - ✅ `<if>` - Basic conditionals, with variables, else logic
 - ✅ `<loop>` - Basic loops, nested loops, loops with eval
+- ✅ `<break>` - Break out of loops
 
 ### Functions
 - ✅ `<subroutine>` - Basic subroutines, multiple params, recursive
@@ -64,6 +65,6 @@ Each test file follows this format:
 
 ## Test Statistics
 
-- **Total Tests**: 32
-- **Tag Coverage**: 19/24 tags (79%)
+- **Total Tests**: 57
+- **Tag Coverage**: 20/24 tags (83%)
 - **Missing Coverage**: llm, execute, mongodb (require external services)

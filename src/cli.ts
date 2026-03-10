@@ -18,6 +18,10 @@ async function main() {
   // --help option
   if (args.includes('--help') || args.includes('-h')) {
     console.log('Usage: dirac <file.di|file.bk>');
+    console.log('       dirac shell [options]');
+    console.log('');
+    console.log('Commands:');
+    console.log('  shell             Start interactive shell (REPL)');
     console.log('');
     console.log('File formats:');
     console.log('  .di               XML notation (verbose)');
@@ -31,6 +35,7 @@ async function main() {
     console.log('  --model <name>    Set default LLM model');
     console.log('  --max-llm <n>     Maximum LLM calls (default: 100)');
     console.log('  --max-depth <n>   Maximum recursion depth (default: 50)');
+    console.log('  -f, --config <path>  Path to config.yml file');
     process.exit(0);
   }
 
@@ -40,8 +45,54 @@ async function main() {
     process.exit(0);
   }
 
+  // Check for shell command
+  if (args[0] === 'shell') {
+    const { DiracShell } = await import('./shell.js');
+    
+    // Parse shell-specific options
+    const shellConfig: any = { debug: false };
+    for (let i = 1; i < args.length; i++) {
+      const arg = args[i];
+      if (arg === '--debug') {
+        shellConfig.debug = true;
+      } else if ((arg === '-f' || arg === '--config') && i + 1 < args.length) {
+        const configPath = resolve(args[++i]);
+        if (fs.existsSync(configPath)) {
+          const configData = yaml.load(fs.readFileSync(configPath, 'utf-8')) as any;
+          Object.assign(shellConfig, {
+            llmProvider: configData.llmProvider,
+            llmModel: configData.llmModel,
+            customLLMUrl: configData.customLLMUrl,
+            initScript: configData.initScript,
+          });
+        }
+      }
+    }
+    
+    // Load from default config.yml if not specified
+    if (!shellConfig.llmProvider) {
+      const defaultConfigPath = resolve(process.cwd(), 'config.yml');
+      if (fs.existsSync(defaultConfigPath)) {
+        try {
+          const configData = yaml.load(fs.readFileSync(defaultConfigPath, 'utf-8')) as any;
+          shellConfig.llmProvider = shellConfig.llmProvider || configData.llmProvider;
+          shellConfig.llmModel = shellConfig.llmModel || configData.llmModel;
+          shellConfig.customLLMUrl = shellConfig.customLLMUrl || configData.customLLMUrl;
+          shellConfig.initScript = shellConfig.initScript || configData.initScript;
+        } catch (err) {
+          // Ignore
+        }
+      }
+    }
+    
+    const shell = new DiracShell(shellConfig);
+    await shell.start();
+    return;
+  }
+
   if (args.length === 0) {
     console.error('Usage: dirac <file.di|file.bk>');
+    console.error('       dirac shell [options]');
     console.error('Try dirac --help for more information.');
     process.exit(1);
   }

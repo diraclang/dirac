@@ -27,11 +27,16 @@ import { executeCatch } from '../tags/catch.js';
 import { executeException } from '../tags/exception.js';
 import { executeTestIf } from '../tags/test-if.js';
 import { executeAvailableSubroutines } from '../tags/available-subroutines.js';
+import { executeListSubroutines } from '../tags/list-subroutines.js';
+import { executeIndexSubroutines, executeSearchSubroutines, executeRegistryStats } from '../tags/subroutine-index.js';
+import { executeLoadContext } from '../tags/load-context.js';
+import { executeSaveSubroutine } from '../tags/save-subroutine.js';
 import { executeForeach } from '../tags/foreach.js';
 import { executeBreak } from '../tags/break.js';
 import { executeAttr } from '../tags/attr.js';
 import { executeEnvironment } from '../tags/environment.js';
 import { executeInput } from '../tags/input.js';
+import { executeSchedule } from '../tags/schedule.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -152,6 +157,30 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         await executeAvailableSubroutines(session, element);
         break;
         
+      case 'list-subroutines':
+        await executeListSubroutines(session, element);
+        break;
+        
+      case 'index-subroutines':
+        await executeIndexSubroutines(session, element);
+        break;
+        
+      case 'search-subroutines':
+        await executeSearchSubroutines(session, element);
+        break;
+        
+      case 'registry-stats':
+        await executeRegistryStats(session, element);
+        break;
+        
+      case 'load-context':
+        await executeLoadContext(session, element);
+        break;
+        
+      case 'save-subroutine':
+        await executeSaveSubroutine(session, element);
+        break;
+        
       case 'foreach':
         await executeForeach(session, element);
         break;
@@ -166,6 +195,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'input':
         await executeInput(session, element);
+        break;
+        
+      case 'schedule':
+        await executeSchedule(session, element);
         break;
 
       case 'require_module':
