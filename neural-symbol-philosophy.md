@@ -284,3 +284,107 @@ Both RNNs and transformers act as mechanisms for context composition: they take 
 - The RNN’s flexibility comes from its ability to learn when to preserve, transform, or mix context and input, depending on the task.
 - In some cases, the RNN’s update may look like a simple addition in embedding space, but more generally, it is a learned, dynamic combination.
 - Symbolically, $|color\ hair\rangle$ in bra-ket notation captures the idea of context composition, even though literal vector addition is not a symbolic operation.
+
+
+## The Context Window Problem and DIRAC's Solution
+
+### The Fundamental Challenge
+
+For Large Language Models (LLMs), regardless of how large the context window is (4K, 32K, 128K, or even 1M tokens), it remains fundamentally limited. For large-scale business applications, this creates critical problems:
+
+1. **Context Initialization Overhead:**
+   - Every new conversation or task requires re-initializing business-specific context
+   - For large enterprises with extensive domain knowledge, documentation, procedures, and rules, the context required can easily exceed even million-token windows
+   - Repeatedly transmitting this context is:
+     - Computationally expensive (higher latency, more API costs)
+     - Inefficient (most context is static and reused across sessions)
+     - Impractical at scale (thousands of concurrent users each needing full context)
+
+2. **Fine-tuning Limitations:**
+   - The alternative—fine-tuning a model for each business—appears promising but faces severe practical barriers:
+     - **Cost:** Fine-tuning large models requires significant compute resources
+     - **Data Requirements:** Requires high-quality, extensive domain-specific training data
+     - **Maintenance:** Business rules, policies, and knowledge evolve continuously; each change requires retraining
+     - **Specialization vs. Generalization:** Fine-tuned models may lose general capabilities
+     - **Deployment:** Managing multiple fine-tuned models for different businesses or departments is operationally complex
+   - For the foreseeable future, fine-tuning is not a viable solution for most businesses
+
+### The Assessment
+
+**This assessment is correct.** We face a fundamental tradeoff:
+- **Context Window Approach:** Flexible but limited, expensive at scale, requires constant re-initialization
+- **Fine-tuning Approach:** Potentially powerful but impractical for most use cases, high maintenance burden
+
+Neither approach adequately solves the problem of persistent, business-specific knowledge that must be:
+- Accessible across sessions
+- Updatable without retraining
+- Composable and modular
+- Efficient to retrieve and use
+
+### DIRAC's Symbolic Solution
+
+DIRAC offers a third path that bridges symbolic AI's modularity with neural context formation:
+
+1. **Persistent Symbolic Knowledge Base:**
+   - Business rules, procedures, and domain knowledge are encoded as DIRAC subroutines
+   - These are **modular** and **compositional**—new knowledge doesn't interfere with existing knowledge
+   - Knowledge is **explicitly structured** and **human-readable**, not buried in model weights
+
+2. **On-Demand Context Assembly:**
+   - Instead of loading all context upfront, DIRAC can:
+     - Dynamically call relevant subroutines based on the current query
+     - Compose context from modular pieces (similar to RAG, but with executable logic)
+     - Build context hierarchically (high-level overview → drill down to specifics)
+
+3. **Hybrid Neural-Symbolic Processing:**
+   - Use LLM for semantic understanding and generation
+   - Use DIRAC's symbolic structures for:
+     - Rule enforcement (compliance, policies)
+     - Multi-step procedures (workflows, protocols)
+     - Data retrieval and transformation
+     - Context selection (which knowledge is relevant?)
+
+4. **Efficient Context Injection:**
+   - Only inject **relevant** context for each query
+   - Use embedding-based tag selection to find applicable subroutines
+   - Leverage DIRAC's ability to call subroutines with parameters, passing context dynamically
+
+### Example: Enterprise Customer Service
+
+Instead of:
+```
+[Massive context dump: company policies, product specs, customer history, FAQ, procedures...]
+User: How do I return a product?
+LLM: [processes everything, generates response]
+```
+
+DIRAC approach:
+```
+User: How do I return a product?
+→ DIRAC identifies relevant subroutines: returns-policy, shipping-procedure, refund-rules
+→ Calls these subroutines with customer context (account type, product category, purchase date)
+→ Subroutines execute, generating structured, contextualized information
+→ LLM receives only the relevant, assembled context (not everything)
+→ LLM generates natural language response
+```
+
+### Key Advantages
+
+1. **Scalability:** Context size grows with query complexity, not with total business knowledge
+2. **Maintainability:** Update individual subroutines without retraining or re-initializing entire context
+3. **Explainability:** Symbolic execution paths are traceable and auditable
+4. **Efficiency:** Computational cost proportional to query needs, not total knowledge base
+5. **Modularity:** Different departments/products can have their own subroutine libraries that compose cleanly
+
+### Philosophical Insight
+
+The context window problem reveals a deeper truth about knowledge representation:
+- **Neural approaches** treat knowledge as continuous, distributed patterns—powerful for generalization but opaque and inflexible
+- **Symbolic approaches** treat knowledge as discrete, structured rules—brittle but modular and maintainable
+- **DIRAC's hybrid** leverages both:
+  - Symbolic structure for persistent, updatable knowledge
+  - Neural embeddings for semantic matching and flexible reasoning
+  - Dynamic composition for efficient, query-specific context formation
+
+This is not just a technical workaround—it's a fundamental architectural principle for building AI systems that must maintain large-scale, evolving knowledge bases while remaining practical and explainable.
+
