@@ -388,3 +388,678 @@ The context window problem reveals a deeper truth about knowledge representation
 
 This is not just a technical workaround—it's a fundamental architectural principle for building AI systems that must maintain large-scale, evolving knowledge bases while remaining practical and explainable.
 
+
+### Addressing the RAG Counterargument
+
+**Challenge:** "RAG (Retrieval-Augmented Generation) already solves this problem. We use semantic search to retrieve only relevant chunks from a knowledge base, so we never send the entire context—just the pieces needed for each query. Why do we need DIRAC?"
+
+This is a valid point, and RAG is indeed a significant improvement over naive context stuffing. However, DIRAC addresses fundamental limitations that RAG cannot overcome:
+
+#### 1. **Static Text vs. Executable Logic**
+
+**RAG:**
+- Retrieves static text chunks (documentation, policies, FAQs)
+- LLM must interpret and reason about these chunks
+- No guarantee of correct interpretation or consistent application
+
+**DIRAC:**
+- Retrieves and **executes** subroutines (procedures, rules, calculations)
+- Business logic is **enforced programmatically**, not interpreted
+- Results are computed, not inferred
+
+**Example:** A return policy might state "30-day return window for electronics, 14 days for software." 
+- **RAG:** Retrieves this text, LLM must parse it and apply it to the customer's case
+- **DIRAC:** Executes `<call name="check-return-eligibility" product-type="electronics" purchase-date="2026-02-15" />` and gets a definitive yes/no with calculated days remaining
+
+#### 2. **Multi-Step Reasoning and Workflows**
+
+**RAG:**
+- Retrieves relevant documents
+- LLM must chain reasoning steps based on retrieved text
+- Each step risks hallucination or logical errors
+- No built-in state management across steps
+
+**DIRAC:**
+- Subroutines can call other subroutines
+- Workflows are explicit and traceable
+- State is maintained symbolically through variable passing
+- Complex procedures are executed, not improvised
+
+**Example:** Processing an order cancellation:
+- **RAG:** Retrieves cancellation policy, refund rules, inventory procedures—LLM must coordinate all steps
+- **DIRAC:** Executes `<call name="cancel-order" order-id="12345" />` which internally:
+  1. Validates cancellation eligibility
+  2. Calculates refund amount (calls refund-calculator)
+  3. Updates inventory (calls inventory-update)
+  4. Generates confirmation (calls notification-generator)
+  - All steps are guaranteed to execute in correct order with correct logic
+
+#### 3. **Data Access and Transformation**
+
+**RAG:**
+- Limited to pre-indexed text/documents
+- Cannot query databases or APIs directly
+- Cannot perform computations on retrieved data
+
+**DIRAC:**
+- Can query databases via `<mongodb>`, `<sql>`, etc.
+- Can call external APIs via `<http>`, `<system>`
+- Can perform calculations, transformations, validations
+- Results are fresh data, not stale documentation
+
+**Example:** "What's my account balance?"
+- **RAG:** Retrieves general information about account types and balance checking procedures
+- **DIRAC:** Executes `<mongodb collection="accounts"><find><filter account_id="${user_id}" /></find></mongodb>` and returns actual current balance
+
+#### 4. **Compliance and Auditability**
+
+**RAG:**
+- Black box: Cannot prove which documents influenced the response
+- Cannot guarantee policy compliance
+- Difficult to audit decision paths
+
+**DIRAC:**
+- White box: Complete execution trace available
+- Policy compliance enforced by code, not hoped for from LLM
+- Full audit trail: which subroutines were called, with what parameters, what they returned
+
+**Example:** Financial regulation compliance:
+- **RAG:** Retrieves compliance documents, hopes LLM applies them correctly
+- **DIRAC:** Executes compliance-checking subroutines that **must** be satisfied before proceeding—verifiable and auditable
+
+#### 5. **Composability and Modularity**
+
+**RAG:**
+- Chunks are independent text fragments
+- No guaranteed semantic consistency across chunks
+- Updates require re-indexing and hoping for coherent retrieval
+
+**DIRAC:**
+- Subroutines are composable units with defined interfaces
+- Updates to one subroutine don't require touching others
+- Changes are immediate and deterministic
+
+**Example:** Updating shipping rates:
+- **RAG:** Update documentation, re-index, hope retrieval ranks it appropriately, hope LLM interprets it correctly
+- **DIRAC:** Update `calculate-shipping` subroutine—all calls immediately use new logic, guaranteed
+
+#### 6. **The Hybrid Synthesis**
+
+**The key insight:** RAG and DIRAC are not competitors—they're complementary.
+
+**Optimal architecture:**
+```
+User Query
+    ↓
+DIRAC (orchestration layer)
+    ├→ RAG (retrieve relevant documentation for semantic understanding)
+    ├→ Subroutines (execute business logic, rules, calculations)
+    ├→ Databases (query real-time data)
+    └→ External APIs (integrate with other systems)
+    ↓
+Structured Context (assembled from all sources)
+    ↓
+LLM (natural language generation)
+    ↓
+Response
+```
+
+**RAG provides:**
+- Semantic retrieval of unstructured knowledge
+- Documentation and explanatory text
+- Background context and examples
+
+**DIRAC provides:**
+- Executable business logic
+- Guaranteed correct computations
+- Multi-step workflow orchestration
+- Real-time data access
+- Auditable decision paths
+
+#### 7. **The Practical Reality**
+
+In enterprise applications, you need both:
+- **RAG** for "What does the policy say?"
+- **DIRAC** for "Apply the policy to this specific case"
+
+- **RAG** for "How do returns work?"
+- **DIRAC** for "Process this return"
+
+- **RAG** for "Explain our pricing model"
+- **DIRAC** for "Calculate the price for this configuration"
+
+### Summary: RAG vs. DIRAC
+
+| Aspect | RAG | DIRAC |
+|--------|-----|-------|
+| **Knowledge Type** | Static text/documents | Executable logic |
+| **Retrieval** | Semantic search | Subroutine calls |
+| **Execution** | LLM interprets | Code executes |
+| **Correctness** | Probabilistic | Deterministic |
+| **Multi-step** | LLM chains | Explicit workflows |
+| **Data Access** | Pre-indexed only | Live queries |
+| **Auditability** | Opaque | Transparent |
+| **Updates** | Re-index, hope | Change code, guarantee |
+| **Best for** | Explanations, context | Actions, decisions, calculations |
+
+**Conclusion:** RAG is excellent for retrieving *information*. DIRAC is essential for executing *logic*. Real-world enterprise AI systems need both, working together in a hybrid architecture where DIRAC orchestrates RAG retrieval alongside deterministic execution.
+
+
+### Hierarchical Context Construction: DIRAC's Progressive Drilling
+
+A fundamental architectural difference between RAG and DIRAC is how they structure and access information:
+
+#### RAG's Flat Retrieval Model
+
+**RAG operates on a flat namespace:**
+- All documents/chunks are indexed at the same level
+- Retrieval returns a ranked list based on semantic similarity
+- No inherent hierarchy or structure to the knowledge
+- Must retrieve complete chunks even when only high-level overview is needed
+- Cannot progressively drill down—must fetch everything upfront or re-query
+
+**Example:** Asking "What are our product categories?"
+- RAG retrieves chunks about products, potentially including detailed specs, pricing, inventory levels
+- LLM must parse through all details to extract just the category names
+- Wastes tokens on irrelevant detail
+
+#### DIRAC's Hierarchical Structure
+
+**DIRAC organizes knowledge as a tree/graph:**
+- Information structured from general to specific
+- LLM can interact with DIRAC multiple times in a conversation
+- Progressive drilling: start broad, then request details as needed
+- Top-down construction matches human reasoning patterns
+
+**Example Architecture:**
+```xml
+<subroutine name="get-product-categories">
+  <output>Electronics, Clothing, Home & Garden, Books, Sports</output>
+</subroutine>
+
+<subroutine name="get-category-details" param-category="string">
+  <test-if test="$category" eq="Electronics">
+    <call name="electronics-subcategories" />
+  </test-if>
+  <!-- Other categories... -->
+</subroutine>
+
+<subroutine name="electronics-subcategories">
+  <output>Computers, Phones, Audio, Cameras, Gaming</output>
+</subroutine>
+
+<subroutine name="get-product-list" param-subcategory="string">
+  <!-- Actual product queries to database -->
+  <mongodb collection="products">
+    <find><filter category="${subcategory}" /></find>
+  </mongodb>
+</subroutine>
+```
+
+#### Progressive Interaction Pattern
+
+**Conversation flow with hierarchical drilling:**
+
+```
+User: "What product categories do you have?"
+    ↓
+DIRAC: <call name="get-product-categories" />
+LLM: "We have Electronics, Clothing, Home & Garden, Books, and Sports."
+    ↓
+User: "Tell me about Electronics."
+    ↓
+DIRAC: <call name="get-category-details" category="Electronics" />
+        ↓
+       <call name="electronics-subcategories" />
+LLM: "Electronics includes Computers, Phones, Audio, Cameras, and Gaming."
+    ↓
+User: "Show me gaming products."
+    ↓
+DIRAC: <call name="get-product-list" subcategory="Gaming" />
+       <!-- Queries database, returns actual products -->
+LLM: "Here are our gaming products: [list with details]"
+```
+
+**Key advantages:**
+1. **Context efficiency:** Each response uses minimal tokens—only what's needed at that level
+2. **User-driven depth:** User controls how deep to drill
+3. **Fresh data at each level:** Each call can query live data
+4. **Natural conversation flow:** Mirrors how humans explore information
+
+#### RAG's Limitation: No Progressive Drilling
+
+**With RAG, the same conversation would require:**
+
+```
+User: "What product categories do you have?"
+    ↓
+RAG: Retrieves chunks about products (likely includes category info + details)
+LLM: "We have Electronics, Clothing, Home & Garden, Books, and Sports."
+     (but retrieved chunks may have included unnecessary subcategory details)
+    ↓
+User: "Tell me about Electronics."
+    ↓
+RAG: Re-retrieves chunks, now focused on electronics
+     (must re-index or re-query, cannot reuse hierarchical knowledge)
+LLM: Responds based on new retrieval
+    ↓
+User: "Show me gaming products."
+    ↓
+RAG: Another retrieval pass
+     (each query is independent, no structural knowledge preserved)
+```
+
+**Problems:**
+- Each query is independent—no memory of hierarchical structure
+- Cannot efficiently navigate from general to specific
+- Often retrieves too much or too little
+- No guarantee of consistency across queries
+- Cannot query live data at each level
+
+#### Hierarchical Composability
+
+**DIRAC subroutines can be composed hierarchically:**
+
+```xml
+<!-- Top level: Company overview -->
+<subroutine name="company-overview">
+  <output>Company: Acme Corp</output>
+  <output>Departments: <call name="list-departments" /></output>
+</subroutine>
+
+<!-- Second level: Department list -->
+<subroutine name="list-departments">
+  <output>Sales, Engineering, Operations, HR</output>
+</subroutine>
+
+<!-- Third level: Department details -->
+<subroutine name="department-info" param-dept="string">
+  <test-if test="$dept" eq="Engineering">
+    <output>Head: Jane Smith</output>
+    <output>Teams: <call name="list-eng-teams" /></output>
+    <output>Projects: <call name="list-projects" dept="Engineering" /></output>
+  </test-if>
+</subroutine>
+
+<!-- Fourth level: Live project data -->
+<subroutine name="list-projects" param-dept="string">
+  <mongodb collection="projects">
+    <find><filter department="${dept}" status="active" /></find>
+  </mongodb>
+</subroutine>
+```
+
+**LLM can navigate this hierarchy interactively:**
+- "Tell me about the company" → calls `company-overview` (top level)
+- "What about Engineering?" → calls `department-info dept="Engineering"` (drill down)
+- "What projects are they working on?" → calls `list-projects dept="Engineering"` (live data)
+
+**Each step:**
+- Uses only the necessary context
+- Can incorporate fresh data
+- Maintains structural relationships
+- Enables audit trail of navigation path
+
+#### Comparison: Information Architecture
+
+| Aspect | RAG | DIRAC Hierarchical |
+|--------|-----|-------------------|
+| **Structure** | Flat/unstructured | Tree/graph hierarchy |
+| **Navigation** | Retrieve by similarity | Navigate by structure |
+| **Depth control** | All-or-nothing retrieval | Progressive drilling |
+| **Conversation** | Stateless queries | Stateful navigation |
+| **Efficiency** | Retrieves full chunks | Returns only needed level |
+| **Consistency** | Depends on retrieval quality | Guaranteed by structure |
+| **Live data** | Pre-indexed only | Query at any level |
+| **Composability** | Text concatenation | Subroutine composition |
+
+#### The Cognitive Advantage
+
+**Hierarchical structure matches human reasoning:**
+- We naturally think top-down: categories → subcategories → items
+- We explore incrementally: overview → drill into interest areas
+- We maintain context: remember where we are in the hierarchy
+- We compose understanding: combine pieces with structural relationships
+
+**RAG's flat model forces:**
+- LLM to reconstruct hierarchy from unstructured chunks
+- Probabilistic inference instead of guaranteed structure
+- Token waste on irrelevant details or re-retrieval
+- Loss of navigational context between queries
+
+#### Practical Example: Technical Documentation
+
+**User exploring API documentation:**
+
+```
+User: "What APIs do you have?"
+DIRAC: <call name="list-api-endpoints" />
+       → Returns: "Authentication, Users, Products, Orders, Payments"
+
+User: "How does authentication work?"
+DIRAC: <call name="api-docs" endpoint="auth" level="overview" />
+       → Returns: "OAuth 2.0 flow, supports JWT tokens..."
+
+User: "Show me the login endpoint details."
+DIRAC: <call name="api-docs" endpoint="auth" method="login" level="full" />
+       → Returns: Detailed specs, parameters, examples, response codes
+
+User: "What about error handling?"
+DIRAC: <call name="api-docs" endpoint="auth" method="login" section="errors" />
+       → Returns: Only error documentation
+```
+
+**Each call:**
+- Targets exactly what's needed
+- Can be as shallow or deep as required
+- Maintains logical structure
+- Can include live data (e.g., current API version, status)
+
+**With RAG:**
+- Would need to retrieve API docs (all or filtered)
+- Cannot guarantee structural navigation
+- Likely retrieves more than needed at each step
+- No guarantee of consistency in depth/detail across responses
+
+### Summary: Hierarchical Architecture
+
+**DIRAC's hierarchical structure enables:**
+1. **Top-down exploration:** Start with overview, drill into details
+2. **Context efficiency:** Use only tokens needed at current level
+3. **Progressive revelation:** Expose complexity incrementally
+4. **Structural guarantees:** Relationships are explicit, not inferred
+5. **Multi-turn optimization:** Each turn refines context, doesn't rebuild it
+6. **Natural conversation:** Mirrors human information-seeking behavior
+
+**This is not just about retrieval—it's about knowledge architecture.** RAG retrieves documents; DIRAC navigates structured knowledge. The difference is fundamental to building conversational AI that can efficiently guide users through complex information spaces.
+
+
+### DIRAC vs. Tool-Calling Approaches (MCP, Function Calling, etc.)
+
+**Your question highlights an important clarification:** Technologies like MCP (Model Context Protocol), OpenAI's function calling, Anthropic's tool use, and LangChain's agents all attempt to give LLMs the ability to execute code, query databases, and call APIs. How is DIRAC different?
+
+#### The Tool-Calling Paradigm
+
+**Modern LLM platforms provide:**
+- **Function/Tool Definitions:** Describe available functions with schemas
+- **LLM Decides:** Model chooses which tool to call based on user query
+- **Execution:** System executes the chosen tool with LLM-provided parameters
+- **Return to LLM:** Results fed back to LLM for response generation
+
+**Examples:**
+- **OpenAI Function Calling:** Define functions as JSON schemas, GPT decides when to call
+- **Anthropic Tool Use:** Similar approach with Claude
+- **MCP (Model Context Protocol):** Standardized protocol for tools/resources across providers
+- **LangChain Agents:** Framework for chaining tool calls
+
+**This solves the "execute code" problem** - LLMs can now query databases, call APIs, perform calculations, etc.
+
+#### What Tool-Calling Provides
+
+```python
+# Example: OpenAI function calling
+tools = [
+    {
+        "type": "function",
+        "function": {
+            "name": "get_product_list",
+            "description": "Get products from database",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "category": {"type": "string"},
+                    "limit": {"type": "integer"}
+                }
+            }
+        }
+    }
+]
+
+# LLM decides: "User wants gaming products"
+# LLM calls: get_product_list(category="gaming", limit=10)
+# System executes function
+# Results returned to LLM
+```
+
+**Strengths:**
+- ✅ Can execute arbitrary code
+- ✅ Access live data from databases/APIs
+- ✅ Standardized protocols (MCP)
+- ✅ LLM autonomously chooses tools
+
+**Limitations:**
+- ❌ Still probabilistic - LLM might choose wrong tool or wrong parameters
+- ❌ No guaranteed workflows - each tool call is independent
+- ❌ No hierarchical structure - flat namespace of available tools
+- ❌ No composability - tools don't call other tools (unless LLM chains them)
+- ❌ Limited auditability - hard to trace multi-step reasoning
+- ❌ No separation of concerns - business logic scattered across tool definitions
+
+#### DIRAC's Complementary Approach
+
+**DIRAC is not replacing tool-calling - it's providing the orchestration layer above it.**
+
+Think of it this way:
+
+```
+User Query
+    ↓
+LLM (reasoning)
+    ↓
+DIRAC (orchestration & structure)
+    ↓
+├→ Tool Calls (via MCP/function calling)
+├→ Database Queries (MongoDB, SQL)
+├→ RAG Retrieval (semantic search)
+├→ Business Logic (subroutines)
+└→ APIs (HTTP, system calls)
+    ↓
+Structured Results
+    ↓
+LLM (natural language generation)
+    ↓
+Response
+```
+
+#### Key Differences: Tool-Calling vs. DIRAC
+
+| Aspect | Tool-Calling (MCP/etc.) | DIRAC |
+|--------|------------------------|-------|
+| **Abstraction Level** | Individual functions | Workflows & procedures |
+| **Decision Making** | LLM chooses each call | Structure guides execution |
+| **Composability** | LLM chains manually | Subroutines compose hierarchically |
+| **Workflows** | LLM improvises | Explicitly defined |
+| **Business Logic** | In tool definitions | In subroutines |
+| **Auditability** | Tool call logs | Full execution trace |
+| **Correctness** | Probabilistic | Deterministic workflows |
+| **Hierarchy** | Flat tool list | Structured knowledge tree |
+| **State Management** | LLM's context window | Symbolic variables |
+| **Updates** | Change tool definitions | Update subroutines |
+
+#### Concrete Example: Order Processing
+
+**With Tool-Calling Only:**
+
+```
+User: "Cancel my order #12345"
+
+LLM thinks: "Need to cancel order"
+→ Calls: check_order_status(order_id="12345")
+← Returns: {status: "shipped", can_cancel: false}
+
+LLM thinks: "Order already shipped, but maybe can return?"
+→ Calls: check_return_eligibility(order_id="12345")
+← Returns: {eligible: true, window_days: 30}
+
+LLM thinks: "Can return, need to calculate refund"
+→ Calls: calculate_refund(order_id="12345")
+← Returns: {amount: 89.99, method: "original_payment"}
+
+LLM generates: "Your order has shipped, but you can return it within 30 days for a refund of $89.99"
+```
+
+**Problems:**
+- LLM must remember to check all steps
+- Each step is independent - no guaranteed workflow
+- Might skip compliance checks
+- Might calculate refund before checking eligibility
+- Logic is in LLM's reasoning, not auditable code
+
+**With DIRAC Orchestration:**
+
+```xml
+<subroutine name="cancel-order" param-order_id="string">
+  <!-- Step 1: Validate order exists -->
+  <call name="get-order" order_id="${order_id}" />
+  <test-if test="$order" eq="">
+    <throw message="Order not found" />
+  </test-if>
+  
+  <!-- Step 2: Check cancellation eligibility -->
+  <defvar name="status">
+    <call name="check-order-status" order_id="${order_id}" />
+  </defvar>
+  
+  <test-if test="$status" eq="shipped">
+    <!-- Already shipped - redirect to returns -->
+    <call name="check-return-eligibility" order_id="${order_id}" />
+  </test-if>
+  <test-else>
+    <!-- Not shipped - can cancel directly -->
+    <call name="cancel-order-internal" order_id="${order_id}" />
+    <call name="process-refund" order_id="${order_id}" />
+    <call name="update-inventory" order_id="${order_id}" />
+    <call name="send-cancellation-email" order_id="${order_id}" />
+  </test-else>
+</subroutine>
+```
+
+**Advantages:**
+- ✅ Guaranteed workflow - all steps execute in order
+- ✅ Compliance checks built-in
+- ✅ Reusable - can be called from multiple contexts
+- ✅ Auditable - full trace of what happened
+- ✅ Testable - can unit test the subroutine
+- ✅ Maintainable - update logic in one place
+
+**And the underlying tools can still be MCP/function calls:**
+
+```xml
+<subroutine name="check-order-status" param-order_id="string">
+  <!-- This could internally use MCP to call external service -->
+  <http method="GET" url="https://api.orders.com/status/${order_id}" />
+</subroutine>
+```
+
+#### The Layered Architecture
+
+**DIRAC doesn't compete with MCP - it leverages it:**
+
+```
+┌─────────────────────────────────┐
+│   LLM (Claude, GPT, etc.)       │  ← Natural language understanding
+└────────────┬────────────────────┘
+             ↓
+┌─────────────────────────────────┐
+│   DIRAC (Orchestration)         │  ← Workflows, hierarchy, logic
+│   - Subroutines                 │
+│   - Control flow                │
+│   - State management            │
+│   - Composition                 │
+└────────────┬────────────────────┘
+             ↓
+┌─────────────────────────────────┐
+│   Tool Layer (MCP/Function Call)│  ← Individual operations
+│   - Database queries            │
+│   - API calls                   │
+│   - RAG retrieval              │
+│   - Calculations               │
+└─────────────────────────────────┘
+```
+
+**Each layer has a role:**
+- **LLM:** Understands intent, generates language
+- **DIRAC:** Structures the solution, enforces workflows
+- **Tools/MCP:** Executes atomic operations
+
+#### Why Both Are Needed
+
+**Tool-calling alone:**
+```
+User: "Process order cancellation"
+→ LLM must decide: Which tools? In what order? What if error?
+→ Logic is in LLM's weights + prompt
+→ Changes require prompt engineering or retraining
+```
+
+**DIRAC + tool-calling:**
+```
+User: "Process order cancellation"
+→ LLM: "This needs the cancel-order workflow"
+→ DIRAC: Executes cancel-order subroutine (defined workflow)
+→ Subroutine calls tools via MCP as needed
+→ Logic is in code, auditable and maintainable
+```
+
+#### Real-World Integration
+
+**DIRAC can use MCP tools as primitives:**
+
+```xml
+<dirac>
+  <!-- Define MCP tool as DIRAC subroutine wrapper -->
+  <subroutine name="query-database" param-query="string">
+    <mcp-tool name="mongodb.query" query="${query}" />
+  </subroutine>
+  
+  <!-- Compose into higher-level workflow -->
+  <subroutine name="get-customer-profile" param-customer_id="string">
+    <defvar name="customer">
+      <call name="query-database" query="SELECT * FROM customers WHERE id=${customer_id}" />
+    </defvar>
+    
+    <defvar name="orders">
+      <call name="query-database" query="SELECT * FROM orders WHERE customer_id=${customer_id}" />
+    </defvar>
+    
+    <defvar name="preferences">
+      <call name="query-database" query="SELECT * FROM preferences WHERE customer_id=${customer_id}" />
+    </defvar>
+    
+    <!-- Compose into structured profile -->
+    <output>Customer: <variable name="customer" /></output>
+    <output>Orders: <variable name="orders" /></output>
+    <output>Preferences: <variable name="preferences" /></output>
+  </subroutine>
+</dirac>
+```
+
+Now `get-customer-profile` is a **single, testable, auditable unit** that:
+- Uses MCP tools for database access
+- Composes multiple queries
+- Guarantees they execute in order
+- Returns structured data
+
+### Summary: DIRAC + MCP = Complete Solution
+
+**MCP/Tool-Calling provides:**
+- Execution capabilities (database, APIs, calculations)
+- Standardized protocols
+- LLM autonomy in tool selection
+
+**DIRAC provides:**
+- Workflow orchestration
+- Hierarchical knowledge structure
+- Guaranteed execution paths
+- Composability and modularity
+- Business logic separation
+- Full auditability
+
+**Together:**
+- **MCP** gives LLMs hands (ability to act)
+- **DIRAC** gives LLMs a brain structure (how to think and organize actions)
+- **RAG** gives LLMs memory (access to knowledge)
+- **LLM** provides intelligence (understanding and language)
+
+The optimal enterprise AI system uses **all four**, with DIRAC as the orchestration layer that coordinates MCP tool calls, RAG retrieval, and LLM reasoning into coherent, auditable, maintainable workflows.
+
