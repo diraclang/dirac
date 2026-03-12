@@ -102,6 +102,11 @@ async function main() {
   let filePath: string | undefined;
   let emitXml = false;
   let configFile: string | undefined;
+  
+  // Check DEBUG environment variable
+  if (process.env.DEBUG === '1') {
+    config.debug = true;
+  }
 
   for (let i = 0; i < args.length; i++) {
     const arg = args[i];
