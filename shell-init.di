@@ -2,6 +2,8 @@
 # This script runs automatically when the shell starts
 |import src="./lib/native-tags.di" >
 
+|import src="./lib/ai.di" >
+
 # Define some useful helper subroutines
 <hello |
   |output>Hello from init script!

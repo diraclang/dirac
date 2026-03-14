@@ -22,11 +22,22 @@
 <output>
 Autocomplete test file loaded!
 
-Try typing in the shell:
-  |li[TAB]       - Should suggest: list-items, list-users, list-files, list-subroutines
-  |load[TAB]     - Should suggest: load-data, load-context
-  :h[TAB]        - Should suggest: :help, :history
-  :s[TAB]        - Should suggest: :save, :subs
+Try typing in the shell and press TAB:
 
-Press TAB to see autocomplete suggestions!
+1. Tag name completion:
+   |li[TAB]       → Suggests: list-items, list-users, list-files, list-subroutines
+
+2. After exact tag name, shows parameters:
+   |llm[TAB]      → Shows available parameters: model=string, output=string, context=string, etc.
+
+3. Attribute name completion:
+   |llm m[TAB]    → Suggests: model=, maxTokens=, max-retries=, max-iterations=
+   |llm o[TAB]    → Suggests: output=, noextra=
+
+4. Shell commands:
+   :h[TAB]        → Suggests: :help, :history
+   :s[TAB]        → Suggests: :save, :subs
+
+Parameters marked with * are required!
+Press TAB multiple times to cycle through suggestions!
 </output>

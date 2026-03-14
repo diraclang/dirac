@@ -52,6 +52,72 @@ export class DiracShell {
   }
 
   private completer(line: string): [string[], string] {
+    // Check if user is typing an attribute after a tag: |tagname attr_partial
+    // Match: |tagname something attr_partial (where attr_partial is being typed)
+    const attrMatch = line.match(/\|([a-z0-9_-]+)\s+.*?([a-z0-9_-]*)$/i);
+    
+    if (attrMatch) {
+      const tagName = attrMatch[1];
+      const attrPartial = attrMatch[2];
+      
+      // Find the subroutine
+      const subroutine = this.session.subroutines.find((sub: any) => sub.name === tagName);
+      
+      if (subroutine && subroutine.parameters && subroutine.parameters.length > 0) {
+        // Get parameter names
+        const paramNames = subroutine.parameters.map((p: any) => p.name);
+        
+        // Filter by partial match
+        const matches = paramNames.filter((name: string) => 
+          name.toLowerCase().startsWith(attrPartial.toLowerCase())
+        );
+        
+        // Return with '=' suffix to indicate attribute assignment
+        const completions = matches.map((name: string) => `${name}=`);
+        
+        return [completions, attrPartial];
+      }
+    }
+    
+    // Check if user just completed a tag name: |tagname (suggest first space + attributes)
+    const tagCompleteMatch = line.match(/\|([a-z0-9_-]+)$/i);
+    
+    if (tagCompleteMatch) {
+      const tagName = tagCompleteMatch[1];
+      
+      // First try exact match to show attributes
+      const subroutine = this.session.subroutines.find((sub: any) => sub.name === tagName);
+      
+      if (subroutine && subroutine.parameters && subroutine.parameters.length > 0) {
+        // Show available parameters as suggestions
+        const paramSuggestions = subroutine.parameters.map((p: any) => {
+          const required = p.required ? '*' : '';
+          const typeInfo = p.type || 'string';
+          return `${p.name}=${required}${typeInfo}`;
+        });
+        
+        return [paramSuggestions, ''];
+      }
+      
+      // Otherwise, show matching subroutine names
+      const subroutineNames = this.session.subroutines.map((sub: any) => sub.name);
+      const matches = subroutineNames.filter((name: string) => 
+        name.toLowerCase().startsWith(tagName.toLowerCase())
+      );
+      
+      if (matches.length > 0) {
+        // For each match, check if it has parameters
+        const completions = matches.map((name: string) => {
+          const sub = this.session.subroutines.find((s: any) => s.name === name);
+          const hasParams = sub && sub.parameters && sub.parameters.length > 0;
+          
+          // If has parameters, leave it open with a space; otherwise close with >
+          return hasParams ? `|${name} ` : `|${name}>`;
+        });
+        return [completions, tagCompleteMatch[0]];
+      }
+    }
+    
     // Check if user is typing a bra-ket tag: |name>
     const braketMatch = line.match(/\|([a-z0-9_-]*)$/i);
     
@@ -66,8 +132,14 @@ export class DiracShell {
         name.toLowerCase().startsWith(partial.toLowerCase())
       );
       
-      // Return matches with the pipe prefix
-      const completions = matches.map((name: string) => `|${name}>`);
+      // For each match, check if it has parameters
+      const completions = matches.map((name: string) => {
+        const subroutine = this.session.subroutines.find((sub: any) => sub.name === name);
+        const hasParams = subroutine && subroutine.parameters && subroutine.parameters.length > 0;
+        
+        // If has parameters, leave it open with a space; otherwise close with >
+        return hasParams ? `|${name} ` : `|${name}>`;
+      });
       
       return [completions, braketMatch[0]];
     }
