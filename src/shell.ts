@@ -267,7 +267,7 @@ Commands:
   :index <path>   Index subroutines from directory
   :search <query> Search indexed subroutines
   :load <query>   Load context (search and import subroutines)
-  :save <name> <file>  Save subroutine to file
+  :save <name> [file]  Save subroutine (default: ~/.dirac/lib/TIMESTAMP/name.di)
   :stats          Show registry statistics
   :tasks          List all scheduled tasks
   :stop <name>    Stop a scheduled task
@@ -417,13 +417,30 @@ Examples:
         break;
         
       case 'save':
-        if (args.length < 2) {
-          console.log('Usage: :save <subroutine-name> <file>');
+        if (args.length === 0) {
+          console.log('Usage: :save <subroutine-name> [file]');
+          console.log('  If file is omitted, saves to ~/.dirac/lib/TIMESTAMP/NAME.di');
+          console.log('Examples:');
+          console.log('  :save greet                    # saves to ~/.dirac/lib/TIMESTAMP/greet.di');
+          console.log('  :save greet ./my-lib/greet.di  # saves to specific file');
+          console.log('  :save greet utils              # saves to ~/.dirac/lib/utils/greet.di');
         } else {
           const subName = args[0];
-          const fileName = args[1];
+          const fileName = args.length > 1 ? args[1] : undefined;
           try {
-            const xml = `<save-subroutine name="${subName}" file="${fileName}" format="xml" />`;
+            let xml: string;
+            if (fileName) {
+              // Check if it's a directory path or file path
+              if (fileName.includes('/') || fileName.includes('.di')) {
+                xml = `<save-subroutine name="${subName}" file="${fileName}" format="xml" />`;
+              } else {
+                // Treat as directory name under ~/.dirac/lib/
+                xml = `<save-subroutine name="${subName}" path="${fileName}" format="xml" />`;
+              }
+            } else {
+              // No file specified, use default timestamped directory
+              xml = `<save-subroutine name="${subName}" format="xml" />`;
+            }
             const ast = this.xmlParser.parse(xml);
             await integrate(this.session, ast);
             if (this.session.output.length > 0) {

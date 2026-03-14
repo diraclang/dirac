@@ -2,30 +2,36 @@
  * <save-subroutine> tag - Save a subroutine definition to a file
  * 
  * Usage:
+ *   <save-subroutine name="my-sub" />  <!-- saves to ~/.dirac/lib/TIMESTAMP/my-sub.di -->
  *   <save-subroutine name="my-sub" file="./my-sub.di" />
  *   <save-subroutine name="ai" file="ai.di" format="xml" />
  *   <save-subroutine name="greeting" file="lib/greeting.di" format="braket" />
+ *   <save-subroutine name="greet" path="utils" />  <!-- saves to ~/.dirac/lib/utils/greet.di -->
  * 
  * This extracts a subroutine from the session and writes it to a file
  * in either XML or bra-ket notation.
+ * 
+ * Attributes:
+ *   - name: subroutine name (required)
+ *   - file: explicit file path (optional, uses default if omitted)
+ *   - path: directory name under ~/.dirac/lib/ (optional)
+ *   - format: 'xml' or 'braket' (default: 'xml')
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
 import { emit } from '../runtime/session.js';
-import { writeFileSync, mkdirSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { resolve, dirname, join } from 'path';
+import { homedir } from 'os';
 
 export async function executeSaveSubroutine(session: DiracSession, element: DiracElement): Promise<void> {
   const name = element.attributes.name;
   const file = element.attributes.file;
+  const pathAttr = element.attributes.path;
   const format = element.attributes.format || 'xml'; // 'xml' or 'braket'
   
   if (!name) {
     throw new Error('<save-subroutine> requires name attribute');
-  }
-  
-  if (!file) {
-    throw new Error('<save-subroutine> requires file attribute');
   }
   
   // Find the subroutine in the session (get the full object, not just element)
@@ -50,17 +56,37 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
     content = generateXMLNotation(subroutine);
   }
   
-  // Resolve file path (relative to cwd)
-  const filePath = resolve(process.cwd(), file);
+  // Determine file path
+  let filePath: string;
+  
+  if (file) {
+    // Explicit file path (existing behavior)
+    filePath = resolve(process.cwd(), file);
+  } else if (pathAttr) {
+    // Path is a directory name under ~/.dirac/lib/
+    const targetDir = join(homedir(), '.dirac', 'lib', pathAttr);
+    filePath = join(targetDir, `${name}.di`);
+  } else {
+    // Default: ~/.dirac/lib/TIMESTAMP/name.di
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+    const defaultDir = join(homedir(), '.dirac', 'lib', timestamp);
+    filePath = join(defaultDir, `${name}.di`);
+  }
   
   // Create directory if it doesn't exist
   const dir = dirname(filePath);
-  mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
   
   // Write to file
   writeFileSync(filePath, content, 'utf-8');
   
   emit(session, `Subroutine '${name}' saved to: ${filePath}\n`);
+  
+  if (session.debug) {
+    console.error(`[save-subroutine] Saved '${name}' to: ${filePath}`);
+  }
 }
 
 /**
