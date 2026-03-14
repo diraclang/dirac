@@ -44,10 +44,48 @@ export class DiracShell {
       output: process.stdout,
       prompt: '> ',
       historySize: MAX_HISTORY,
+      completer: this.completer.bind(this),
     });
 
     this.loadHistory();
     this.setupHandlers();
+  }
+
+  private completer(line: string): [string[], string] {
+    // Check if user is typing a bra-ket tag: |name>
+    const braketMatch = line.match(/\|([a-z0-9_-]*)$/i);
+    
+    if (braketMatch) {
+      const partial = braketMatch[1];
+      
+      // Get all subroutine names
+      const subroutineNames = this.session.subroutines.map((sub: any) => sub.name);
+      
+      // Filter matches
+      const matches = subroutineNames.filter((name: string) => 
+        name.toLowerCase().startsWith(partial.toLowerCase())
+      );
+      
+      // Return matches with the pipe prefix
+      const completions = matches.map((name: string) => `|${name}>`);
+      
+      return [completions, braketMatch[0]];
+    }
+    
+    // Check if user is typing a shell command: :name
+    const commandMatch = line.match(/:([a-z]*)$/i);
+    
+    if (commandMatch) {
+      const partial = commandMatch[1];
+      const commands = ['help', 'quit', 'exit', 'vars', 'subs', 'clear', 'history', 'save', 'debug', 'llm'];
+      
+      const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
+      const completions = matches.map(cmd => `:${cmd}`);
+      
+      return [completions, commandMatch[0]];
+    }
+    
+    return [[], line];
   }
 
   private loadHistory(): void {

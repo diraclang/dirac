@@ -1,5 +1,6 @@
 # Dirac Shell Init Script
 # This script runs automatically when the shell starts
+|import src="./lib/native-tags.di" >
 
 # Define some useful helper subroutines
 <hello |

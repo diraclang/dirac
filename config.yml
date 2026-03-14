@@ -1,7 +1,6 @@
 # Dirac server configuration
-llmProvider: ollama
-llmModel: llama2 
-# Add other config options as needed
+llmProvider: anthropic 
+llmModel: claude-sonnet-4-20250514
 
 # Custom LLM server URL (when llmProvider is 'custom')
 #llmProvider: custom
@@ -18,4 +17,3 @@ embeddingServer:
 
 # MongoDB configuration
 MONGODB_URI: "mongodb://localhost:27017"
-
