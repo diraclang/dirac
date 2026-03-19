@@ -20,11 +20,30 @@ export async function executeExecute(session: DiracSession, element: DiracElemen
     if (!diracCode) {
       throw new Error(`<execute> source variable '${sourceAttr}' not found`);
     }
-  } else if (element.text) {
-    // Get from text content (with variable substitution)
-    diracCode = substituteVariables(session, element.text);
   } else {
-    throw new Error('<execute> requires source attribute or text content');
+    // Check if has non-text children (actual element children)
+    const hasElementChildren = element.children.some(child => child.tag !== '');
+    
+    if (hasElementChildren) {
+      // Execute children to build code dynamically
+      const beforeOutput = session.output.length;
+      
+      for (const child of element.children) {
+        await integrate(session, child);
+      }
+      
+      // Collect output from children as the code
+      const childOutput = session.output.slice(beforeOutput);
+      diracCode = childOutput.join('');
+      
+      // Remove child output from main output
+      session.output = session.output.slice(0, beforeOutput);
+    } else if (element.text) {
+      // Get from text content (with variable substitution)
+      diracCode = substituteVariables(session, element.text);
+    } else {
+      throw new Error('<execute> requires source attribute or text content');
+    }
   }
   
   if (session.debug) {

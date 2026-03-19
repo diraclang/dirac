@@ -1,6 +1,7 @@
 # Dirac server configuration
-llmProvider: anthropic 
-llmModel: claude-sonnet-4-20250514
+llmProvider: openai 
+llmModel: gpt-4.1-2025-04-14 
+# Add other config options as needed
 
 # Custom LLM server URL (when llmProvider is 'custom')
 #llmProvider: custom
