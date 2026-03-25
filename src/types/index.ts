@@ -115,6 +115,9 @@ export interface DiracSession {
   // Import tracking
   currentFile?: string;
   importedFiles?: Set<string>;
+  
+  // Library paths from config.yml
+  libraryPaths?: string[];
 }
 
 export interface DiracConfig {
@@ -128,4 +131,5 @@ export interface DiracConfig {
   llmModel?: string;
   customLLMUrl?: string;  // Custom LLM server URL
   initScript?: string;  // Shell init script path (like .bashrc)
+  libraryPaths?: string[];  // Additional library search paths
 }

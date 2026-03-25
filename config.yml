@@ -10,6 +10,14 @@ llmModel: gpt-4.1-2025-04-14
 # Shell init script (runs on 'dirac shell' startup)
 initScript: shell-init.di
 
+# Library search paths for imports (supports ~/ for home directory)
+# Used after DIRAC_LIBS environment variable but before node_modules
+# Uncomment and customize for project-specific library locations
+#libraryPaths:
+#  - ~/diraclang
+#  - ~/my-project/libs
+#  - /usr/local/dirac-libs
+
 # Embedding server configuration (for tag-check similarity matching)
 embeddingServer:
   host: localhost

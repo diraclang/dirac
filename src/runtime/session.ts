@@ -76,6 +76,7 @@ export function createSession(config: DiracConfig = {}): DiracSession {
     skipSubroutineRegistration: false,
     debug: config.debug || false,
     currentFile: config.filePath, // Set current file from config for proper relative import resolution
+    libraryPaths: config.libraryPaths || [],
   };
 }
 

@@ -9,22 +9,95 @@ import { resolve, dirname, join } from 'path';
 import { DiracParser } from '../runtime/parser.js';
 import { integrate } from '../runtime/interpreter.js';
 import { substituteAttribute } from '../runtime/session.js';
+import { homedir } from 'os';
 
 /**
- * Resolve import path - supports relative paths and node_modules packages
- * @param src - The import source (e.g., "./file.di" or "package-name")
+ * Resolve import path with comprehensive strategy:
+ * 1. Absolute paths (starts with /)
+ * 2. Home expansion (starts with ~/)
+ * 3. Relative to current file (starts with ./ or ../)
+ * 4. DIRAC_LIBS environment variable (colon-separated paths)
+ * 5. config.yml libraryPaths
+ * 6. node_modules (npm packages)
+ * 7. Error if not found
+ * 
+ * @param src - The import source (e.g., "./file.di", "dirac-stdlib/lib/telegram.di")
  * @param currentDir - Current directory context
+ * @param libraryPaths - Additional library paths from config.yml
  * @returns Resolved absolute path
  */
-function resolveImportPath(src: string, currentDir: string): string {
-  // If it starts with ./ or ../ or /, it's a relative/absolute path
-  if (src.startsWith('./') || src.startsWith('../') || src.startsWith('/')) {
-    const resolved = resolve(currentDir, src);
-    // Add .di extension if not present
-    return resolved.endsWith('.di') ? resolved : resolved + '.di';
+function resolveImportPath(src: string, currentDir: string, libraryPaths: string[] = []): string {
+  // Helper to add .di extension if not present
+  const ensureDiExtension = (path: string) => path.endsWith('.di') ? path : path + '.di';
+  
+  // Helper to try resolving in a base directory
+  const tryResolveInBase = (basePath: string, modulePath: string): string | null => {
+    const fullPath = join(basePath, modulePath);
+    const withExtension = ensureDiExtension(fullPath);
+    if (existsSync(withExtension)) {
+      return withExtension;
+    }
+    return null;
+  };
+  
+  // 1. Absolute paths (starts with /)
+  if (src.startsWith('/')) {
+    const resolved = ensureDiExtension(src);
+    if (existsSync(resolved)) {
+      return resolved;
+    }
+    throw new Error(`Absolute path not found: ${resolved}`);
   }
   
-  // Otherwise, try to resolve as a package from node_modules
+  // 2. Home expansion (starts with ~/)
+  if (src.startsWith('~/')) {
+    const expanded = join(homedir(), src.slice(2));
+    const resolved = ensureDiExtension(expanded);
+    if (existsSync(resolved)) {
+      return resolved;
+    }
+    throw new Error(`Home path not found: ${resolved}`);
+  }
+  
+  // 3. Relative to current file (starts with ./ or ../)
+  if (src.startsWith('./') || src.startsWith('../')) {
+    const resolved = resolve(currentDir, src);
+    const withExtension = ensureDiExtension(resolved);
+    if (existsSync(withExtension)) {
+      return withExtension;
+    }
+    throw new Error(`Relative path not found: ${withExtension}`);
+  }
+  
+  // 4. DIRAC_LIBS environment variable (colon-separated paths)
+  const diracLibs = process.env.DIRAC_LIBS;
+  if (diracLibs) {
+    const libPaths = diracLibs.split(':').filter(p => p.trim());
+    for (const libPath of libPaths) {
+      const expandedLibPath = libPath.startsWith('~') 
+        ? join(homedir(), libPath.slice(1))
+        : libPath;
+      
+      const resolved = tryResolveInBase(expandedLibPath, src);
+      if (resolved) {
+        return resolved;
+      }
+    }
+  }
+  
+  // 5. config.yml libraryPaths
+  for (const libPath of libraryPaths) {
+    const expandedLibPath = libPath.startsWith('~')
+      ? join(homedir(), libPath.slice(1))
+      : libPath;
+    
+    const resolved = tryResolveInBase(expandedLibPath, src);
+    if (resolved) {
+      return resolved;
+    }
+  }
+  
+  // 6. node_modules (npm packages)
   // Walk up the directory tree looking for node_modules
   let searchDir = currentDir;
   
@@ -62,7 +135,7 @@ function resolveImportPath(src: string, currentDir: string): string {
         }
       }
       
-      throw new Error(`Package "${src}" found but no entry point (.di file) available`);
+      throw new Error(`Package "${src}" found in node_modules but no entry point (.di file) available`);
     }
     
     // Move up one directory
@@ -74,9 +147,17 @@ function resolveImportPath(src: string, currentDir: string): string {
     searchDir = parentDir;
   }
   
-  // Package not found in node_modules, treat as relative path with .di extension
-  const resolved = resolve(currentDir, src);
-  return resolved.endsWith('.di') ? resolved : resolved + '.di';
+  // 7. Not found anywhere
+  throw new Error(`Module not found: ${src}
+Searched in:
+  - Absolute/Home paths
+  - Relative to: ${currentDir}
+  - DIRAC_LIBS: ${diracLibs || '(not set)'}
+  - libraryPaths: ${libraryPaths.join(', ') || '(none)'}
+  - node_modules (walked up from ${currentDir})
+  
+Hint: Set DIRAC_LIBS environment variable for development (e.g., export DIRAC_LIBS=~/diraclang)
+      Or add libraryPaths to config.yml for project-specific paths`);
 }
 
 export async function executeImport(session: DiracSession, element: DiracElement): Promise<void> {
@@ -92,11 +173,14 @@ export async function executeImport(session: DiracSession, element: DiracElement
   // Get the current file's directory (if available in session)
   const currentDir = session.currentFile ? dirname(session.currentFile) : process.cwd();
   
-  // Resolve the import path (handles both relative paths and node_modules packages)
-  const importPath = resolveImportPath(src, currentDir);
+  // Get library paths from session config
+  const libraryPaths = session.libraryPaths || [];
+  
+  // Resolve the import path with comprehensive strategy
+  const importPath = resolveImportPath(src, currentDir, libraryPaths);
   
   if (session.debug) {
-    console.error(`[IMPORT] Loading: ${importPath}`);
+    console.error(`[IMPORT] Resolved: ${src} -> ${importPath}`);
   }
   
   // Check if already imported (prevent circular imports)
