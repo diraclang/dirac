@@ -202,17 +202,23 @@ export class SubroutineRegistry {
         // Multi-word token matching
         let tokenMatchCount = 0;
         for (const queryToken of queryTokens) {
+          // Skip very short tokens (like "me", "a", "to") to avoid false matches
+          if (queryToken.length <= 2) {
+            continue;
+          }
+          
           // Match in name tokens
           if (nameTokens.some(nt => nt === queryToken)) {
             score += 40; // Exact token match
             tokenMatchCount++;
-          } else if (nameTokens.some(nt => nt.includes(queryToken))) {
-            score += 20; // Partial token match
+          } else if (nameTokens.some(nt => nt.startsWith(queryToken))) {
+            score += 20; // Prefix match (e.g., "play" matches "player")
             tokenMatchCount++;
           }
           
-          // Match in description
-          if (lowerDesc.includes(queryToken)) {
+          // Match in description (word boundary only)
+          const descWords = lowerDesc.split(/[\s\-_]+/);
+          if (descWords.some(w => w === queryToken || w.startsWith(queryToken))) {
             score += 15;
             tokenMatchCount++;
           }
@@ -223,7 +229,7 @@ export class SubroutineRegistry {
             if (lowerParamName === queryToken) {
               score += 10;
               tokenMatchCount++;
-            } else if (lowerParamName.includes(queryToken)) {
+            } else if (lowerParamName.startsWith(queryToken)) {
               score += 5;
             }
           }

@@ -228,6 +228,15 @@ export class DiracShell {
       return;
     }
 
+    // Simple shorthand: ? -> |ai>
+    if (this.inputBuffer.length === 0 && input.trim().startsWith('?')) {
+      const rest = input.trim().substring(1).trim();
+      input = rest ? `|ai>${rest}` : `|ai>`;
+      if (this.config.debug) {
+        console.log(`[mapped: ? -> ${input}]`);
+      }
+    }
+
     // Check if this is Dirac syntax or Unix shell command (only on first line)
     if (this.inputBuffer.length === 0 && !this.isDiracSyntax(input)) {
       // Pass to Unix shell
