@@ -494,11 +494,11 @@ CRITICAL: When defining parameters:
               // Add new response to dialog history
               dialogHistory.push({ role: 'assistant', content: result });
               
-              // Update context variable if present
+              // Update context variable if present (store as JSON string, not object)
               if (contextVar) {
-                setVariable(session, contextVar, dialogHistory, true);
+                setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
               } else if (saveDialog) {
-                setVariable(session, '__llm_dialog__', dialogHistory, true);
+                setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
               }
               
               if (session.debug) {
@@ -593,11 +593,11 @@ CRITICAL: When defining parameters:
             // Add response to dialog history
             dialogHistory.push({ role: 'assistant', content: result });
             
-            // Update context variable if present
+            // Update context variable if present (store as JSON string, not object)
             if (contextVar) {
-              setVariable(session, contextVar, dialogHistory, true);
+              setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
             } else if (saveDialog) {
-              setVariable(session, '__llm_dialog__', dialogHistory, true);
+              setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
             }
             
             if (session.debug) {
