@@ -81,6 +81,9 @@ export class SubroutineRegistry {
   async indexDirectory(dirPath: string): Promise<number> {
     let count = 0;
     
+    // Resolve to absolute path first
+    const absoluteDirPath = path.isAbsolute(dirPath) ? dirPath : path.resolve(process.cwd(), dirPath);
+    
     const scanDir = (dir: string) => {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       
@@ -95,7 +98,7 @@ export class SubroutineRegistry {
       }
     };
     
-    scanDir(dirPath);
+    scanDir(absoluteDirPath);
     this.saveIndex();
     return count;
   }
