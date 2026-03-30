@@ -64,16 +64,29 @@ export class DiracShell {
       const subroutine = this.session.subroutines.find((sub: any) => sub.name === tagName);
       
       if (subroutine && subroutine.parameters && subroutine.parameters.length > 0) {
-        // Get parameter names
-        const paramNames = subroutine.parameters.map((p: any) => p.name);
-        
         // Filter by partial match
-        const matches = paramNames.filter((name: string) => 
-          name.toLowerCase().startsWith(attrPartial.toLowerCase())
+        const matches = subroutine.parameters.filter((p: any) => 
+          p.name.toLowerCase().startsWith(attrPartial.toLowerCase())
         );
         
-        // Return with '=' suffix to indicate attribute assignment
-        const completions = matches.map((name: string) => `${name}=`);
+        // If multiple matches, show info as display-only (user can't complete to this text)
+        // Print the detailed info and return just the parameter names for actual completion
+        if (matches.length > 1) {
+          console.log('\n');
+          matches.forEach((p: any) => {
+            const parts = [];
+            if (p.type) parts.push(p.type);
+            if (p.required) parts.push('required');
+            if (p.description) parts.push(p.description);
+            if (p.options && p.options.length > 0) parts.push(`[${p.options.join(',')}]`);
+            if (p.examples && p.examples.length > 0) parts.push(`eg:${p.examples[0]}`);
+            const info = parts.length > 0 ? ` (${parts.join(' | ')})` : '';
+            console.log(`  ${p.name}=${info}`);
+          });
+        }
+        
+        // Return just the parameter names with '=' for actual completion
+        const completions = matches.map((p: any) => `${p.name}=`);
         
         return [completions, attrPartial];
       }
@@ -89,12 +102,21 @@ export class DiracShell {
       const subroutine = this.session.subroutines.find((sub: any) => sub.name === tagName);
       
       if (subroutine && subroutine.parameters && subroutine.parameters.length > 0) {
-        // Show available parameters as suggestions
-        const paramSuggestions = subroutine.parameters.map((p: any) => {
-          const required = p.required ? '*' : '';
-          const typeInfo = p.type || 'string';
-          return `${p.name}=${required}${typeInfo}`;
+        // Print detailed parameter info above the prompt
+        console.log('\n');
+        subroutine.parameters.forEach((p: any) => {
+          const parts = [];
+          if (p.type) parts.push(p.type);
+          if (p.required) parts.push('required');
+          if (p.description) parts.push(p.description);
+          if (p.options && p.options.length > 0) parts.push(`[${p.options.join(',')}]`);
+          if (p.examples && p.examples.length > 0) parts.push(`eg:${p.examples[0]}`);
+          const info = parts.length > 0 ? ` (${parts.join(' | ')})` : '';
+          console.log(`  ${p.name}=${info}`);
         });
+        
+        // Return just the parameter names with '=' for actual completion
+        const paramSuggestions = subroutine.parameters.map((p: any) => `${p.name}=`);
         
         return [paramSuggestions, ''];
       }
