@@ -241,6 +241,7 @@
 
 <subroutine name="llm"
   description="Invoke Large Language Model with validation"
+  param-provider="string:optional:LLM provider for this call|anthropic|openai|ollama|custom"
   param-model="string:optional:Model name or use DEFAULT_MODEL env var"
   param-output="string:optional:Variable to store result"
   param-context="string:optional:Context variable for RAG"
@@ -256,7 +257,8 @@
   param-max-iterations="string:optional:Max feedback iterations (default: 3)"
   param-replace-tick="string:optional:Replace backticks in code|true|false">
   <!-- Generate DIRAC code via LLM -->
-  <!-- Supports Anthropic, OpenAI, Ollama providers -->
+  <!-- Supports Anthropic, OpenAI, Ollama, Custom providers -->
+  <!-- provider attribute allows per-call provider switching -->
   <!-- save-dialog=true enables conversation persistence with 85% token savings -->
   <!-- execute=true runs generated code immediately -->
   <!-- validate/autocorrect for syntax checking and repair -->

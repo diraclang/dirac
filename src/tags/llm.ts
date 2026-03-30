@@ -7,9 +7,38 @@ import type { DiracSession, DiracElement } from '../types/index.js';
 import { setVariable, substituteVariables, emit, getVariable } from '../runtime/session.js';
 import { integrate } from '../runtime/interpreter.js';
 import { DiracParser } from '../runtime/parser.js';
+import Anthropic from '@anthropic-ai/sdk';
+import OpenAI from 'openai';
+import { OllamaProvider } from '../llm/ollama.js';
+import { CustomLLMProvider } from '../llm/custom.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as os from 'os';
+
+/**
+ * Create an LLM client for a specific provider
+ */
+function createLLMClient(provider: string, model?: string): any {
+  const anthropicKey = process.env.ANTHROPIC_API_KEY;
+  const openaiKey = process.env.OPENAI_API_KEY;
+  const ollamaModel = model || process.env.LLM_MODEL || 'llama2';
+  const customBaseUrl = process.env.CUSTOM_LLM_URL || 'http://localhost:5001';
+
+  switch (provider) {
+    case 'ollama':
+      return new OllamaProvider({ model: ollamaModel });
+    case 'anthropic':
+      if (!anthropicKey) throw new Error('ANTHROPIC_API_KEY required for Anthropic provider');
+      return new Anthropic({ apiKey: anthropicKey });
+    case 'openai':
+      if (!openaiKey) throw new Error('OPENAI_API_KEY required for OpenAI provider');
+      return new OpenAI({ apiKey: openaiKey });
+    case 'custom':
+      return new CustomLLMProvider({ baseUrl: customBaseUrl, model: ollamaModel });
+    default:
+      throw new Error(`Unknown LLM provider: ${provider}. Use 'ollama', 'anthropic', 'openai', or 'custom'.`);
+  }
+}
 
 /**
  * Dump LLM-generated subroutines to ~/.dirac/lib/TIMESTAMP/
@@ -172,8 +201,25 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
 
   session.limits.currentLLMCalls++;
 
+  // Support per-call provider switching via provider attribute
+  const requestedProvider = element.attributes.provider;
+  let llmClient = session.llmClient;
+  
+  if (requestedProvider) {
+    // Create a temporary client for this specific provider
+    const requestedModel = element.attributes.model || process.env.DEFAULT_MODEL;
+    llmClient = createLLMClient(requestedProvider, requestedModel);
+    if (session.debug) {
+      console.error(`[LLM] Switching to provider: ${requestedProvider}`);
+    }
+  }
+  
+  if (!llmClient) {
+    throw new Error('No LLM provider configured. Set provider attribute or configure session with LLM_PROVIDER.');
+  }
+
   // Detect provider from client type
-  const providerName = session.llmClient.constructor.name;
+  const providerName = llmClient.constructor.name;
   const isOpenAI = providerName === 'OpenAI';
   const isOllama = providerName === 'OllamaProvider';
   const isCustom = providerName === 'CustomLLMProvider';
@@ -231,9 +277,22 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
       dialogHistory = [...existing];
       hasExistingDialog = dialogHistory.length > 0;
     } else if (existing) {
-      // If context is a string, treat as system message
-      dialogHistory = [{ role: 'system', content: String(existing) }];
-      hasExistingDialog = true;
+      // Try to parse as JSON string first (new format)
+      try {
+        const parsed = JSON.parse(String(existing));
+        if (Array.isArray(parsed)) {
+          dialogHistory = parsed;
+          hasExistingDialog = dialogHistory.length > 0;
+        } else {
+          // Not an array, treat as system message
+          dialogHistory = [{ role: 'system', content: String(existing) }];
+          hasExistingDialog = true;
+        }
+      } catch {
+        // Not JSON, treat as system message
+        dialogHistory = [{ role: 'system', content: String(existing) }];
+        hasExistingDialog = true;
+      }
     }
   }
 
@@ -345,7 +404,7 @@ CRITICAL: When defining parameters:
     let result: string;
     if (isOpenAI) {
       // Call OpenAI API with full dialog history
-      const response = await session.llmClient.chat.completions.create({
+      const response = await llmClient.chat.completions.create({
         model,
         max_tokens: maxTokens,
         temperature,
@@ -355,7 +414,7 @@ CRITICAL: When defining parameters:
     } else if (isOllama) {
       // Call OllamaProvider with dialog history as joined string
       const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
-      result = await session.llmClient.complete(ollamaPrompt, {
+      result = await llmClient.complete(ollamaPrompt, {
         model,
         temperature,
         max_tokens: maxTokens,
@@ -363,7 +422,7 @@ CRITICAL: When defining parameters:
     } else if (isCustom) {
       // Call CustomLLMProvider with dialog history
       const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
-      result = await session.llmClient.complete(customPrompt, {
+      result = await llmClient.complete(customPrompt, {
         model,
         temperature,
         max_tokens: maxTokens,
@@ -371,7 +430,7 @@ CRITICAL: When defining parameters:
       });
     } else {
       // Call Anthropic API - use helper function
-      result = await callAnthropic(session.llmClient, model, maxTokens, temperature, dialogHistory);
+      result = await callAnthropic(llmClient, model, maxTokens, temperature, dialogHistory);
     }
     
     if (session.debug) {
@@ -386,7 +445,7 @@ CRITICAL: When defining parameters:
       if (session.debug) {
         console.error(`[LLM] Saving dialog history (${dialogHistory.length} messages) to: ${varName}`);
       }
-      setVariable(session, varName, dialogHistory, true);
+      setVariable(session, varName, JSON.stringify(dialogHistory), true);
     }
 
     // Store in variable if requested
@@ -465,7 +524,7 @@ CRITICAL: When defining parameters:
               
               // Retry LLM call
               if (isOpenAI) {
-                const response = await session.llmClient.chat.completions.create({
+                const response = await llmClient.chat.completions.create({
                   model,
                   max_tokens: maxTokens,
                   temperature,
@@ -474,21 +533,21 @@ CRITICAL: When defining parameters:
                 result = response.choices[0]?.message?.content || '';
               } else if (isOllama) {
                 const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
-                result = await session.llmClient.complete(ollamaPrompt, {
+                result = await llmClient.complete(ollamaPrompt, {
                   model,
                   temperature,
                   max_tokens: maxTokens,
                 });
               } else if (isCustom) {
                 const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
-                result = await session.llmClient.complete(customPrompt, {
+                result = await llmClient.complete(customPrompt, {
                   model,
                   temperature,
                   max_tokens: maxTokens,
                   messages: dialogHistory,
                 });
               } else {
-                result = await callAnthropic(session.llmClient, model, maxTokens, temperature, dialogHistory);
+                result = await callAnthropic(llmClient, model, maxTokens, temperature, dialogHistory);
               }
               
               // Add new response to dialog history
@@ -564,7 +623,7 @@ CRITICAL: When defining parameters:
             
             // Get LLM's assessment
             if (isOpenAI) {
-              const response = await session.llmClient.chat.completions.create({
+              const response = await llmClient.chat.completions.create({
                 model,
                 max_tokens: maxTokens,
                 temperature,
@@ -573,21 +632,21 @@ CRITICAL: When defining parameters:
               result = response.choices[0]?.message?.content || '';
             } else if (isOllama) {
               const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
-              result = await session.llmClient.complete(ollamaPrompt, {
+              result = await llmClient.complete(ollamaPrompt, {
                 model,
                 temperature,
                 max_tokens: maxTokens,
               });
             } else if (isCustom) {
               const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
-              result = await session.llmClient.complete(customPrompt, {
+              result = await llmClient.complete(customPrompt, {
                 model,
                 temperature,
                 max_tokens: maxTokens,
                 messages: dialogHistory,
               });
             } else {
-              result = await callAnthropic(session.llmClient, model, maxTokens, temperature, dialogHistory);
+              result = await callAnthropic(llmClient, model, maxTokens, temperature, dialogHistory);
             }
             
             // Add response to dialog history

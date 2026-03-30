@@ -125,6 +125,11 @@ export class BraKetParser {
       return { indent, type: 'empty', raw };
     }
 
+    // Comment line (starts with #)
+    if (content.startsWith('#')) {
+      return { indent, type: 'empty', raw };
+    }
+
     // Bra: <name| or <name attrs|
     // Need to handle | inside quoted strings, so we can't use [^|]*
     // Match: <tagname ... | where ... can contain quoted strings with |
