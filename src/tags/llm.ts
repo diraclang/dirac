@@ -303,10 +303,20 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
   if (!noExtra) {
     // Reflect subroutines for system prompt
     const { getAvailableSubroutines } = await import('../runtime/session.js');
-    const subroutines = getAvailableSubroutines(session);
+    const allSubroutines = getAvailableSubroutines(session);
+    
+    // Filter out subroutines with hide-from-llm metadata
+    const subroutines = allSubroutines.filter(sub => {
+      const hideMeta = (sub as any).meta?.['hide-from-llm'];
+      return hideMeta !== 'true' && hideMeta !== true;
+    });
+    
     if (session.debug) {
       console.error('[LLM] Subroutines available at prompt composition:',
         subroutines.map(s => ({ name: s.name, description: s.description, parameters: s.parameters })));
+      if (allSubroutines.length !== subroutines.length) {
+        console.error(`[LLM] Filtered out ${allSubroutines.length - subroutines.length} subroutine(s) with hide-from-llm metadata`);
+      }
     }
     
     // If we have existing dialog history, only send updated subroutine list

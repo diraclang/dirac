@@ -1,6 +1,8 @@
 <!-- Exported subroutine -->
 
-<subroutine name="ai">
+<subroutine name="ai" 
+  description="AI assistant with context loading (internal wrapper - use llm tag directly instead)"
+  meta-hide-from-llm="true">
 
    <load-context>
     <parameters select="*" />
