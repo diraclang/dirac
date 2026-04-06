@@ -2,6 +2,24 @@
 
 ## ⚠️ Critical Architecture Issues
 
+### `<llm show="boundary">` Second Execution Bug
+- **Issue**: When using `<llm show="boundary">` inside a subroutine that calls `<load-context>`, the second execution fails
+- **Root cause**: Boundary filtering happens at the wrong time - either before subroutines are fully imported, or with stale boundary values
+- **Symptom**: First AI command works, second command's LLM response isn't executed even though code is generated correctly
+- **Current workaround**: Add `visible="subroutine"` to the calling subroutine (e.g., `<subroutine name="ai" visible="subroutine">`)
+- **Why workaround works**: Prevents cleanup of imported subroutines between calls, avoiding boundary timing issues
+- **Proper fix needed**: 
+  1. Ensure boundary filtering reads `session.subBoundary` AFTER all imports complete
+  2. OR ensure imported subroutines are registered before LLM builds its prompt
+  3. Investigate execution order of `<load-context>` → subroutine registration → `<llm>` prompt building
+- **Impact**: Affects any subroutine using `show="boundary"` with dynamic imports
+- **Affected files**: 
+  - `src/tags/llm.ts` (boundary filtering logic)
+  - `src/tags/load-context.ts` (import timing)
+  - `lib/ai.di` (temporary workaround applied)
+- **Status**: Workaround in place, root cause investigation needed
+- **Related**: Boundary scoping, subroutine cleanup timing, `cleanSubroutinesToBoundary()`
+
 ### `<eval>` Variable Injection Namespace Conflicts
 - **Issue**: Parameters are injected directly into JavaScript scope, causing conflicts with Node.js built-ins
 - **Example**: `param-path="string"` conflicts with Node.js `path` module
