@@ -696,6 +696,7 @@ Examples:
 
   /**
    * Execute a Unix shell command
+   * If command is not found, fallback to treating it as an AI query
    */
   private async executeShellCommand(command: string): Promise<void> {
     const trimmed = command.trim();
@@ -723,17 +724,43 @@ Examples:
     // Pause readline to allow interactive programs (vi, nano, etc.) to take control
     this.rl.pause();
     
-    return new Promise((resolve) => {
+    return new Promise(async (resolve) => {
       // Use the user's shell (or fallback to sh)
       const shell = process.env.SHELL || '/bin/sh';
+      
+      // Capture stderr to detect "command not found" errors
       const child = spawn(shell, ['-c', command], {
-        stdio: 'inherit',
+        stdio: ['inherit', 'inherit', 'pipe'],
         cwd: process.cwd(),
       });
       
-      child.on('close', () => {
+      let stderrData = '';
+      child.stderr?.on('data', (data) => {
+        stderrData += data.toString();
+        // Also show the error to user in real-time
+        process.stderr.write(data);
+      });
+      
+      child.on('close', async (code) => {
         // Resume readline after command completes
         this.rl.resume();
+        
+        // Check if command was not found (exit code 127 is standard for command not found)
+        // Also check stderr for "command not found" message
+        const commandNotFound = code === 127 || stderrData.includes('command not found');
+        
+        if (commandNotFound) {
+          // Fallback to AI query
+          if (this.config.debug) {
+            console.log(`[command not found, trying AI: |ai>${trimmed}]`);
+          }
+          
+          // Execute as AI query
+          const aiInput = `|ai>${trimmed}`;
+          this.inputBuffer = [aiInput];
+          await this.executeBuffer();
+        }
+        
         resolve();
       });
       
