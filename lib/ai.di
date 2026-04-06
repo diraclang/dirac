@@ -8,7 +8,7 @@
     <parameters select="*" />
    </load-context>
 
-  <llm execute="true" save-dialog="true">
+  <llm execute="true" save-dialog="true" show="boundary">
       <parameters select="*" />
   </llm>
   

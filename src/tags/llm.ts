@@ -240,6 +240,7 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
   const executeMode = element.attributes.execute === 'true'; // NEW: seamless execution mode
   const temperature = parseFloat(element.attributes.temperature || '1.0');
   const maxTokens = parseInt(element.attributes.maxTokens || '4096', 10);
+  const showMode = element.attributes.show || 'all'; // 'all' shows all subroutines (default), 'boundary' limits to current scope
 
   // Build prompt from children or text
   let userPrompt = '';
@@ -305,8 +306,31 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
     const { getAvailableSubroutines } = await import('../runtime/session.js');
     const allSubroutines = getAvailableSubroutines(session);
     
+    // Filter based on show mode and boundaries
+    let boundaryFilteredSubroutines = allSubroutines;
+    if (showMode === 'boundary') {
+      // Find the current boundary in the subroutine stack
+      const currentBoundary = session.subBoundary;
+      
+      if (session.debug) {
+        console.error(`[LLM] Current boundary: ${currentBoundary}`);
+        console.error(`[LLM] All subroutines before boundary filter:`, 
+          allSubroutines.map(s => ({ name: s.name, boundary: (s as any).boundary })));
+      }
+      
+      boundaryFilteredSubroutines = allSubroutines.filter(sub => {
+        // Keep only subroutines registered at or after the current boundary
+        // These are from the current scope, not parent scopes
+        return (sub as any).boundary >= currentBoundary;
+      });
+      
+      if (session.debug && allSubroutines.length !== boundaryFilteredSubroutines.length) {
+        console.error(`[LLM] Filtered to boundary ${currentBoundary}: ${boundaryFilteredSubroutines.length}/${allSubroutines.length} subroutines visible`);
+      }
+    }
+    
     // Filter out subroutines with hide-from-llm metadata
-    const subroutines = allSubroutines.filter(sub => {
+    const subroutines = boundaryFilteredSubroutines.filter(sub => {
       const hideMeta = (sub as any).meta?.['hide-from-llm'];
       return hideMeta !== 'true' && hideMeta !== true;
     });
@@ -315,7 +339,7 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
       console.error('[LLM] Subroutines available at prompt composition:',
         subroutines.map(s => ({ name: s.name, description: s.description, parameters: s.parameters })));
       if (allSubroutines.length !== subroutines.length) {
-        console.error(`[LLM] Filtered out ${allSubroutines.length - subroutines.length} subroutine(s) with hide-from-llm metadata`);
+        console.error(`[LLM] Filtered out ${allSubroutines.length - subroutines.length} subroutine(s) (boundary + hide-from-llm)`);
       }
     }
     

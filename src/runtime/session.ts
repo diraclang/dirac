@@ -287,6 +287,7 @@ export function getAvailableSubroutines(session: DiracSession): Array<{
     description: sub.description,
     parameters: sub.parameters,
     meta: sub.meta,
+    boundary: sub.boundary,
   }));
 }
 
