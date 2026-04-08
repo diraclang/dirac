@@ -413,6 +413,12 @@ Commands:
   :tasks          List all scheduled tasks
   :stop <name>    Stop a scheduled task
   :stopall        Stop all scheduled tasks
+  :crons          List all cron jobs
+  :stopcron <name> Stop a cron job
+  :stopallcrons   Stop all cron jobs
+  :scheduled      List all scheduled runs (run-at)
+  :cancel <name>  Cancel a scheduled run
+  :cancelall      Cancel all scheduled runs
   :exit           Exit shell
 
 Syntax:
@@ -651,6 +657,100 @@ Examples:
           console.error('Error stopping tasks:', error instanceof Error ? error.message : String(error));
         }
         break;
+        
+      case 'crons':
+        try {
+          const { listCronJobs } = await import('./tags/cron.js');
+          const jobs = listCronJobs();
+          if (jobs.length === 0) {
+            console.log('No cron jobs running.');
+          } else {
+            console.log('\nCron Jobs:');
+            for (const job of jobs) {
+              const status = job.isRunning ? '(running)' : '';
+              console.log(`  - ${job.name}: ${job.cronExpression} ${status}`);
+            }
+          }
+        } catch (error) {
+          console.error('Error listing cron jobs:', error instanceof Error ? error.message : String(error));
+        }
+        break;
+        
+      case 'stopcron':
+        if (args.length === 0) {
+          console.log('Usage: :stopcron <job-name>');
+        } else {
+          try {
+            const { stopCronJob } = await import('./tags/cron.js');
+            const jobName = args[0];
+            const stopped = stopCronJob(jobName);
+            if (stopped) {
+              console.log(`Stopped cron job: ${jobName}`);
+            } else {
+              console.log(`Cron job not found: ${jobName}`);
+            }
+          } catch (error) {
+            console.error('Error stopping cron job:', error instanceof Error ? error.message : String(error));
+          }
+        }
+        break;
+        
+      case 'stopallcrons':
+        try {
+          const { stopAllCronJobs } = await import('./tags/cron.js');
+          stopAllCronJobs();
+          console.log('All cron jobs stopped.');
+        } catch (error) {
+          console.error('Error stopping cron jobs:', error instanceof Error ? error.message : String(error));
+        }
+        break;
+        
+      case 'scheduled':
+        try {
+          const { listScheduledRuns } = await import('./tags/run-at.js');
+          const runs = listScheduledRuns();
+          if (runs.length === 0) {
+            console.log('No scheduled runs pending.');
+          } else {
+            console.log('\nScheduled Runs:');
+            for (const run of runs) {
+              const status = run.isRunning ? '(running)' : '';
+              console.log(`  - ${run.name}: ${run.scheduledTime.toLocaleString()} ${status}`);
+            }
+          }
+        } catch (error) {
+          console.error('Error listing scheduled runs:', error instanceof Error ? error.message : String(error));
+        }
+        break;
+        
+      case 'cancel':
+        if (args.length === 0) {
+          console.log('Usage: :cancel <run-name>');
+        } else {
+          try {
+            const { cancelScheduledRun } = await import('./tags/run-at.js');
+            const runName = args[0];
+            const cancelled = cancelScheduledRun(runName);
+            if (cancelled) {
+              console.log(`Cancelled scheduled run: ${runName}`);
+            } else {
+              console.log(`Scheduled run not found: ${runName}`);
+            }
+          } catch (error) {
+            console.error('Error cancelling run:', error instanceof Error ? error.message : String(error));
+          }
+        }
+        break;
+        
+      case 'cancelall':
+        try {
+          const { cancelAllScheduledRuns } = await import('./tags/run-at.js');
+          cancelAllScheduledRuns();
+          console.log('All scheduled runs cancelled.');
+        } catch (error) {
+          console.error('Error cancelling runs:', error instanceof Error ? error.message : String(error));
+        }
+        break;
 
       case 'exit':
       case 'quit':
@@ -750,9 +850,12 @@ Examples:
         const commandNotFound = code === 127 || stderrData.includes('command not found');
         
         if (commandNotFound) {
+          // Notify user about fallback
+          console.log(`💡 Command not found, trying as AI query...`);
+          
           // Fallback to AI query
           if (this.config.debug) {
-            console.log(`[command not found, trying AI: |ai>${trimmed}]`);
+            console.log(`[executing: |ai>${trimmed}]`);
           }
           
           // Execute as AI query

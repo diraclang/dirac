@@ -37,6 +37,8 @@ import { executeAttr } from '../tags/attr.js';
 import { executeEnvironment } from '../tags/environment.js';
 import { executeInput } from '../tags/input.js';
 import { executeSchedule } from '../tags/schedule.js';
+import { executeCron } from '../tags/cron.js';
+import { executeRunAt } from '../tags/run-at.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -199,6 +201,14 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'schedule':
         await executeSchedule(session, element);
+        break;
+        
+      case 'cron':
+        await executeCron(session, element);
+        break;
+        
+      case 'run-at':
+        await executeRunAt(session, element);
         break;
 
       case 'require_module':

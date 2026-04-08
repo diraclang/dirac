@@ -332,6 +332,37 @@
   <!-- Replaces existing task with same name -->
 </subroutine>
 
+<subroutine name="cron"
+  description="Run tasks on cron schedule without blocking"
+  param-time="string:required:Cron expression (minute hour day month weekday)"
+  param-name="string:optional:Job identifier for logging">
+  <!-- Cron expression examples: -->
+  <!-- "* * * * *"      - Every minute -->
+  <!-- "0 9 * * *"      - Every day at 9 AM -->
+  <!-- "*/5 * * * *"    - Every 5 minutes -->
+  <!-- "0 0 * * 1"      - Every Monday at midnight -->
+  <!-- "0 8-17 * * 1-5" - Every hour 8AM-5PM, Monday-Friday -->
+  <!-- Task continues until shell/program exit -->
+  <!-- Replaces existing job with same name -->
+</subroutine>
+
+<subroutine name="run-at"
+  description="Run task once at future time without blocking"
+  param-time="string:required:When to execute"
+  param-name="string:optional:Run identifier for logging">
+  <!-- Executes task once at specified future time, then removes itself -->
+  <!-- Time formats (all relative to current moment): -->
+  <!--   "+30"   = 30 seconds from now -->
+  <!--   "+5m"   = 5 minutes from now (300 seconds) -->
+  <!--   "+2h"   = 2 hours from now (7200 seconds) -->
+  <!--   "+7d"   = 7 days from now (604800 seconds) -->
+  <!--   "2026-04-07T15:30:00" = Absolute ISO timestamp -->
+  <!--   "1712502600000" = Unix timestamp in milliseconds -->
+  <!-- Non-blocking: returns immediately after scheduling -->
+  <!-- Error if time is in the past -->
+  <!-- Replaces existing run with same name -->
+</subroutine>
+
 <!-- ============================================================
      MONGODB (if dirac-mongodb package installed)
      ============================================================ -->
