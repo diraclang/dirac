@@ -19,12 +19,14 @@ import { createSession } from './runtime/session.js';
 import { integrate } from './runtime/interpreter.js';
 import yaml from 'js-yaml';
 import type { DiracConfig } from './types/index.js';
+import type { SessionClient } from './session-client.js';
 
 const HISTORY_FILE = path.join(os.homedir(), '.dirac_history');
 const MAX_HISTORY = 1000;
 
 export class DiracShell {
   private session: any;
+  private client: SessionClient | null = null;
   private braketParser: BraKetParser;
   private xmlParser: DiracParser;
   private rl: readline.Interface;
@@ -49,6 +51,13 @@ export class DiracShell {
 
     this.loadHistory();
     this.setupHandlers();
+  }
+
+  /**
+   * Set client for daemon mode
+   */
+  setClient(client: SessionClient): void {
+    this.client = client;
   }
 
   private completer(line: string): [string[], string] {
@@ -215,6 +224,12 @@ export class DiracShell {
 
     this.rl.on('close', () => {
       this.saveHistory();
+      
+      // Disconnect from agent if connected
+      if (this.client) {
+        this.client.disconnect();
+      }
+      
       // Stop all scheduled tasks on exit
       import('./tags/schedule.js').then(({ stopAllScheduledTasks }) => {
         stopAllScheduledTasks();
@@ -359,6 +374,26 @@ export class DiracShell {
     this.baseIndent = null;
 
     try {
+      // If connected to agent, execute remotely
+      if (this.client) {
+        // Parse bra-ket to XML
+        const xml = this.braketParser.parse(input);
+        
+        if (this.config.debug) {
+          console.log('[Debug] Sending to agent:\n', xml);
+        }
+        
+        // Execute on agent (returns output as string)
+        const output = await this.client.execute(xml);
+        
+        if (output) {
+          console.log(output);
+        }
+        
+        return;
+      }
+      
+      // Otherwise execute locally
       // Clear previous output
       this.session.output = [];
       
@@ -444,30 +479,60 @@ Examples:
         break;
 
       case 'vars':
-        if (this.session.variables.length === 0) {
-          console.log('No variables defined');
-        } else {
-          console.log('Variables:');
-          for (const v of this.session.variables) {
-            if (v.visible) {
-              console.log(`  ${v.name} = ${JSON.stringify(v.value)}`);
+        try {
+          let variables;
+          if (this.client) {
+            const state = await this.client.getState();
+            variables = state.variables || [];
+          } else {
+            variables = this.session.variables;
+          }
+          
+          if (variables.length === 0) {
+            console.log('No variables defined');
+          } else {
+            console.log('Variables:');
+            for (const v of variables) {
+              if (v.visible) {
+                console.log(`  ${v.name} = ${JSON.stringify(v.value)}`);
+              }
             }
           }
+        } catch (error) {
+          console.error('Error getting variables:', error instanceof Error ? error.message : String(error));
         }
         break;
 
       case 'subs':
-        if (this.session.subroutines.length === 0) {
-          console.log('No subroutines defined');
-        } else {
-          console.log('Subroutines:');
-          for (const s of this.session.subroutines) {
-            const params = s.parameters?.map((p: any) => p.name).join(', ') || '';
-            console.log(`  ${s.name}(${params})`);
-            if (s.description) {
-              console.log(`    ${s.description}`);
+        try {
+          let subroutines;
+          if (this.client) {
+            const state = await this.client.getState();
+            console.log('State received:', JSON.stringify(state, null, 2).substring(0, 500));
+            subroutines = state.subroutines || [];
+          } else {
+            subroutines = this.session.subroutines;
+          }
+          
+          if (!Array.isArray(subroutines)) {
+            console.error('Error: subroutines is not an array, it is:', typeof subroutines);
+            break;
+          }
+          
+          if (subroutines.length === 0) {
+            console.log('No subroutines defined');
+          } else {
+            console.log('Subroutines:');
+            for (const s of subroutines) {
+              const params = s.parameters?.map((p: any) => p.name).join(', ') || '';
+              console.log(`  ${s.name}(${params})`);
+              if (s.description) {
+                console.log(`    ${s.description}`);
+              }
             }
           }
+        } catch (error) {
+          console.error('Error getting subroutines:', error instanceof Error ? error.message : String(error));
         }
         break;
 
@@ -908,10 +973,16 @@ Examples:
       console.log(`Loading init script: ${scriptPath}`);
       const scriptContent = fs.readFileSync(resolvedPath, 'utf-8');
       
-      // Parse and execute the script
-      const xml = this.braketParser.parse(scriptContent);
-      const ast = this.xmlParser.parse(xml);
-      await integrate(this.session, ast);
+      // If connected to agent, execute there; otherwise local
+      if (this.client) {
+        const xml = this.braketParser.parse(scriptContent);
+        await this.client.execute(xml);
+      } else {
+        // Parse and execute locally
+        const xml = this.braketParser.parse(scriptContent);
+        const ast = this.xmlParser.parse(xml);
+        await integrate(this.session, ast);
+      }
       
       console.log(`Init script loaded.\n`);
     } catch (err) {

@@ -19,9 +19,22 @@ async function main() {
   if (args.includes('--help') || args.includes('-h')) {
     console.log('Usage: dirac <file.di|file.bk>');
     console.log('       dirac shell [options]');
+    console.log('       dirac agent <command>');
     console.log('');
     console.log('Commands:');
     console.log('  shell             Start interactive shell (REPL)');
+    console.log('  shell --agent     Connect shell to running agent daemon');
+    console.log('  agent start       Start persistent agent daemon');
+    console.log('  agent stop        Stop agent daemon');
+    console.log('  agent status      Check agent status');
+    console.log('  agent restart     Restart agent daemon');
+    console.log('  agent logs        Show agent logs');
+    console.log('  shell --daemon    Start shell with persistent daemon (experimental)');
+    console.log('');
+    console.log('Shell tips:');
+    console.log('  Press Ctrl-Z to suspend shell, then `bg` to run in background');
+    console.log('  Use `fg` to bring it back to foreground');
+    console.log('  Cron jobs and run-at tasks continue running in background');
     console.log('');
     console.log('File formats:');
     console.log('  .di               XML notation (verbose)');
@@ -45,9 +58,56 @@ async function main() {
     process.exit(0);
   }
 
+  // Check for agent command
+  if (args[0] === 'agent') {
+    const subcommand = args[1];
+    
+    // Special case: daemon subcommand runs the actual daemon
+    if (subcommand === 'daemon') {
+      const { runAgentDaemon } = await import('./agent.js');
+      await runAgentDaemon();
+      return;
+    }
+    
+    // All other subcommands use AgentCLI
+    const { AgentCLI } = await import('./agent.js');
+    const agent = new AgentCLI();
+    
+    switch (subcommand) {
+      case 'start':
+        await agent.start();
+        break;
+      case 'stop':
+        await agent.stop();
+        break;
+      case 'status':
+        await agent.status();
+        break;
+      case 'restart':
+        await agent.restart();
+        break;
+      case 'logs':
+        const follow = args.includes('-f') || args.includes('--follow');
+        await agent.logs(follow);
+        break;
+      default:
+        console.error('Unknown agent command:', subcommand);
+        console.error('Available commands: start, stop, status, restart, logs');
+        process.exit(1);
+    }
+    
+    return;
+  }
+
   // Check for shell command
   if (args[0] === 'shell') {
     const { DiracShell } = await import('./shell.js');
+    const { SessionServer, isSessionRunning, getSocketPath } = await import('./session-server.js');
+    const { SessionClient } = await import('./session-client.js');
+    
+    // Check for --daemon and --agent flags
+    const daemonMode = args.includes('--daemon') || args.includes('-d');
+    const agentMode = args.includes('--agent') || args.includes('-a');
     
     // Parse shell-specific options
     const shellConfig: any = { debug: false };
@@ -55,6 +115,12 @@ async function main() {
       const arg = args[i];
       if (arg === '--debug') {
         shellConfig.debug = true;
+      } else if (arg === '--daemon' || arg === '-d') {
+        // Skip, already handled
+        continue;
+      } else if (arg === '--agent' || arg === '-a') {
+        // Skip, already handled
+        continue;
       } else if ((arg === '-f' || arg === '--config') && i + 1 < args.length) {
         const configPath = resolve(args[++i]);
         if (fs.existsSync(configPath)) {
@@ -85,8 +151,83 @@ async function main() {
       }
     }
     
+    // Handle agent mode - connect to running agent
+    if (agentMode) {
+      if (!isSessionRunning()) {
+        console.error('Error: No agent is running');
+        console.error('Start the agent first with: dirac agent start');
+        process.exit(1);
+      }
+      
+      console.log('Connecting to agent...');
+      const client = new SessionClient({ socketPath: getSocketPath() });
+      
+      client.on('error', (error) => {
+        console.error('Agent error:', error);
+      });
+      
+      try {
+        await client.connect();
+        console.log('Connected to agent at', getSocketPath());
+        console.log('Session state is persistent across disconnects');
+        console.log('');
+        
+        const shell = new DiracShell(shellConfig);
+        shell.setClient(client);
+        
+        // Handle cleanup on exit
+        process.on('SIGINT', async () => {
+          await client.disconnect();
+          process.exit(0);
+        });
+        
+        // Start shell (this returns after setup, not after exit)
+        await shell.start();
+        
+        // Shell will handle its own lifecycle
+        // Don't disconnect here - shell is still running
+      } catch (error) {
+        console.error('Failed to connect to agent:', error);
+        process.exit(1);
+      }
+      
+      return;
+    }
+    
+    // Handle daemon mode
+    if (daemonMode) {
+      console.log('Note: Daemon mode is under development.');
+      console.log('For now, use Ctrl-Z + bg to background the shell.');
+      console.log('');
+      // TODO: Implement full daemon mode with client-server architecture
+    }
+    
+    // Normal shell mode
     const shell = new DiracShell(shellConfig);
     await shell.start();
+    return;
+  }
+  
+  // Hidden command to start daemon directly (for future use)
+  if (args[0] === 'daemon') {
+    const { SessionServer } = await import('./session-server.js');
+    const server = new SessionServer();
+    
+    await server.start();
+    console.log('Session daemon started');
+    
+    // Handle graceful shutdown
+    process.on('SIGINT', async () => {
+      await server.shutdown();
+      process.exit(0);
+    });
+    
+    process.on('SIGTERM', async () => {
+      await server.shutdown();
+      process.exit(0);
+    });
+    
+    // Keep process alive
     return;
   }
 
