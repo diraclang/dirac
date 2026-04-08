@@ -255,7 +255,8 @@ export async function runAgentDaemon(): Promise<void> {
         llmProvider: configData.llmProvider,
         llmModel: configData.llmModel,
         customLLMUrl: configData.customLLMUrl,
-        initScript: configData.initScript
+        initScript: configData.initScript,
+        libraryPaths: configData.libraryPaths
       };
       console.log(`[${new Date().toISOString()}] Loaded config: LLM=${config.llmProvider}/${config.llmModel}`);
     }

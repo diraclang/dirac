@@ -346,7 +346,7 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
     // If we have existing dialog history, only send updated subroutine list
     // Otherwise, send full system prompt with Dirac introduction
     if (hasExistingDialog && (contextVar || saveDialog)) {
-      // Continuing a conversation - only update available subroutines
+      // Continuing a conversation - add updated subroutines as system message
       systemPrompt = 'Updated available Dirac XML tags:';
       for (const sub of subroutines) {
         systemPrompt += `\n- ${sub.name} : ${sub.description || ''}`;
@@ -361,11 +361,14 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
         systemPrompt += '>'+example+'</' + sub.name + '>';
       }
       
-      // Prepend subroutine update to user message
-      currentUserPrompt = systemPrompt + '\n\nUser request: ' + userPrompt;
+      // Add as separate system message before the user's new message
+      dialogHistory.push({ role: 'system', content: systemPrompt });
+      
+      // User prompt stays clean
+      currentUserPrompt = userPrompt;
       
       if (session.debug || process.env.DIRAC_LOG_PROMPT === '1') {
-        console.error('[LLM] Continuing dialog with updated subroutines\n');
+        console.error('[LLM] Continuing dialog with updated subroutines (as system message)\n');
       }
     } else {
       // First call - send full system prompt

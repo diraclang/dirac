@@ -27,6 +27,7 @@ const MAX_HISTORY = 1000;
 export class DiracShell {
   private session: any;
   private client: SessionClient | null = null;
+  private cachedSubroutines: any[] = [];  // Cache for agent mode tab completion
   private braketParser: BraKetParser;
   private xmlParser: DiracParser;
   private rl: readline.Interface;
@@ -58,9 +59,29 @@ export class DiracShell {
    */
   setClient(client: SessionClient): void {
     this.client = client;
+    
+    // Fetch and cache subroutines for tab completion
+    this.updateCachedSubroutines();
+  }
+  
+  /**
+   * Update cached subroutines from agent
+   */
+  private async updateCachedSubroutines(): Promise<void> {
+    if (!this.client) return;
+    
+    try {
+      const state = await this.client.getState();
+      this.cachedSubroutines = state.subroutines || [];
+    } catch (error) {
+      // Silently fail - tab completion will just not work
+    }
   }
 
   private completer(line: string): [string[], string] {
+    // Use cached subroutines if in agent mode, otherwise use session subroutines
+    const subroutines = this.client ? this.cachedSubroutines : this.session.subroutines;
+    
     // Check if user is typing an attribute after a tag: |tagname attr_partial
     // Match: |tagname something attr_partial (where attr_partial is being typed)
     const attrMatch = line.match(/\|([a-z0-9_-]+)\s+.*?([a-z0-9_-]*)$/i);
@@ -70,7 +91,7 @@ export class DiracShell {
       const attrPartial = attrMatch[2];
       
       // Find the subroutine
-      const subroutine = this.session.subroutines.find((sub: any) => sub.name === tagName);
+      const subroutine = subroutines.find((sub: any) => sub.name === tagName);
       
       if (subroutine && subroutine.parameters && subroutine.parameters.length > 0) {
         // Filter by partial match
@@ -108,7 +129,7 @@ export class DiracShell {
       const tagName = tagCompleteMatch[1];
       
       // First try exact match to show attributes
-      const subroutine = this.session.subroutines.find((sub: any) => sub.name === tagName);
+      const subroutine = subroutines.find((sub: any) => sub.name === tagName);
       
       if (subroutine && subroutine.parameters && subroutine.parameters.length > 0) {
         // Print detailed parameter info above the prompt
@@ -131,7 +152,7 @@ export class DiracShell {
       }
       
       // Otherwise, show matching subroutine names
-      const subroutineNames = this.session.subroutines.map((sub: any) => sub.name);
+      const subroutineNames = subroutines.map((sub: any) => sub.name);
       const matches = subroutineNames.filter((name: string) => 
         name.toLowerCase().startsWith(tagName.toLowerCase())
       );
@@ -139,7 +160,7 @@ export class DiracShell {
       if (matches.length > 0) {
         // For each match, check if it has parameters
         const completions = matches.map((name: string) => {
-          const sub = this.session.subroutines.find((s: any) => s.name === name);
+          const sub = subroutines.find((s: any) => s.name === name);
           const hasParams = sub && sub.parameters && sub.parameters.length > 0;
           
           // If has parameters, leave it open with a space; otherwise close with >
@@ -389,6 +410,9 @@ export class DiracShell {
         if (output) {
           console.log(output);
         }
+        
+        // Update cached subroutines for tab completion
+        await this.updateCachedSubroutines();
         
         return;
       }

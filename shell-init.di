@@ -2,9 +2,9 @@
 # This script runs automatically when the shell starts
 
 # Uncomment to load native tags for tab completion:
-|import src="./lib/native-tags.di" >
+|import src="dirac/lib/native-tags.di" >
 
-|import src="./lib/ai.di" >
+|import src="dirac/lib/ai.di" >
 
 # Define some useful helper subroutines
 #<hello |
