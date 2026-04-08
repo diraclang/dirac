@@ -16,6 +16,63 @@ import * as path from 'path';
 import * as os from 'os';
 
 /**
+ * Dialog message structure
+ */
+interface DialogMessage {
+  role: 'system' | 'user' | 'assistant';
+  content: string;
+}
+
+/**
+ * Prune dialog history for LLM call to reduce token usage
+ * Strategy:
+ * 1. Keep first system message (language intro)
+ * 2. Remove redundant middle system messages 
+ * 3. Keep recent user/assistant exchanges
+ * 4. Ensure latest system message is present (current subroutine list)
+ */
+function pruneDialogForLLM(dialogHistory: DialogMessage[], keepRecentCount: number = 20): DialogMessage[] {
+  if (dialogHistory.length <= keepRecentCount) {
+    return dialogHistory; // No pruning needed
+  }
+
+  const firstSystemMsg = dialogHistory.find(m => m.role === 'system');
+  const lastSystemMsg = dialogHistory.slice().reverse().find(m => m.role === 'system');
+  
+  // Get recent messages (last N)
+  const recentMessages = dialogHistory.slice(-keepRecentCount);
+  
+  // Filter out redundant system messages from recent messages
+  // Keep only the latest one (which should be at or near the end)
+  const prunedRecent = recentMessages.filter(msg => {
+    if (msg.role !== 'system') return true;
+    // Keep this system message only if it's the last one
+    return msg === lastSystemMsg;
+  });
+  
+  // Build final pruned history
+  const result: DialogMessage[] = [];
+  
+  // Add first system message if not already in recent
+  if (firstSystemMsg && !prunedRecent.includes(firstSystemMsg)) {
+    result.push(firstSystemMsg);
+  }
+  
+  // Add pruned recent messages
+  result.push(...prunedRecent);
+  
+  // Ensure latest system message is at the end (right before current query)
+  // Remove it from middle if present and add at end
+  if (lastSystemMsg && lastSystemMsg !== result[result.length - 1]) {
+    const filtered = result.filter(m => m !== lastSystemMsg);
+    filtered.push(lastSystemMsg);
+    return filtered;
+  }
+  
+  return result;
+}
+
+/**
  * Create an LLM client for a specific provider
  */
 function createLLMClient(provider: string, model?: string): any {
@@ -188,12 +245,6 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
     return content.type === 'text' ? content.text : '';
   };
 
-  // Dialog message interface
-  interface DialogMessage {
-    role: 'system' | 'user' | 'assistant';
-    content: string;
-  }
-
   // Check limits
   if (session.limits.currentLLMCalls >= session.limits.maxLLMCalls) {
     throw new Error('Maximum LLM calls exceeded');
@@ -306,6 +357,11 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
     const { getAvailableSubroutines } = await import('../runtime/session.js');
     const allSubroutines = getAvailableSubroutines(session);
     
+    if (session.debug) {
+      console.error(`[LLM] Total subroutines from session: ${allSubroutines.length}`);
+      console.error(`[LLM] Has existing dialog: ${hasExistingDialog}`);
+    }
+    
     // Filter based on show mode and boundaries
     let boundaryFilteredSubroutines = allSubroutines;
     if (showMode === 'boundary') {
@@ -315,13 +371,13 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
       if (session.debug) {
         console.error(`[LLM] Current boundary: ${currentBoundary}`);
         console.error(`[LLM] All subroutines before boundary filter:`, 
-          allSubroutines.map(s => ({ name: s.name, boundary: (s as any).boundary })));
+          allSubroutines.slice(0, 5).map(s => ({ name: s.name, boundary: (s as any).boundary })));
       }
       
       boundaryFilteredSubroutines = allSubroutines.filter(sub => {
-        // Keep only subroutines registered at or after the current boundary
-        // These are from the current scope, not parent scopes
-        return (sub as any).boundary >= currentBoundary;
+        // Keep only subroutines registered at or before the current boundary
+        // These are from the current scope and parent scopes
+        return (sub as any).boundary <= currentBoundary;
       });
       
       if (session.debug && allSubroutines.length !== boundaryFilteredSubroutines.length) {
@@ -336,6 +392,7 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
     });
     
     if (session.debug) {
+      console.error(`[LLM] After hide-from-llm filter: ${subroutines.length} subroutines`);
       console.error('[LLM] Subroutines available at prompt composition:',
         subroutines.map(s => ({ name: s.name, description: s.description, parameters: s.parameters })));
       if (allSubroutines.length !== subroutines.length) {
@@ -428,29 +485,32 @@ CRITICAL: When defining parameters:
     }
   }
 
-  // Add user message to dialog history
+  // Add user message to dialog history (for full audit log)
   dialogHistory.push({ role: 'user', content: currentUserPrompt });
+  
+  // Prune dialog history for LLM call (keep full history for audit)
+  const prunedDialogHistory = pruneDialogForLLM(dialogHistory, 20); // Keep last 20 messages
   
   if (session.debug) {
     console.error(`[LLM] Calling ${model}`);
-    console.error(`[LLM] Dialog history length: ${dialogHistory.length} messages`);
+    console.error(`[LLM] Dialog history length: ${dialogHistory.length} messages (full), ${prunedDialogHistory.length} messages (pruned)`);
     console.error(`[LLM] Has existing dialog: ${hasExistingDialog}`);
   }
   
   try {
     let result: string;
     if (isOpenAI) {
-      // Call OpenAI API with full dialog history
+      // Call OpenAI API with pruned dialog history
       const response = await llmClient.chat.completions.create({
         model,
         max_tokens: maxTokens,
         temperature,
-        messages: dialogHistory,
+        messages: prunedDialogHistory,
       });
       result = response.choices[0]?.message?.content || '';
     } else if (isOllama) {
       // Call OllamaProvider with dialog history as joined string
-      const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
+      const ollamaPrompt = prunedDialogHistory.map((m: DialogMessage) => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
       result = await llmClient.complete(ollamaPrompt, {
         model,
         temperature,
@@ -458,16 +518,16 @@ CRITICAL: When defining parameters:
       });
     } else if (isCustom) {
       // Call CustomLLMProvider with dialog history
-      const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+      const customPrompt = prunedDialogHistory.map((m: DialogMessage) => `${m.role}: ${m.content}`).join('\n');
       result = await llmClient.complete(customPrompt, {
         model,
         temperature,
         max_tokens: maxTokens,
-        messages: dialogHistory,
+        messages: prunedDialogHistory,
       });
     } else {
       // Call Anthropic API - use helper function
-      result = await callAnthropic(llmClient, model, maxTokens, temperature, dialogHistory);
+      result = await callAnthropic(llmClient, model, maxTokens, temperature, prunedDialogHistory);
     }
     
     if (session.debug) {
