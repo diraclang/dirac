@@ -82,6 +82,82 @@ export class DiracShell {
     // Use cached subroutines if in agent mode, otherwise use session subroutines
     const subroutines = this.client ? this.cachedSubroutines : this.session.subroutines;
     
+    // Check if user is typing a variable: $varname
+    const varMatch = line.match(/\$([a-zA-Z0-9_-]*)$/);
+    
+    if (varMatch) {
+      const partial = varMatch[1];
+      
+      // Get session variables
+      const varNames = Object.keys(this.session.variables || {});
+      
+      // Get environment variables (common ones to reduce noise)
+      const commonEnvVars = ['HOME', 'PATH', 'USER', 'SHELL', 'PWD', 'OLDPWD', 
+                             'TERM', 'LANG', 'EDITOR', 'TMPDIR', 'PS1'];
+      const envVarNames = Object.keys(process.env).filter(name => 
+        commonEnvVars.includes(name) || name.startsWith('DIRAC_') || name.startsWith('TELEGRAM_')
+      );
+      
+      // Combine and filter
+      const allVars = [...varNames, ...envVarNames];
+      const matches = allVars.filter(name => 
+        name.toLowerCase().startsWith(partial.toLowerCase())
+      );
+      
+      const completions = matches.map(name => `$${name}`);
+      return [completions, varMatch[0]];
+    }
+    
+    // Check if user is typing a file path (starts with ./ or ~/ or / or ../)
+    const pathMatch = line.match(/((?:\.\.?\/|~\/|\/)[^\s]*)$/);
+    
+    if (pathMatch) {
+      const partial = pathMatch[1];
+      
+      try {
+        // Expand ~ to home directory
+        let searchPath = partial;
+        if (searchPath.startsWith('~/')) {
+          searchPath = path.join(os.homedir(), searchPath.slice(2));
+        }
+        
+        // Get directory and file prefix
+        const dirPath = path.dirname(searchPath);
+        const filePrefix = path.basename(searchPath);
+        
+        // Read directory contents
+        if (fs.existsSync(dirPath) && fs.statSync(dirPath).isDirectory()) {
+          const entries = fs.readdirSync(dirPath, { withFileTypes: true });
+          
+          // Filter by prefix
+          const matches = entries
+            .filter(entry => entry.name.startsWith(filePrefix))
+            .map(entry => {
+              const fullPath = path.join(dirPath, entry.name);
+              // Convert back to original format (~ or ./ or /)
+              let displayPath = fullPath;
+              if (partial.startsWith('~/')) {
+                displayPath = '~/' + path.relative(os.homedir(), fullPath);
+              } else if (partial.startsWith('./') || partial.startsWith('../')) {
+                displayPath = path.relative(process.cwd(), fullPath);
+                if (!displayPath.startsWith('.')) {
+                  displayPath = './' + displayPath;
+                }
+              }
+              
+              // Add trailing slash for directories
+              return entry.isDirectory() ? displayPath + '/' : displayPath;
+            });
+          
+          if (matches.length > 0) {
+            return [matches, pathMatch[0]];
+          }
+        }
+      } catch (error) {
+        // Silently fail on file system errors
+      }
+    }
+    
     // Check if user is typing an attribute after a tag: |tagname attr_partial
     // Match: |tagname something attr_partial (where attr_partial is being typed)
     const attrMatch = line.match(/\|([a-z0-9_-]+)\s+.*?([a-z0-9_-]*)$/i);
@@ -201,12 +277,33 @@ export class DiracShell {
     
     if (commandMatch) {
       const partial = commandMatch[1];
-      const commands = ['help', 'quit', 'exit', 'vars', 'subs', 'clear', 'history', 'save', 'debug', 'llm'];
+      const commands = ['help', 'quit', 'exit', 'vars', 'subs', 'clear', 'history', 'save', 'debug', 'llm', 'index'];
       
       const matches = commands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
       const completions = matches.map(cmd => `:${cmd}`);
       
       return [completions, commandMatch[0]];
+    }
+    
+    // Check if line starts with system tag and complete common shell commands
+    if (line.includes('<system>') || line.includes('|system>')) {
+      // Extract the partial command after the system tag
+      const systemMatch = line.match(/(?:<system>|\\|system>)\s*([a-z]*)$/i);
+      
+      if (systemMatch) {
+        const partial = systemMatch[1];
+        const commonCommands = [
+          'ls', 'cd', 'pwd', 'cat', 'grep', 'find', 'echo', 'cp', 'mv', 'rm', 'mkdir', 'touch',
+          'git', 'npm', 'node', 'python', 'curl', 'wget', 'ssh', 'scp', 'tar', 'gzip', 'diff',
+          'ps', 'top', 'kill', 'chmod', 'chown', 'ln', 'du', 'df', 'which', 'man', 'history'
+        ];
+        
+        const matches = commonCommands.filter(cmd => cmd.startsWith(partial.toLowerCase()));
+        
+        if (matches.length > 0) {
+          return [matches, partial];
+        }
+      }
     }
     
     return [[], line];
