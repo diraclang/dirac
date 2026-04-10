@@ -48,6 +48,11 @@ export async function executeEval(session: DiracSession, element: DiracElement):
       return params && params[0] ? params[0] : null;
     };
     
+    // Add session runtime functions
+    context.getVariable = (name: string) => getVariable(session, name);
+    context.setVariable = (name: string, value: any, global: boolean = false) => 
+      setVariable(session, name, value, global);
+    
     // Add session object for orchestration (reserved identifier in eval context)
     context.session = session;
     
