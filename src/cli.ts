@@ -12,13 +12,66 @@ import { resolve, extname } from 'path';
 import { execute } from './index.js';
 import { BraKetParser } from './runtime/braket-parser.js';
 
+// Load shell configuration from config.yml and args
+function loadShellConfig(args: string[] = []): any {
+  const shellConfig: any = { debug: false };
+  
+  // Parse command-line options
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === '--debug') {
+      shellConfig.debug = true;
+    } else if ((arg === '-f' || arg === '--config') && i + 1 < args.length) {
+      const configPath = resolve(args[++i]);
+      if (fs.existsSync(configPath)) {
+        const configData = yaml.load(fs.readFileSync(configPath, 'utf-8')) as any;
+        Object.assign(shellConfig, {
+          llmProvider: configData.llmProvider,
+          llmModel: configData.llmModel,
+          customLLMUrl: configData.customLLMUrl,
+          initScript: configData.initScript,
+        });
+      }
+    }
+  }
+  
+  // Load from default config.yml if not specified
+  if (!shellConfig.llmProvider) {
+    const defaultConfigPath = resolve(process.cwd(), 'config.yml');
+    if (fs.existsSync(defaultConfigPath)) {
+      try {
+        const configData = yaml.load(fs.readFileSync(defaultConfigPath, 'utf-8')) as any;
+        shellConfig.llmProvider = shellConfig.llmProvider || configData.llmProvider;
+        shellConfig.llmModel = shellConfig.llmModel || configData.llmModel;
+        shellConfig.customLLMUrl = shellConfig.customLLMUrl || configData.customLLMUrl;
+        shellConfig.initScript = shellConfig.initScript || configData.initScript;
+      } catch (err) {
+        // Ignore
+      }
+    }
+  }
+  
+  return shellConfig;
+}
+
 async function main() {
   const args = process.argv.slice(2);
+
+  // Check if launched as 'dish' command (auto-launch shell)
+  const calledAs = process.argv[1];
+  if (calledAs && calledAs.endsWith('/dish')) {
+    const { DiracShell } = await import('./shell.js');
+    const shellConfig = loadShellConfig(args);
+    const shell = new DiracShell(shellConfig);
+    await shell.start();
+    return;
+  }
 
   // --help option
   if (args.includes('--help') || args.includes('-h')) {
     console.log('Usage: dirac <file.di|file.bk>');
     console.log('       dirac shell [options]');
+    console.log('       dish              Start interactive shell (short alias)');
     console.log('       dirac agent <command>');
     console.log('');
     console.log('Commands:');
@@ -109,47 +162,10 @@ async function main() {
     const daemonMode = args.includes('--daemon') || args.includes('-d');
     const agentMode = args.includes('--agent') || args.includes('-a');
     
-    // Parse shell-specific options
-    const shellConfig: any = { debug: false };
-    for (let i = 1; i < args.length; i++) {
-      const arg = args[i];
-      if (arg === '--debug') {
-        shellConfig.debug = true;
-      } else if (arg === '--daemon' || arg === '-d') {
-        // Skip, already handled
-        continue;
-      } else if (arg === '--agent' || arg === '-a') {
-        // Skip, already handled
-        continue;
-      } else if ((arg === '-f' || arg === '--config') && i + 1 < args.length) {
-        const configPath = resolve(args[++i]);
-        if (fs.existsSync(configPath)) {
-          const configData = yaml.load(fs.readFileSync(configPath, 'utf-8')) as any;
-          Object.assign(shellConfig, {
-            llmProvider: configData.llmProvider,
-            llmModel: configData.llmModel,
-            customLLMUrl: configData.customLLMUrl,
-            initScript: configData.initScript,
-          });
-        }
-      }
-    }
-    
-    // Load from default config.yml if not specified
-    if (!shellConfig.llmProvider) {
-      const defaultConfigPath = resolve(process.cwd(), 'config.yml');
-      if (fs.existsSync(defaultConfigPath)) {
-        try {
-          const configData = yaml.load(fs.readFileSync(defaultConfigPath, 'utf-8')) as any;
-          shellConfig.llmProvider = shellConfig.llmProvider || configData.llmProvider;
-          shellConfig.llmModel = shellConfig.llmModel || configData.llmModel;
-          shellConfig.customLLMUrl = shellConfig.customLLMUrl || configData.customLLMUrl;
-          shellConfig.initScript = shellConfig.initScript || configData.initScript;
-        } catch (err) {
-          // Ignore
-        }
-      }
-    }
+    // Load shell configuration (skip --daemon and --agent flags)
+    const shellConfig = loadShellConfig(args.slice(1).filter(arg => 
+      arg !== '--daemon' && arg !== '-d' && arg !== '--agent' && arg !== '-a'
+    ));
     
     // Handle agent mode - connect to running agent
     if (agentMode) {

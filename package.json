@@ -6,7 +6,8 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "dirac": "dist/cli.js"
+    "dirac": "dist/cli.js",
+    "dish": "dist/cli.js"
   },
   "exports": {
     ".": "./dist/index.js"
