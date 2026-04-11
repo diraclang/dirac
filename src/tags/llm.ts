@@ -4,7 +4,7 @@
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { setVariable, substituteVariables, emit, getVariable } from '../runtime/session.js';
+import { setVariable, substituteVariables, substituteAttribute, emit, getVariable } from '../runtime/session.js';
 import { integrate } from '../runtime/interpreter.js';
 import { DiracParser } from '../runtime/parser.js';
 import Anthropic from '@anthropic-ai/sdk';
@@ -554,7 +554,11 @@ CRITICAL: When defining parameters:
       const autocorrect = element.attributes['autocorrect'] === 'true';
       const maxRetries = parseInt(element.attributes['max-retries'] || '0', 10);
       const feedbackMode = element.attributes['feedback'] === 'true';
-      const maxIterations = parseInt(element.attributes['max-iterations'] || '3', 10);
+      
+      // Support variable substitution in max-iterations attribute
+      const maxIterationsAttr = substituteAttribute(session, element.attributes['max-iterations'] || '3');
+      const maxIterations = parseInt(maxIterationsAttr, 10);
+      
       const replaceTick = element.attributes['replace-tick'] === 'true';
       
       if (session.debug) {
