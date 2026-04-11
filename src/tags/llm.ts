@@ -703,6 +703,36 @@ CRITICAL: When defining parameters:
             dumpGeneratedSubroutines(session, diracCode, userPrompt);
           }
           
+          // NEW: Call plugin callback if provided (for monitoring/control)
+          const onIterationCallback = element.attributes['on-iteration'];
+          if (onIterationCallback && feedbackMode) {
+            if (session.debug) {
+              console.error(`[LLM] Calling on-iteration plugin: ${onIterationCallback}`);
+            }
+            
+            // Set iteration context variables for callback
+            setVariable(session, '__llm_iteration__', iteration.toString(), true);
+            setVariable(session, '__llm_max_iterations__', maxIterations.toString(), true);
+            
+            // Call the plugin subroutine
+            const callElement: DiracElement = {
+              tag: onIterationCallback,
+              attributes: {},
+              children: [],
+              text: '',
+            };
+            await integrate(session, callElement);
+            
+            // Check if plugin requested stop
+            const stopRequested = getVariable(session, '__llm_stop_requested__');
+            if (stopRequested === 'true') {
+              if (session.debug) {
+                console.error('[LLM] Plugin requested stop');
+              }
+              break; // Exit feedback loop
+            }
+          }
+          
           // If feedback mode, capture execution output and send back to LLM
           if (feedbackMode) {
             const outputAfter = session.output.slice();
