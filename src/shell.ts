@@ -335,12 +335,90 @@ export class DiracShell {
     }
   }
 
+  private checkUnsavedSubroutines(): void {
+    // Find subroutines that either:
+    // 1. Have no sourcePath (created in session)
+    // 2. Have sourcePath but are from multi-subroutine files (would create new file on save)
+    // 3. Have sourcePath in temp directory (from edit-subroutine)
+    const unsaved: any[] = [];
+    const excludePaths = [
+      path.join(os.homedir(), '.dirac', 'lib'),  // System library
+      '/tmp/',  // Temp files
+    ];
+    
+    for (const sub of this.session.subroutines) {
+      // Skip if meta-hide-from-llm (internal/system subroutines)
+      if (sub.meta && sub.meta['hide-from-llm'] === 'true') {
+        continue;
+      }
+      
+      if (!sub.sourcePath) {
+        // No source file - definitely unsaved
+        unsaved.push({ name: sub.name, reason: 'created in session' });
+      } else {
+        // Check if it's from a system/excluded path
+        const isExcluded = excludePaths.some(excludePath => 
+          sub.sourcePath.startsWith(excludePath)
+        );
+        
+        if (isExcluded) {
+          continue;  // Skip system/temp subroutines
+        }
+        
+        if (fs.existsSync(sub.sourcePath)) {
+          // Has source file - check if it contains multiple subroutines
+          try {
+            const content = fs.readFileSync(sub.sourcePath, 'utf-8');
+            const parser = new DiracParser();
+            const ast = parser.parse(content);
+            const count = this.countSubroutinesInAST(ast);
+            
+            if (count > 1) {
+              // Multi-subroutine file - saving would create new file
+              const shortPath = sub.sourcePath.replace(os.homedir(), '~');
+              unsaved.push({ name: sub.name, reason: `from multi-sub file (${shortPath})` });
+            }
+          } catch (err) {
+            // Parse error - skip to avoid false positives
+          }
+        }
+      }
+    }
+    
+    if (unsaved.length > 0) {
+      console.log('\n⚠️  Warning: You have unsaved subroutines:');
+      for (const { name, reason } of unsaved) {
+        console.log(`   - ${name} (${reason})`);
+      }
+      console.log('\nUse :save <name> or |save-subroutine name="..."> to persist them.\n');
+    }
+  }
+
+  private countSubroutinesInAST(element: any): number {
+    let count = 0;
+    
+    if (element.tag === 'subroutine') {
+      count = 1;
+    }
+    
+    if (element.children) {
+      for (const child of element.children) {
+        count += this.countSubroutinesInAST(child);
+      }
+    }
+    
+    return count;
+  }
+
   private setupHandlers(): void {
     this.rl.on('line', async (input: string) => {
       await this.handleInput(input);
     });
 
     this.rl.on('close', () => {
+      // Check for unsaved subroutines before exiting
+      this.checkUnsavedSubroutines();
+      
       this.saveHistory();
       
       // Disconnect from agent if connected

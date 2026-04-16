@@ -64,6 +64,7 @@ export interface Subroutine {
   description?: string;
   parameters?: ParameterMetadata[];
   meta?: Record<string, string>;
+  sourcePath?: string;  // File path where subroutine was loaded from
 }
 
 /**

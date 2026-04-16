@@ -154,7 +154,8 @@ export function registerSubroutine(
   description?: string,
   parameters?: any[],
   meta?: Record<string, string>,
-  visible?: boolean
+  visible?: boolean,
+  sourcePath?: string
 ): void {
   session.subroutines.push({
     name,
@@ -163,7 +164,8 @@ export function registerSubroutine(
     visible,
     description,
     parameters,
-    meta
+    meta,
+    sourcePath
   });
 }
 

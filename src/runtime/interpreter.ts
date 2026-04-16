@@ -31,6 +31,7 @@ import { executeListSubroutines } from '../tags/list-subroutines.js';
 import { executeIndexSubroutines, executeSearchSubroutines, executeRegistryStats } from '../tags/subroutine-index.js';
 import { executeLoadContext } from '../tags/load-context.js';
 import { executeSaveSubroutine } from '../tags/save-subroutine.js';
+import { executeEditSubroutine } from '../tags/edit-subroutine.js';
 import { executeForeach } from '../tags/foreach.js';
 import { executeBreak } from '../tags/break.js';
 import { executeAttr } from '../tags/attr.js';
@@ -181,6 +182,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'save-subroutine':
         await executeSaveSubroutine(session, element);
+        break;
+        
+      case 'edit-subroutine':
+        await executeEditSubroutine(session, element);
         break;
         
       case 'foreach':

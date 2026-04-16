@@ -183,8 +183,24 @@
   param-file="string:optional:Explicit file path"
   param-path="string:optional:Directory name under ~/.dirac/lib/"
   param-format="string:optional:Output format (default: xml)|xml|braket">
-  <!-- Persist subroutine definitions -->
+  <!-- Persist subroutine definitions with smart file management -->
+  <!-- Smart logic: -->
+  <!-- - If file specified: save to that file -->
+  <!-- - If path specified: save to ~/.dirac/lib/path/name.di -->
+  <!-- - If sourcePath exists and contains only 1 subroutine: overwrite source -->
+  <!-- - If sourcePath exists and contains multiple subroutines: create new file -->
+  <!-- - If no sourcePath: create in ~/.dirac/lib/TIMESTAMP/name.di -->
   <!-- Shell command: :save greet [file] -->
+</subroutine>
+
+<subroutine name="edit-subroutine"
+  description="Edit subroutine definition in external editor"
+  param-name="string:required:Subroutine name to edit"
+  param-editor="string:optional:Editor command (default: $EDITOR or vi)">
+  <!-- Opens subroutine in temp file with editor (blocking) -->
+  <!-- After save/exit, automatically re-imports into session -->
+  <!-- Changes take effect immediately but are NOT saved to disk -->
+  <!-- Use save-subroutine to persist changes -->
 </subroutine>
 
 <subroutine name="subroutine-index"
@@ -255,6 +271,7 @@
   param-max-retries="string:optional:Validation retry attempts (default: 0)"
   param-feedback="string:optional:Enable validation feedback loop|true|false"
   param-max-iterations="string:optional:Max feedback iterations (default: 3)"
+  param-on-iteration="string:optional:Callback subroutine invoked after each iteration"
   param-replace-tick="string:optional:Replace backticks in code|true|false">
   <!-- Generate DIRAC code via LLM -->
   <!-- Supports Anthropic, OpenAI, Ollama, Custom providers -->
@@ -263,6 +280,9 @@
   <!-- execute=true runs generated code immediately -->
   <!-- validate/autocorrect for syntax checking and repair -->
   <!-- Generated subroutines auto-dumped to ~/.dirac/lib/TIMESTAMP/ -->
+  <!-- on-iteration: callback for monitoring LLM feedback loops -->
+  <!-- Callback has access to __llm_iteration__, __llm_max_iterations__, __llm_dialog__ -->
+  <!-- Set __llm_stop_requested__="true" in callback to stop iteration early -->
 </subroutine>
 
 <subroutine name="load-context"

@@ -20,9 +20,11 @@
 
 import type { DiracSession, DiracElement } from '../types/index.js';
 import { emit } from '../runtime/session.js';
-import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { writeFileSync, mkdirSync, existsSync, readFileSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { homedir } from 'os';
+import { SubroutineRegistry } from '../runtime/subroutine-registry.js';
+import { DiracParser } from '../runtime/parser.js';
 
 export async function executeSaveSubroutine(session: DiracSession, element: DiracElement): Promise<void> {
   const name = element.attributes.name;
@@ -56,8 +58,9 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
     content = generateXMLNotation(subroutine);
   }
   
-  // Determine file path
+  // Determine file path with smart logic
   let filePath: string;
+  let shouldMerge = false;  // Whether to merge into existing file
   
   if (file) {
     // Explicit file path (existing behavior)
@@ -66,6 +69,34 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
     // Path is a directory name under ~/.dirac/lib/
     const targetDir = join(homedir(), '.dirac', 'lib', pathAttr);
     filePath = join(targetDir, `${name}.di`);
+  } else if (subroutine.sourcePath && existsSync(subroutine.sourcePath)) {
+    // Smart logic: Check if source file contains multiple subroutines
+    const sourceFile = subroutine.sourcePath;
+    const sourceContent = readFileSync(sourceFile, 'utf-8');
+    const parser = new DiracParser();
+    
+    try {
+      const ast = parser.parse(sourceContent);
+      const subroutineCount = countSubroutines(ast);
+      
+      if (subroutineCount === 1) {
+        // Single subroutine file - safe to overwrite
+        filePath = sourceFile;
+        emit(session, `Updating single-subroutine file: ${filePath}\n`);
+      } else {
+        // Multiple subroutines - extract to new file to avoid merge complexity
+        emit(session, `Source file contains ${subroutineCount} subroutines - creating separate file\n`);
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+        const defaultDir = join(homedir(), '.dirac', 'lib', timestamp);
+        filePath = join(defaultDir, `${name}.di`);
+      }
+    } catch (error) {
+      // Parse error - create new file to be safe
+      emit(session, `Warning: Could not parse source file - creating new file\n`);
+      const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+      const defaultDir = join(homedir(), '.dirac', 'lib', timestamp);
+      filePath = join(defaultDir, `${name}.di`);
+    }
   } else {
     // Default: ~/.dirac/lib/TIMESTAMP/name.di
     const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
@@ -86,6 +117,20 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
   
   if (session.debug) {
     console.error(`[save-subroutine] Saved '${name}' to: ${filePath}`);
+  }
+  
+  // Re-index the file to update the subroutine registry
+  try {
+    const registry = new SubroutineRegistry();
+    const count = registry.indexFile(filePath);
+    if (session.debug) {
+      console.error(`[save-subroutine] Re-indexed ${filePath}: ${count} subroutine(s)`);
+    }
+  } catch (error) {
+    // Don't fail if indexing fails, just warn
+    if (session.debug) {
+      console.error(`[save-subroutine] Warning: Failed to re-index: ${error}`);
+    }
   }
 }
 
@@ -248,4 +293,23 @@ function escapeXml(text: string): string {
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&apos;');
+}
+
+/**
+ * Count subroutines in an AST
+ */
+function countSubroutines(element: DiracElement): number {
+  let count = 0;
+  
+  if (element.tag === 'subroutine') {
+    count = 1;
+  }
+  
+  if (element.children) {
+    for (const child of element.children) {
+      count += countSubroutines(child);
+    }
+  }
+  
+  return count;
 }
