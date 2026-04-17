@@ -335,12 +335,9 @@ export class DiracShell {
     }
   }
 
-  private checkUnsavedSubroutines(): void {
-    // Find subroutines that either:
-    // 1. Have no sourcePath (created in session)
-    // 2. Have sourcePath but are from multi-subroutine files (would create new file on save)
-    // 3. Have sourcePath in temp directory (from edit-subroutine)
-    const unsaved: any[] = [];
+  private checkUnsavedSubroutines(): boolean {
+    // Only warn about subroutines created in session (no sourcePath)
+    const unsaved: string[] = [];
     const excludePaths = [
       path.join(os.homedir(), '.dirac', 'lib'),  // System library
       '/tmp/',  // Temp files
@@ -353,8 +350,8 @@ export class DiracShell {
       }
       
       if (!sub.sourcePath) {
-        // No source file - definitely unsaved
-        unsaved.push({ name: sub.name, reason: 'created in session' });
+        // No source file - created in session
+        unsaved.push(sub.name);
       } else {
         // Check if it's from a system/excluded path
         const isExcluded = excludePaths.some(excludePath => 
@@ -364,34 +361,20 @@ export class DiracShell {
         if (isExcluded) {
           continue;  // Skip system/temp subroutines
         }
-        
-        if (fs.existsSync(sub.sourcePath)) {
-          // Has source file - check if it contains multiple subroutines
-          try {
-            const content = fs.readFileSync(sub.sourcePath, 'utf-8');
-            const parser = new DiracParser();
-            const ast = parser.parse(content);
-            const count = this.countSubroutinesInAST(ast);
-            
-            if (count > 1) {
-              // Multi-subroutine file - saving would create new file
-              const shortPath = sub.sourcePath.replace(os.homedir(), '~');
-              unsaved.push({ name: sub.name, reason: `from multi-sub file (${shortPath})` });
-            }
-          } catch (err) {
-            // Parse error - skip to avoid false positives
-          }
-        }
       }
     }
     
     if (unsaved.length > 0) {
-      console.log('\n⚠️  Warning: You have unsaved subroutines:');
-      for (const { name, reason } of unsaved) {
-        console.log(`   - ${name} (${reason})`);
+      console.log('\n⚠️  Warning: You have unsaved subroutines created in this session:');
+      for (const name of unsaved) {
+        console.log(`   - ${name}`);
       }
-      console.log('\nUse :save <name> or |save-subroutine name="..."> to persist them.\n');
+      console.log('\nUse :save <name> or |save-subroutine name="..."> to persist them.');
+      console.log('Press Enter to exit anyway, or Ctrl+C to cancel...\n');
+      return true;  // Has unsaved
     }
+    
+    return false;  // No unsaved
   }
 
   private countSubroutinesInAST(element: any): number {
@@ -410,6 +393,25 @@ export class DiracShell {
     return count;
   }
 
+  private finalizeExit(): void {
+    this.saveHistory();
+    
+    // Disconnect from agent if connected
+    if (this.client) {
+      this.client.disconnect();
+    }
+    
+    // Stop all scheduled tasks on exit
+    import('./tags/schedule.js').then(({ stopAllScheduledTasks }) => {
+      stopAllScheduledTasks();
+      console.log('\nGoodbye!');
+      process.exit(0);
+    }).catch(() => {
+      console.log('\nGoodbye!');
+      process.exit(0);
+    });
+  }
+
   private setupHandlers(): void {
     this.rl.on('line', async (input: string) => {
       await this.handleInput(input);
@@ -417,24 +419,22 @@ export class DiracShell {
 
     this.rl.on('close', () => {
       // Check for unsaved subroutines before exiting
-      this.checkUnsavedSubroutines();
+      const hasUnsaved = this.checkUnsavedSubroutines();
       
-      this.saveHistory();
-      
-      // Disconnect from agent if connected
-      if (this.client) {
-        this.client.disconnect();
+      if (hasUnsaved) {
+        // Re-open readline to wait for confirmation
+        const confirmRl = readline.createInterface({
+          input: process.stdin,
+          output: process.stdout,
+        });
+        
+        confirmRl.question('', () => {
+          confirmRl.close();
+          this.finalizeExit();
+        });
+      } else {
+        this.finalizeExit();
       }
-      
-      // Stop all scheduled tasks on exit
-      import('./tags/schedule.js').then(({ stopAllScheduledTasks }) => {
-        stopAllScheduledTasks();
-        console.log('\nGoodbye!');
-        process.exit(0);
-      }).catch(() => {
-        console.log('\nGoodbye!');
-        process.exit(0);
-      });
     });
 
     // Handle Ctrl+C
