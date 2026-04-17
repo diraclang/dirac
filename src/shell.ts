@@ -422,15 +422,35 @@ export class DiracShell {
       const hasUnsaved = this.checkUnsavedSubroutines();
       
       if (hasUnsaved) {
-        // Re-open readline to wait for confirmation
+        // Re-open readline to wait for user decision
         const confirmRl = readline.createInterface({
           input: process.stdin,
           output: process.stdout,
         });
         
+        // Handle Ctrl+C to cancel exit
+        let canceled = false;
+        confirmRl.on('SIGINT', () => {
+          canceled = true;
+          confirmRl.close();
+          console.log('\n(Exit canceled - returning to shell)\n');
+          // Restart the shell
+          this.rl = readline.createInterface({
+            input: process.stdin,
+            output: process.stdout,
+            prompt: '> ',
+            historySize: MAX_HISTORY,
+            completer: this.completer.bind(this),
+          });
+          this.setupHandlers();
+          this.rl.prompt();
+        });
+        
         confirmRl.question('', () => {
           confirmRl.close();
-          this.finalizeExit();
+          if (!canceled) {
+            this.finalizeExit();
+          }
         });
       } else {
         this.finalizeExit();
