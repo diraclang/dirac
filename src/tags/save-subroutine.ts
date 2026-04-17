@@ -23,7 +23,7 @@ import { emit } from '../runtime/session.js';
 import { writeFileSync, mkdirSync, existsSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { homedir } from 'os';
-import { SubroutineRegistry } from '../runtime/subroutine-registry.js';
+import { registry } from './subroutine-index.js';
 
 export async function executeSaveSubroutine(session: DiracSession, element: DiracElement): Promise<void> {
   const name = element.attributes.name;
@@ -90,7 +90,6 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
   
   // Re-index the file to update the subroutine registry
   try {
-    const registry = new SubroutineRegistry();
     const count = registry.indexFile(filePath);
     if (session.debug) {
       console.error(`[save-subroutine] Re-indexed ${filePath}: ${count} subroutine(s)`);

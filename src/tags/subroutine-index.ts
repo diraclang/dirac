@@ -11,7 +11,8 @@ import type { DiracSession, DiracElement } from '../types/index.js';
 import { emit, setVariable } from '../runtime/session.js';
 import { SubroutineRegistry } from '../runtime/subroutine-registry.js';
 
-const registry = new SubroutineRegistry();
+// Singleton registry instance shared across all tags
+export const registry = new SubroutineRegistry();
 
 export async function executeIndexSubroutines(session: DiracSession, element: DiracElement): Promise<void> {
   const pathAttr = element.attributes.path;
