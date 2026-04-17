@@ -183,14 +183,14 @@
   param-file="string:optional:Explicit file path"
   param-path="string:optional:Directory name under ~/.dirac/lib/"
   param-format="string:optional:Output format (default: xml)|xml|braket">
-  <!-- Persist subroutine definitions with smart file management -->
-  <!-- Smart logic: -->
-  <!-- - If file specified: save to that file -->
-  <!-- - If path specified: save to ~/.dirac/lib/path/name.di -->
-  <!-- - If sourcePath exists and contains only 1 subroutine: overwrite source -->
-  <!-- - If sourcePath exists and contains multiple subroutines: create new file -->
-  <!-- - If no sourcePath: create in ~/.dirac/lib/TIMESTAMP/name.di -->
-  <!-- Shell command: :save greet [file] -->
+  <!-- Saves subroutine to canonical location: ~/.dirac/lib/user/NAME.di -->
+  <!-- Override with file="..." for custom path or path="..." for subdirectory -->
+  <!-- Automatically indexes saved subroutine for search functionality -->
+  <!-- Shell command: :save <name> [file|path] -->
+  <!-- Examples: -->
+  <!--   :save greet              -> ~/.dirac/lib/user/greet.di -->
+  <!--   :save greet utils        -> ~/.dirac/lib/utils/greet.di -->
+  <!--   :save greet ./custom.di  -> ./custom.di -->
 </subroutine>
 
 <subroutine name="edit-subroutine"
@@ -211,6 +211,25 @@
   param-output="string:optional:Variable name to store results"
   param-format="string:optional:Output format|text|json">
   <!-- Requires embedding service for semantic search -->
+</subroutine>
+
+<subroutine name="index-subroutines"
+  description="Index subroutines from files or directories for later search"
+  param-path="string:required:File or directory path to index">
+  <!-- Recursively scans .di files and extracts subroutine definitions -->
+  <!-- Indexed subroutines can be searched with search-subroutines tag -->
+  <!-- Shell auto-indexes ~/.dirac/lib/user on startup -->
+</subroutine>
+
+<subroutine name="search-subroutines"
+  description="Search indexed subroutines by name or description"
+  param-query="string:required:Search query (name or description keywords)"
+  param-limit="string:optional:Maximum results to return (default: 10)"
+  param-output="string:optional:Variable name to store results"
+  param-format="string:optional:Output format (default: text)|text|json|xml">
+  <!-- Searches subroutines indexed via index-subroutines -->
+  <!-- Shell command: :search <query> -->
+  <!-- Example: <search-subroutines query="greeting" limit="5" format="text" /> -->
 </subroutine>
 
 <!-- ============================================================
