@@ -119,6 +119,9 @@ export class SubroutineRegistry {
       const subroutines = this.extractSubroutines(ast, filePath);
       this.index.subroutines.push(...subroutines);
       
+      // Persist the updated index to disk
+      this.saveIndex();
+      
       return subroutines.length;
     } catch (err) {
       // Silently skip files with parse errors (they likely have invalid syntax)

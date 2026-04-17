@@ -1,6 +1,9 @@
 # Dirac Shell Init Script
 # This script runs automatically when the shell starts
 
+# Auto-index user's saved subroutines for search functionality
+<index-subroutines path="~/.dirac/lib/user" />
+
 # Uncomment to load native tags for tab completion:
 |import src="dirac/lib/native-tags.di" >
 
