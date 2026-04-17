@@ -335,8 +335,8 @@ export class DiracShell {
     }
   }
 
-  private checkUnsavedSubroutines(): boolean {
-    // Only warn about subroutines created in session (no sourcePath)
+  private getUnsavedSubroutines(): string[] {
+    // Only check subroutines created in session (no sourcePath)
     const unsaved: string[] = [];
     const excludePaths = [
       path.join(os.homedir(), '.dirac', 'lib'),  // System library
@@ -364,17 +364,54 @@ export class DiracShell {
       }
     }
     
-    if (unsaved.length > 0) {
-      console.log('\n⚠️  Warning: You have unsaved subroutines created in this session:');
-      for (const name of unsaved) {
-        console.log(`   - ${name}`);
-      }
-      console.log('\nUse :save <name> or |save-subroutine name="..."> to persist them.');
-      console.log('Press Enter to exit anyway, or Ctrl+C to cancel...\n');
-      return true;  // Has unsaved
+    return unsaved;
+  }
+
+  private async promptSaveUnsaved(unsaved: string[]): Promise<boolean> {
+    console.log('\n⚠️  Warning: You have unsaved subroutines created in this session:');
+    for (const name of unsaved) {
+      console.log(`   - ${name}`);
     }
+    console.log('\nOptions:');
+    console.log('  a - Save all and exit');
+    console.log('  n - Exit without saving');
+    console.log('  c - Cancel (return to shell)');
     
-    return false;  // No unsaved
+    return new Promise((resolve) => {
+      const confirmRl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout,
+      });
+      
+      confirmRl.question('\nYour choice [a/n/c]: ', async (answer) => {
+        confirmRl.close();
+        const choice = answer.trim().toLowerCase();
+        
+        if (choice === 'a') {
+          // Save all unsaved subroutines
+          console.log('\nSaving all unsaved subroutines...\n');
+          for (const name of unsaved) {
+            try {
+              const xml = `<save-subroutine name="${name}" format="xml" />`;
+              const ast = this.xmlParser.parse(xml);
+              await integrate(this.session, ast);
+              if (this.session.output.length > 0) {
+                console.log(this.session.output.join(''));
+                this.session.output = [];
+              }
+            } catch (error) {
+              console.error(`Error saving ${name}:`, error instanceof Error ? error.message : String(error));
+            }
+          }
+          resolve(true);  // Proceed with exit
+        } else if (choice === 'n') {
+          resolve(true);  // Proceed with exit without saving
+        } else {
+          console.log('\n(Exit canceled - returning to shell)\n');
+          resolve(false);  // Cancel exit
+        }
+      });
+    });
   }
 
   private countSubroutinesInAST(element: any): number {
@@ -417,24 +454,16 @@ export class DiracShell {
       await this.handleInput(input);
     });
 
-    this.rl.on('close', () => {
+    this.rl.on('close', async () => {
       // Check for unsaved subroutines before exiting
-      const hasUnsaved = this.checkUnsavedSubroutines();
+      const unsaved = this.getUnsavedSubroutines();
       
-      if (hasUnsaved) {
-        // Re-open readline to wait for user decision
-        const confirmRl = readline.createInterface({
-          input: process.stdin,
-          output: process.stdout,
-        });
-        
-        // Handle Ctrl+C to cancel exit
-        let canceled = false;
-        confirmRl.on('SIGINT', () => {
-          canceled = true;
-          confirmRl.close();
-          console.log('\n(Exit canceled - returning to shell)\n');
-          // Restart the shell
+      if (unsaved.length > 0) {
+        const shouldExit = await this.promptSaveUnsaved(unsaved);
+        if (shouldExit) {
+          this.finalizeExit();
+        } else {
+          // User canceled - restart the shell
           this.rl = readline.createInterface({
             input: process.stdin,
             output: process.stdout,
@@ -444,14 +473,7 @@ export class DiracShell {
           });
           this.setupHandlers();
           this.rl.prompt();
-        });
-        
-        confirmRl.question('', () => {
-          confirmRl.close();
-          if (!canceled) {
-            this.finalizeExit();
-          }
-        });
+        }
       } else {
         this.finalizeExit();
       }
