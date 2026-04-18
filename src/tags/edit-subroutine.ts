@@ -16,7 +16,7 @@
 
 import type { DiracSession, DiracElement } from '../types/index.js';
 import { emit } from '../runtime/session.js';
-import { writeFileSync, readFileSync, unlinkSync } from 'fs';
+import { writeFileSync, readFileSync, unlinkSync, existsSync } from 'fs';
 import { tmpdir } from 'os';
 import { join } from 'path';
 import { spawnSync } from 'child_process';
@@ -44,8 +44,45 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
     throw new Error(`Subroutine '${name}' not found in session`);
   }
   
-  // Generate XML for the subroutine
-  const xml = serializeSubroutineToXML(subroutine);
+  // Try to load original source if available
+  let xml: string;
+  
+  if (subroutine.sourcePath && existsSync(subroutine.sourcePath)) {
+    // Read from original source file to preserve formatting
+    try {
+      const sourceContent = readFileSync(subroutine.sourcePath, 'utf-8');
+      
+      // Try to extract just this subroutine from the file
+      const match = sourceContent.match(
+        new RegExp(`<subroutine\\s+name="${name}"[\\s\\S]*?<\\/subroutine>`, 'i')
+      );
+      
+      if (match) {
+        xml = match[0];
+        if (session.debug) {
+          console.error(`[edit-subroutine] Loaded from source: ${subroutine.sourcePath}`);
+        }
+      } else {
+        // Fallback to serialization
+        xml = serializeSubroutineToXML(subroutine);
+        if (session.debug) {
+          console.error(`[edit-subroutine] Could not extract from source, using serialization`);
+        }
+      }
+    } catch (err) {
+      // Fallback to serialization if file read fails
+      xml = serializeSubroutineToXML(subroutine);
+      if (session.debug) {
+        console.error(`[edit-subroutine] Error reading source file, using serialization`);
+      }
+    }
+  } else {
+    // No source file - serialize from AST
+    xml = serializeSubroutineToXML(subroutine);
+    if (session.debug) {
+      console.error(`[edit-subroutine] No source file, serializing from AST`);
+    }
+  }
   
   // Always use temp file for editing (don't modify source files directly)
   const tempFile = join(tmpdir(), `dirac-edit-${name}-${Date.now()}.di`);
@@ -107,9 +144,18 @@ function serializeSubroutineToXML(sub: any): string {
 }
 
 function serializeElement(el: any, lines: string[], indent: string): void {
-  if (!el || !el.tag) {
-    if (el && typeof el === 'string') {
-      lines.push(indent + el);
+  // Handle text nodes (tag is empty string)
+  if (!el.tag || el.tag === '') {
+    if (el.text) {
+      // Text node - output inline without newline
+      let lastIdx = lines.length - 1;
+      if (lastIdx >= 0 && !lines[lastIdx].endsWith('>')) {
+        // Append to current line
+        lines[lastIdx] += el.text;
+      } else {
+        // Start new line with text
+        lines.push(indent + el.text);
+      }
     }
     return;
   }
@@ -126,30 +172,66 @@ function serializeElement(el: any, lines: string[], indent: string): void {
     }
   }
   
-  // Check for children or text
+  // Check for children
   const hasChildren = el.children && el.children.length > 0;
-  const hasText = el.text && el.text.trim();
   
-  if (!hasChildren && !hasText) {
-    // Self-closing
-    lines.push(tag + ' />');
-  } else if (hasText && !hasChildren) {
-    // Text only
-    lines.push(tag + '>' + el.text + `</${el.tag}>`);
+  if (!hasChildren) {
+    // Self-closing tag
+    let lastIdx = lines.length - 1;
+    if (lastIdx >= 0 && !lines[lastIdx].endsWith('>') && !lines[lastIdx].trim().startsWith('<')) {
+      // Inline with previous text
+      lines[lastIdx] += tag.slice(indent.length) + ' />';
+    } else {
+      lines.push(tag + ' />');
+    }
   } else {
-    // Has children
-    lines.push(tag + '>');
+    // Has children - process them in order to preserve mixed content
+    let lastIdx = lines.length - 1;
+    const shouldInline = lastIdx >= 0 && !lines[lastIdx].endsWith('>');
     
-    if (hasText) {
-      lines.push(indent + '  ' + el.text);
+    if (shouldInline) {
+      // Inline opening tag
+      lines[lastIdx] += tag.slice(indent.length) + '>';
+    } else {
+      lines.push(tag + '>');
     }
     
-    if (hasChildren) {
-      for (const child of el.children) {
-        serializeElement(child, lines, indent + '  ');
+    // Process children in order (preserves text/element interleaving)
+    let allInline = true;
+    for (let i = 0; i < el.children.length; i++) {
+      const child = el.children[i];
+      
+      // Check if this is a text node
+      if (!child.tag || child.tag === '') {
+        // Text node - keep inline
+        lastIdx = lines.length - 1;
+        if (child.text) {
+          lines[lastIdx] += child.text;
+        }
+      } else {
+        // Element node
+        // If we have inline content so far, try to keep element inline too
+        const isSimpleVar = child.tag === 'variable' && child.attributes && child.attributes.name;
+        
+        if (isSimpleVar) {
+          // Variable tag - keep inline
+          lastIdx = lines.length - 1;
+          lines[lastIdx] += `<variable name="${child.attributes.name}" />`;
+        } else {
+          // Complex child - serialize normally
+          allInline = false;
+          serializeElement(child, lines, indent + '  ');
+        }
       }
     }
     
-    lines.push(`${indent}</${el.tag}>`);
+    // Closing tag
+    lastIdx = lines.length - 1;
+    if (allInline || lines[lastIdx].indexOf(`<${el.tag}`) !== -1) {
+      // Close inline
+      lines[lastIdx] += `</${el.tag}>`;
+    } else {
+      lines.push(`${indent}</${el.tag}>`);
+    }
   }
 }
