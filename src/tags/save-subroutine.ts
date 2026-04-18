@@ -84,6 +84,13 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
   
   emit(session, `Subroutine '${name}' saved to: ${filePath}\n`);
   
+  // Update subroutine metadata: clear modified flag and set sourcePath
+  const savedSub = session.subroutines.find(s => s.name === name);
+  if (savedSub) {
+    savedSub.sourcePath = filePath;
+    savedSub.modified = false;
+  }
+  
   if (session.debug) {
     console.error(`[save-subroutine] Saved '${name}' to: ${filePath}`);
   }

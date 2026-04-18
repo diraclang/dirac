@@ -336,7 +336,7 @@ export class DiracShell {
   }
 
   private getUnsavedSubroutines(): string[] {
-    // Only check subroutines created in session (no sourcePath)
+    // Check subroutines created in session OR modified but not saved
     const unsaved: string[] = [];
     const excludePaths = [
       path.join(os.homedir(), '.dirac', 'lib'),  // System library
@@ -349,13 +349,19 @@ export class DiracShell {
         continue;
       }
       
+      // Check if modified but not saved
+      if (sub.modified) {
+        unsaved.push(sub.name);
+        continue;
+      }
+      
       if (!sub.sourcePath) {
         // No source file - created in session
         unsaved.push(sub.name);
       } else {
         // Check if it's from a system/excluded path
         const isExcluded = excludePaths.some(excludePath => 
-          sub.sourcePath.startsWith(excludePath)
+          sub.sourcePath!.startsWith(excludePath)
         );
         
         if (isExcluded) {

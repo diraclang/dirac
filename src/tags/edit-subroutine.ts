@@ -124,6 +124,12 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
   const ast = parser.parse(editedContent);
   await integrate(session, ast);
   
+  // Mark the subroutine as modified (edited but not saved to disk)
+  const editedSub = session.subroutines.find(s => s.name === name);
+  if (editedSub) {
+    editedSub.modified = true;
+  }
+  
   emit(session, `Subroutine '${name}' updated in session (use save-subroutine to persist)\n`);
 }
 

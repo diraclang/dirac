@@ -65,6 +65,7 @@ export interface Subroutine {
   parameters?: ParameterMetadata[];
   meta?: Record<string, string>;
   sourcePath?: string;  // File path where subroutine was loaded from
+  modified?: boolean;  // True if edited in session but not saved to disk
 }
 
 /**
