@@ -11,6 +11,7 @@ export async function executeAssign(session: DiracSession, element: DiracElement
   const name = element.attributes.name;
   const valueAttr = element.attributes.value;
   const trimAttr = element.attributes.trim;
+  const typeAttr = element.attributes.type;  // Support type="cat" for concatenation
   
   if (!name) {
     throw new Error('<assign> requires name attribute');
@@ -38,6 +39,14 @@ export async function executeAssign(session: DiracSession, element: DiracElement
   // Trim if requested
   if (trimAttr === 'true' && typeof value === 'string') {
     value = value.trim();
+  }
+  
+  // Handle concatenation if type="cat"
+  if (typeAttr === 'cat') {
+    const existingValue = getVariable(session, name);
+    if (existingValue !== undefined) {
+      value = String(existingValue) + String(value);
+    }
   }
   
   // Find existing variable and update it

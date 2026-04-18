@@ -30,7 +30,10 @@
   description="Assign new value to existing variable"
   param-name="string:required:Variable name to update"
   param-value="string:optional:New value (or use children/text)"
+  param-type="string:optional:Assignment type|cat"
   param-trim="string:optional:Trim whitespace from value|true|false">
+  <!-- Use type="cat" to concatenate to existing value -->
+  <!-- Example: <assign name="str" type="cat">more text</assign> -->
 </subroutine>
 
 <subroutine name="variable"
