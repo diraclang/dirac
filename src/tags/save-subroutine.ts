@@ -63,6 +63,9 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
   if (file) {
     // Explicit file path (user override)
     filePath = resolve(process.cwd(), file);
+  } else if (subroutine.sourcePath && existsSync(dirname(subroutine.sourcePath))) {
+    // Use existing sourcePath if available (for edited subroutines)
+    filePath = subroutine.sourcePath;
   } else if (pathAttr) {
     // Path is a directory name under ~/.dirac/lib/
     const targetDir = join(homedir(), '.dirac', 'lib', pathAttr);

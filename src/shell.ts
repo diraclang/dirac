@@ -741,7 +741,13 @@ Examples:
             console.log('Variables:');
             for (const v of variables) {
               if (v.visible) {
-                console.log(`  ${v.name} = ${JSON.stringify(v.value)}`);
+                // Pretty-print JSON values for better readability
+                const formattedValue = typeof v.value === 'string' && 
+                  (v.value.startsWith('[') || v.value.startsWith('{'))
+                  ? JSON.stringify(JSON.parse(v.value), null, 2)
+                  : JSON.stringify(v.value);
+                console.log(`  ${v.name} =`);
+                console.log(formattedValue.split('\n').map(line => `    ${line}`).join('\n'));
               }
             }
           }

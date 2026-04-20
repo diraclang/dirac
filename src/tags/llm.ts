@@ -738,6 +738,11 @@ CRITICAL: When defining parameters:
             const outputAfter = session.output.slice();
             const executionOutput = outputAfter.slice(outputBefore.length).join('');
             
+            // Display execution output to user immediately
+            if (executionOutput) {
+              process.stdout.write(executionOutput);
+            }
+            
             if (session.debug) {
               console.error(`[LLM] Execution output (${executionOutput.length} chars):\n${executionOutput}\n`);
             }
