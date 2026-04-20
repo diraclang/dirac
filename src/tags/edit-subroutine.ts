@@ -122,6 +122,12 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
   // Preserve original sourcePath before re-importing
   const originalSourcePath = subroutine.sourcePath;
   
+  // Remove old subroutine entry to avoid duplicates
+  const oldIndex = session.subroutines.findIndex(s => s.name === name);
+  if (oldIndex !== -1) {
+    session.subroutines.splice(oldIndex, 1);
+  }
+  
   // Parse and execute the edited subroutine to re-register it
   const parser = new DiracParser();
   const ast = parser.parse(editedContent);
