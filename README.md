@@ -258,7 +258,7 @@ npm install -g dirac-lang
 
 ## PAUL: The Human-Friendly Dirac Dialect
 
-Dirac’s XML-based language is designed for robust machine execution and symbolic reasoning. For human authors, we introduce **PAUL** (Programming AI Utility Language)—a concise, bra/ket-inspired notation for writing Dirac programs quickly and intuitively.
+Dirac's XML-based language is designed for robust machine execution and symbolic reasoning. For human authors, we introduce **PAUL** (Pattern Action Utility Language)—a concise, bra/ket-inspired notation for writing Dirac programs quickly and intuitively.
 
 - PAUL uses bra/ket syntax and positional arguments for readability.
 - It is ideal for human editing, rapid prototyping, and LLM prompts.

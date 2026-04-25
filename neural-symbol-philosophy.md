@@ -15,6 +15,117 @@ This document explores the evolving relationship between symbolic computation (a
 - The “rectlinear” operation (angular brackets) is a bridge: it allows symbolic logic to be “softened” by neural similarity, and neural nets to be “sharpened” by symbolic structure.
 - As this generalizes, we can imagine multi-layer compositions, attention-like mechanisms, or even symbolic-neural hybrids where subroutine calls are weighted by neural activations.
 
+## Attention as Bra-Ket Operator: The Foundational Form
+
+Before diving into specific architectures, we establish that **transformer attention is fundamentally a bra-ket operator**—not metaphorically, but literally in its mathematical structure.
+
+### Standard Attention in Bra-Ket Form
+
+For a query token at position $j$:
+
+**Key vectors:** $|k_i\rangle = M_k |o_i\rangle$
+
+**Value vectors:** $|v_i\rangle = M_v |o_i\rangle$
+
+**Query vector:** $|q_j\rangle = M_q |o_j\rangle$
+
+where $|o_i\rangle$ are the original token embeddings, and $M_k, M_v, M_q$ are the key, value, and query projection matrices.
+
+The attention output for token $j$ is:
+$$
+\text{output}_j = \sum_i |v_i\rangle \langle k_i | q_j \rangle
+$$
+
+### Recognizing the Operator Structure
+
+The key insight: this is naturally an **operator acting on a query**:
+$$
+\text{output}_j = \left( \sum_i |v_i\rangle \langle k_i| \right) |q_j\rangle
+$$
+
+The term $\sum_i |v_i\rangle \langle k_i|$ is a **linear operator**—a sum of outer products. This operator:
+- Takes a query vector $|q_j\rangle$ as input
+- Projects it onto each key direction $\langle k_i|$
+- Returns a weighted sum of value vectors $|v_i\rangle$
+
+**This is the essence of attention:** a projection operator built from the context (all tokens), applied to each query.
+
+### Comparison to Symbolic Invocation
+
+In symbolic systems like DIRAC:
+- A function lookup is $\langle \text{def} | \text{call} \rangle$—checking if the call matches the definition
+- The result is $|\text{action}\rangle$ if the match succeeds
+
+In neural attention:
+- The operator $\sum_i |v_i\rangle \langle k_i|$ performs **all possible lookups simultaneously**
+- Each $\langle k_i | q_j \rangle$ is a "match score"
+- The output is a weighted combination of all $|v_i\rangle$ actions
+
+**Key difference:** Symbolic invocation is discrete (one match), neural attention is continuous (soft weighting over all matches). But the mathematical structure—bra-ket inner product determining action—is identical.
+
+### Compact Form: The Sandwich Operator
+
+We can further simplify the attention operator by factoring out the original token embeddings. Recall:
+- $|k_i\rangle = M_k |o_i\rangle$
+- $|v_i\rangle = M_v |o_i\rangle$
+- $|q_j\rangle = M_q |o_j\rangle$
+
+Substituting into the operator:
+$$
+\sum_i |v_i\rangle \langle k_i| = \sum_i (M_v |o_i\rangle) (\langle o_i| M_k^T)
+$$
+
+Factor out the matrices:
+$$
+= M_v \left( \sum_i |o_i\rangle \langle o_i| \right) M_k^T
+$$
+
+Define the **self-projection operator**:
+$$
+P = \sum_i |o_i\rangle \langle o_i|
+$$
+
+This operator projects onto the subspace spanned by all token embeddings. Then the attention operator becomes:
+$$
+\sum_i |v_i\rangle \langle k_i| = M_v \, P \, M_k^T
+$$
+
+And the full attention output for token $j$ is:
+$$
+\text{output}_j = M_v \, P \, M_k^T \, |q_j\rangle = M_v \, P \, M_k^T M_q |o_j\rangle
+$$
+
+**Defining the sandwich structure:** Let $M_1 = M_v$ and $M_2 = M_k^T M_q$, then:
+$$
+\text{output}_j = M_1 \, P \, M_2 \, |o_j\rangle
+$$
+
+Or in the compact notation you've used:
+$$
+\boxed{\text{output}_j = M_1 |o\rangle \langle o| M_2 |x\rangle}
+$$
+
+where $|x\rangle = |o_j\rangle$ is the input token, and $|o\rangle\langle o|$ represents the self-projection operator $P = \sum_i |o_i\rangle \langle o_i|$.
+
+### Interpretation of the Compact Form
+
+This **sandwich operator structure** $M_1 \, P \, M_2$ reveals several insights:
+
+1. **$M_2$ transforms the input:** The query transformation $M_q$ and key transformation $M_k$ are combined into $M_2 = M_k^T M_q$, which projects the input token into the "matching space."
+
+2. **$P$ performs context lookup:** The self-projection operator $\sum_i |o_i\rangle \langle o_i|$ acts as a "memory" or "database" of all tokens in the context. It answers: "What information is available in the context that matches this query?"
+
+3. **$M_1$ transforms the output:** The value transformation $M_v$ extracts the relevant features from the matched tokens.
+
+**Physical analogy:** Think of $M_2$ as asking a question (transforming input to query space), $P$ as looking up answers in a book (context tokens), and $M_1$ as interpreting the answer (extracting useful features).
+
+**Symbolic parallel:** In DIRAC, when you call a subroutine:
+- The call tags are matched against available definitions (like $M_2$ + $P$)
+- The matching definition's body is executed (like $M_1$)
+- The key difference: DIRAC does discrete selection, attention does soft weighted combination
+
+This is why **attention is a differentiable, continuous version of symbolic function dispatch**.
+
 ## Symbolic Tag-Check and Neural Network Equivalence
 
 Let’s formalize the connection between DIRAC’s symbolic tag-check and neural network math:
