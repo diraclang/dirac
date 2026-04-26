@@ -274,4 +274,37 @@ export class SubroutineRegistry {
       lastUpdated: new Date(this.index.lastUpdated),
     };
   }
+
+  /**
+   * Auto-index stdlib if index is empty (first run)
+   * Returns true if indexing was performed
+   */
+  async autoIndexStdlib(): Promise<boolean> {
+    // Skip if index already has subroutines
+    if (this.index.subroutines.length > 0) {
+      return false;
+    }
+
+    try {
+      // Try to find dirac-stdlib package
+      const { createRequire } = await import('module');
+      const require = createRequire(import.meta.url);
+      
+      const stdlibPackagePath = require.resolve('dirac-stdlib/package.json');
+      const stdlibLibPath = path.join(path.dirname(stdlibPackagePath), 'lib');
+      
+      if (fs.existsSync(stdlibLibPath)) {
+        console.log('First run detected. Indexing standard library...');
+        const count = await this.indexDirectory(stdlibLibPath);
+        console.log(`Indexed ${count} subroutines from dirac-stdlib`);
+        console.log('You can now use |load-context> to find and load subroutines!\n');
+        return true;
+      }
+    } catch (err) {
+      // dirac-stdlib not found or error - that's okay, just skip
+      // Silently fail - not a critical error
+    }
+    
+    return false;
+  }
 }

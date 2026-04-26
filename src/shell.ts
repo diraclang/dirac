@@ -1205,6 +1205,10 @@ Examples:
       console.log('or create ~/.dirac/config.yml with llmProvider and llmModel.\n');
     }
     
+    // Auto-index stdlib on first run
+    const { registry } = await import('./tags/subroutine-index.js');
+    await registry.autoIndexStdlib();
+    
     // Run init script if configured
     if (this.config.initScript) {
       await this.runInitScript(this.config.initScript);
