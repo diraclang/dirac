@@ -1200,7 +1200,9 @@ Examples:
     if (this.config.llmProvider) {
       console.log(`LLM: ${this.config.llmProvider} (${this.config.llmModel || 'default'})\n`);
     } else {
-      console.log('Warning: No LLM provider configured. Set LLM_PROVIDER environment variable.\n');
+      console.log('No LLM provider configured.');
+      console.log('Set ANTHROPIC_API_KEY or OPENAI_API_KEY environment variable,');
+      console.log('or create ~/.dirac/config.yml with llmProvider and llmModel.\n');
     }
     
     // Run init script if configured
@@ -1219,7 +1221,7 @@ Examples:
         : path.join(process.cwd(), scriptPath);
       
       if (!fs.existsSync(resolvedPath)) {
-        console.log(`Init script not found: ${scriptPath}\n`);
+        // Silently skip - init script is optional
         return;
       }
       
@@ -1279,25 +1281,62 @@ async function main() {
     debug: process.env.DEBUG === '1',
   };
 
-  const configPath = path.join(process.cwd(), 'config.yml');
-  if (fs.existsSync(configPath)) {
-    try {
-      const configData = yaml.load(fs.readFileSync(configPath, 'utf-8')) as any;
-      config = {
-        ...config,
-        llmProvider: configData.llmProvider || process.env.LLM_PROVIDER,
-        llmModel: configData.llmModel || process.env.LLM_MODEL,
-        customLLMUrl: configData.customLLMUrl || process.env.CUSTOM_LLM_URL,
-        initScript: configData.initScript,
-      };
-    } catch (err) {
-      console.error('Warning: Could not load config.yml');
+  // Try config files in priority order
+  const configPaths = [
+    path.join(process.cwd(), 'config.yml'),
+    path.join(process.env.HOME || '~', '.dirac', 'config.yml'),
+  ];
+
+  let configLoaded = false;
+  for (const configPath of configPaths) {
+    if (fs.existsSync(configPath)) {
+      try {
+        const configData = yaml.load(fs.readFileSync(configPath, 'utf-8')) as any;
+        
+        // Resolve initScript path relative to config file directory
+        let initScript = configData.initScript;
+        if (initScript) {
+          const configDir = path.dirname(configPath);
+          initScript = path.resolve(configDir, initScript);
+        }
+        
+        config = {
+          ...config,
+          llmProvider: configData.llmProvider || process.env.LLM_PROVIDER,
+          llmModel: configData.llmModel || process.env.LLM_MODEL,
+          customLLMUrl: configData.customLLMUrl || process.env.CUSTOM_LLM_URL,
+          initScript: initScript,
+        };
+        configLoaded = true;
+        break;
+      } catch (err) {
+        // Try next path
+      }
     }
-  } else {
-    // Use environment variables
+  }
+
+  // Fallback to environment variables
+  if (!configLoaded) {
     config.llmProvider = process.env.LLM_PROVIDER;
     config.llmModel = process.env.LLM_MODEL;
     config.customLLMUrl = process.env.CUSTOM_LLM_URL;
+    
+    // Auto-detect provider from API keys
+    if (!config.llmProvider) {
+      if (process.env.ANTHROPIC_API_KEY) {
+        config.llmProvider = 'anthropic';
+        config.llmModel = config.llmModel || 'claude-sonnet-4-20250514';
+      } else if (process.env.OPENAI_API_KEY) {
+        config.llmProvider = 'openai';
+        config.llmModel = config.llmModel || 'gpt-4o';
+      }
+    }
+    
+    // Try global init script
+    const globalInitScript = path.join(process.env.HOME || '~', '.dirac', 'shell-init.di');
+    if (fs.existsSync(globalInitScript)) {
+      config.initScript = globalInitScript;
+    }
   }
 
   const shell = new DiracShell(config);

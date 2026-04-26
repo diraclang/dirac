@@ -35,18 +35,60 @@ function loadShellConfig(args: string[] = []): any {
     }
   }
   
-  // Load from default config.yml if not specified
+  // Try loading config in order of priority:
+  // 1. Explicit --config path (already handled above)
+  // 2. ./config.yml (current directory)
+  // 3. ~/.dirac/config.yml (user home directory)
   if (!shellConfig.llmProvider) {
-    const defaultConfigPath = resolve(process.cwd(), 'config.yml');
-    if (fs.existsSync(defaultConfigPath)) {
-      try {
-        const configData = yaml.load(fs.readFileSync(defaultConfigPath, 'utf-8')) as any;
-        shellConfig.llmProvider = shellConfig.llmProvider || configData.llmProvider;
-        shellConfig.llmModel = shellConfig.llmModel || configData.llmModel;
-        shellConfig.customLLMUrl = shellConfig.customLLMUrl || configData.customLLMUrl;
-        shellConfig.initScript = shellConfig.initScript || configData.initScript;
-      } catch (err) {
-        // Ignore
+    const configPaths = [
+      resolve(process.cwd(), 'config.yml'),
+      resolve(process.env.HOME || '~', '.dirac', 'config.yml'),
+    ];
+    
+    for (const configPath of configPaths) {
+      if (fs.existsSync(configPath)) {
+        try {
+          const configData = yaml.load(fs.readFileSync(configPath, 'utf-8')) as any;
+          shellConfig.llmProvider = shellConfig.llmProvider || configData.llmProvider;
+          shellConfig.llmModel = shellConfig.llmModel || configData.llmModel;
+          shellConfig.customLLMUrl = shellConfig.customLLMUrl || configData.customLLMUrl;
+          
+          // Resolve initScript path relative to config file directory
+          if (configData.initScript && !shellConfig.initScript) {
+            const configDir = configPath.substring(0, configPath.lastIndexOf('/'));
+            shellConfig.initScript = resolve(configDir, configData.initScript);
+          }
+          
+          break; // Use first config file found
+        } catch (err) {
+          // Ignore and try next path
+        }
+      }
+    }
+  }
+  
+  // Fallback to environment variables if no config file found
+  if (!shellConfig.llmProvider) {
+    shellConfig.llmProvider = process.env.LLM_PROVIDER;
+    shellConfig.llmModel = process.env.LLM_MODEL;
+    shellConfig.customLLMUrl = process.env.CUSTOM_LLM_URL;
+    
+    // Auto-detect provider from API keys if not explicitly set
+    if (!shellConfig.llmProvider) {
+      if (process.env.ANTHROPIC_API_KEY) {
+        shellConfig.llmProvider = 'anthropic';
+        shellConfig.llmModel = shellConfig.llmModel || 'claude-sonnet-4-20250514';
+      } else if (process.env.OPENAI_API_KEY) {
+        shellConfig.llmProvider = 'openai';
+        shellConfig.llmModel = shellConfig.llmModel || 'gpt-4o';
+      }
+    }
+    
+    // Try global init script if not specified
+    if (!shellConfig.initScript) {
+      const globalInitScript = resolve(process.env.HOME || '~', '.dirac', 'shell-init.di');
+      if (fs.existsSync(globalInitScript)) {
+        shellConfig.initScript = globalInitScript;
       }
     }
   }
