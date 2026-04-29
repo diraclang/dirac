@@ -84,11 +84,17 @@ function loadShellConfig(args: string[] = []): any {
       }
     }
     
-    // Try global init script if not specified
+    // Try global init script if not specified, then fall back to packaged default
     if (!shellConfig.initScript) {
       const globalInitScript = resolve(process.env.HOME || '~', '.dirac', 'shell-init.di');
       if (fs.existsSync(globalInitScript)) {
         shellConfig.initScript = globalInitScript;
+      } else {
+        // Use packaged default from lib/shell-init.di
+        const packagedInitScript = new URL('../lib/shell-init.di', import.meta.url).pathname;
+        if (fs.existsSync(packagedInitScript)) {
+          shellConfig.initScript = packagedInitScript;
+        }
       }
     }
   }

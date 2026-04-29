@@ -13,7 +13,8 @@
     ".": "./dist/index.js"
   },
   "files": [
-    "dist/"
+    "dist/",
+    "lib/"
   ],
   "scripts": {
     "dev": "tsx src/cli.ts",

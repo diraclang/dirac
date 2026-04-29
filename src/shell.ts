@@ -1207,7 +1207,10 @@ Examples:
     
     // Auto-index stdlib on first run
     const { registry } = await import('./tags/subroutine-index.js');
-    await registry.autoIndexStdlib();
+    const wasIndexed = await registry.autoIndexStdlib();
+    
+    // Load essential stdlib subroutines if available
+    await this.loadEssentialSubroutines();
     
     // Run init script if configured
     if (this.config.initScript) {
@@ -1215,6 +1218,58 @@ Examples:
     }
     
     this.rl.prompt();
+  }
+
+  /**
+   * Load essential stdlib subroutines into the session
+   * This ensures basic helpers are available even without an init script
+   */
+  private async loadEssentialSubroutines(): Promise<void> {
+    try {
+      // Try to find and load ai.di from stdlib
+      const { createRequire } = await import('module');
+      const require = createRequire(import.meta.url);
+      
+      const stdlibPackagePath = require.resolve('dirac-stdlib/package.json');
+      const stdlibLibPath = path.join(path.dirname(stdlibPackagePath), 'lib');
+      
+      // List of essential files to load
+      const essentialFiles = [
+        'ai.di',      // AI helper subroutines
+        'index.di',   // Core utilities
+      ];
+      
+      let loadedCount = 0;
+      for (const file of essentialFiles) {
+        const filePath = path.join(stdlibLibPath, file);
+        if (fs.existsSync(filePath)) {
+          try {
+            const content = fs.readFileSync(filePath, 'utf-8');
+            const parser = new BraKetParser();
+            const xml = parser.parse(content);
+            const ast = this.xmlParser.parse(xml);
+            
+            // Import into session
+            await integrate(this.session, ast);
+            loadedCount++;
+          } catch (err) {
+            // Silently skip files that fail to load
+            if (this.config.debug) {
+              console.error(`Failed to load ${file}:`, err);
+            }
+          }
+        }
+      }
+      
+      if (loadedCount > 0 && this.config.debug) {
+        console.log(`Loaded ${loadedCount} essential stdlib file(s)\n`);
+      }
+    } catch (err) {
+      // Silently fail if stdlib not found - not critical
+      if (this.config.debug) {
+        console.error('Could not load essential subroutines:', err);
+      }
+    }
   }
 
   private async runInitScript(scriptPath: string): Promise<void> {

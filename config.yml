@@ -11,7 +11,7 @@ libraryPaths:
 #customLLMUrl: http://localhost:5002
 
 # Shell init script (runs on 'dirac shell' startup)
-initScript: shell-init.di
+initScript: lib/shell-init.di
 
 # Embedding server configuration (for tag-check similarity matching)
 embeddingServer:
