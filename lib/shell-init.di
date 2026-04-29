@@ -4,10 +4,10 @@
 # Auto-index user's saved subroutines for search functionality
 <index-subroutines path="~/.dirac/lib/user" />
 
-# Uncomment to load native tags for tab completion:
-|import src="dirac/lib/native-tags.di" >
+# Load native tags for tab completion and AI helper subroutines
+|import src="native-tags.di" >
 
-|import src="dirac/lib/ai.di" >
+|import src="ai.di" >
 
 # Define some useful helper subroutines
 #<hello |

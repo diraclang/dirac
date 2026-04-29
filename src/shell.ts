@@ -1284,7 +1284,7 @@ Examples:
         return;
       }
       
-      console.log(`Loading init script: ${scriptPath}`);
+      console.log(`Loading init script: ${resolvedPath}`);
       const scriptContent = fs.readFileSync(resolvedPath, 'utf-8');
       
       // If connected to agent, execute there; otherwise local
@@ -1295,7 +1295,15 @@ Examples:
         // Parse and execute locally
         const xml = this.braketParser.parse(scriptContent);
         const ast = this.xmlParser.parse(xml);
+        
+        // Set currentFile so imports resolve relative to init script location
+        const oldCurrentFile = this.session.currentFile;
+        this.session.currentFile = resolvedPath;
+        
         await integrate(this.session, ast);
+        
+        // Restore original currentFile
+        this.session.currentFile = oldCurrentFile;
       }
       
       console.log(`Init script loaded.\n`);
