@@ -5,9 +5,9 @@
 <index-subroutines path="~/.dirac/lib/user" />
 
 # Load native tags for tab completion and AI helper subroutines
-|import src="native-tags.di" >
+|import src="./native-tags.di" >
 
-|import src="ai.di" >
+|import src="./ai.di" >
 
 # Define some useful helper subroutines
 #<hello |
