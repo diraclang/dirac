@@ -1,6 +1,6 @@
 # Dirac server configuration
 llmProvider: anthropic 
-llmModel: claude-sonnet-4-20250514
+llmModel: claude-sonnet-4-5-20250929 
 
 # Library search paths for import/extend tags
 libraryPaths:
