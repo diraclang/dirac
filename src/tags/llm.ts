@@ -280,7 +280,7 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
       ? 'llama2'
       : isCustom
         ? 'custom-model'
-        : 'claude-sonnet-4-20250514';
+        : 'claude-sonnet-4-5-20250929';
 
 
   const model = element.attributes.model || process.env.DEFAULT_MODEL || defaultModel;

@@ -69,15 +69,21 @@ function loadShellConfig(args: string[] = []): any {
   
   // Fallback to environment variables if no config file found
   if (!shellConfig.llmProvider) {
-    shellConfig.llmProvider = process.env.LLM_PROVIDER;
-    shellConfig.llmModel = process.env.LLM_MODEL;
-    shellConfig.customLLMUrl = process.env.CUSTOM_LLM_URL;
+    if (process.env.LLM_PROVIDER) {
+      shellConfig.llmProvider = process.env.LLM_PROVIDER;
+    }
+    if (process.env.LLM_MODEL) {
+      shellConfig.llmModel = process.env.LLM_MODEL;
+    }
+    if (process.env.CUSTOM_LLM_URL) {
+      shellConfig.customLLMUrl = process.env.CUSTOM_LLM_URL;
+    }
     
     // Auto-detect provider from API keys if not explicitly set
     if (!shellConfig.llmProvider) {
       if (process.env.ANTHROPIC_API_KEY) {
         shellConfig.llmProvider = 'anthropic';
-        shellConfig.llmModel = shellConfig.llmModel || 'claude-sonnet-4-20250514';
+        shellConfig.llmModel = shellConfig.llmModel || 'claude-sonnet-4-5-20250929';
       } else if (process.env.OPENAI_API_KEY) {
         shellConfig.llmProvider = 'openai';
         shellConfig.llmModel = shellConfig.llmModel || 'gpt-4o';

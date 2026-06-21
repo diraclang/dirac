@@ -1384,15 +1384,21 @@ async function main() {
 
   // Fallback to environment variables
   if (!configLoaded) {
-    config.llmProvider = process.env.LLM_PROVIDER;
-    config.llmModel = process.env.LLM_MODEL;
-    config.customLLMUrl = process.env.CUSTOM_LLM_URL;
+    if (process.env.LLM_PROVIDER) {
+      config.llmProvider = process.env.LLM_PROVIDER;
+    }
+    if (process.env.LLM_MODEL) {
+      config.llmModel = process.env.LLM_MODEL;
+    }
+    if (process.env.CUSTOM_LLM_URL) {
+      config.customLLMUrl = process.env.CUSTOM_LLM_URL;
+    }
     
     // Auto-detect provider from API keys
     if (!config.llmProvider) {
       if (process.env.ANTHROPIC_API_KEY) {
         config.llmProvider = 'anthropic';
-        config.llmModel = config.llmModel || 'claude-sonnet-4-20250514';
+        config.llmModel = config.llmModel || 'claude-sonnet-4-5-20250929';
       } else if (process.env.OPENAI_API_KEY) {
         config.llmProvider = 'openai';
         config.llmModel = config.llmModel || 'gpt-4o';
