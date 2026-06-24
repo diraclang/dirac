@@ -1126,8 +1126,23 @@ Examples:
   }
 
   /**
+   * Check if command likely represents natural language based on first word
+   */
+  private isLikelyNaturalLanguage(command: string): boolean {
+    const trimmed = command.trim().toLowerCase();
+    
+    // Question mark at end is a strong signal
+    if (trimmed.endsWith('?')) return true;
+    
+    // Question words and polite words that suggest natural language
+    const nlStarters = /^(what|why|how|where|when|which|who|can|could|would|should|please|may|might|do|does|did|is|are|was|were|will|shall)\s/i;
+    return nlStarters.test(trimmed);
+  }
+
+  /**
    * Execute a Unix shell command
    * If command is not found, fallback to treating it as an AI query
+   * Also fallback if command fails and looks like natural language
    */
   private async executeShellCommand(command: string): Promise<void> {
     const trimmed = command.trim();
