@@ -742,10 +742,23 @@ Examples:
             for (const v of variables) {
               if (v.visible) {
                 // Pretty-print JSON values for better readability
-                const formattedValue = typeof v.value === 'string' && 
-                  (v.value.startsWith('[') || v.value.startsWith('{'))
-                  ? JSON.stringify(JSON.parse(v.value), null, 2)
-                  : JSON.stringify(v.value);
+                let formattedValue;
+                if (typeof v.value === 'object' && v.value !== null) {
+                  // Value is already an object/array, format it directly
+                  formattedValue = JSON.stringify(v.value, null, 2);
+                } else if (typeof v.value === 'string' && 
+                  (v.value.startsWith('[') || v.value.startsWith('{'))) {
+                  // Value is a JSON string, parse and format it
+                  try {
+                    formattedValue = JSON.stringify(JSON.parse(v.value), null, 2);
+                  } catch {
+                    // If parsing fails, just use the string as-is
+                    formattedValue = JSON.stringify(v.value);
+                  }
+                } else {
+                  // Simple value, just stringify it
+                  formattedValue = JSON.stringify(v.value);
+                }
                 console.log(`  ${v.name} =`);
                 console.log(formattedValue.split('\n').map(line => `    ${line}`).join('\n'));
               }
@@ -1167,9 +1180,13 @@ Examples:
         // Also check stderr for "command not found" message
         const commandNotFound = code === 127 || stderrData.includes('command not found');
         
-        if (commandNotFound) {
+        // Check if this looks like natural language and command failed
+        const likelyNaturalLanguage = code !== 0 && this.isLikelyNaturalLanguage(trimmed);
+        
+        if (commandNotFound || likelyNaturalLanguage) {
           // Notify user about fallback
-          console.log(`💡 Command not found, trying as AI query...`);
+          const reason = commandNotFound ? 'Command not found' : 'Command failed, looks like natural language';
+          console.log(`💡 ${reason}, trying as AI query...`);
           
           // Fallback to AI query
           if (this.config.debug) {
