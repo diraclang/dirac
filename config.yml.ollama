@@ -3,12 +3,15 @@ llmProvider: ollama
 llmModel: llama2 
 # Add other config options as needed
 
+libraryPaths:
+  - /Users/zhiwang/diraclang
+
 # Custom LLM server URL (when llmProvider is 'custom')
 #llmProvider: custom
 #customLLMUrl: http://localhost:5001
 
 # Shell init script (runs on 'dirac shell' startup)
-initScript: shell-init.di
+initScript: lib/shell-init.di
 
 # Embedding server configuration (for tag-check similarity matching)
 embeddingServer:

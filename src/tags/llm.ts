@@ -404,18 +404,31 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
     // Otherwise, send full system prompt with Dirac introduction
     if (hasExistingDialog && (contextVar || saveDialog)) {
       // Continuing a conversation - add updated subroutines as system message
-      systemPrompt = 'Updated available Dirac XML tags:';
-      for (const sub of subroutines) {
-        systemPrompt += `\n- ${sub.name} : ${sub.description || ''}`;
-        systemPrompt += `\n\tEx: <${sub.name}`;
-        if (sub.parameters && sub.parameters.length > 0) {
-          for (const p of sub.parameters) {
-            systemPrompt += ` ${p.name}="${(p as any).example || 'string'}"`;
+      // Use simple prompt for custom provider (fine-tuned), detailed for others
+      if (isCustom) {
+        // Simple prompt for fine-tuned custom model
+        systemPrompt = 'Available tags:';
+        for (const sub of subroutines) {
+          systemPrompt += `\n- ${sub.name}`;
+          if (sub.description) {
+            systemPrompt += `: ${sub.description}`;
           }
         }
-        let example = (sub as any).meta?.body?.example || '';
-        example = example.replace(/&quot;/g, '"').replace(/&#58;/g, ':'); 
-        systemPrompt += '>'+example+'</' + sub.name + '>';
+      } else {
+        // Detailed prompt for public models
+        systemPrompt = 'Updated available Dirac XML tags:';
+        for (const sub of subroutines) {
+          systemPrompt += `\n- ${sub.name} : ${sub.description || ''}`;
+          systemPrompt += `\n\tEx: <${sub.name}`;
+          if (sub.parameters && sub.parameters.length > 0) {
+            for (const p of sub.parameters) {
+              systemPrompt += ` ${p.name}="${(p as any).example || 'string'}"`;
+            }
+          }
+          let example = (sub as any).meta?.body?.example || '';
+          example = example.replace(/&quot;/g, '"').replace(/&#58;/g, ':'); 
+          systemPrompt += '>'+example+'</' + sub.name + '>';
+        }
       }
       
       // Add as separate system message before the user's new message
@@ -429,7 +442,29 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
       }
     } else {
       // First call - send full system prompt
-      systemPrompt = `Dirac is a XML-based language. To define a subroutine with parameters:
+      // Use simple prompt for custom provider (fine-tuned), detailed for others
+      if (isCustom) {
+        // Simple prompt for fine-tuned custom model
+        systemPrompt = `Dirac is an XML-based language for defining and calling subroutines.
+
+Example:
+\`\`\`xml
+<subroutine name="greet" param-name="string">
+  <output>Hello, <variable name="name"/>!</output>
+</subroutine>
+<greet name="Alice" />
+\`\`\`
+
+Available tags:`;
+        for (const sub of subroutines) {
+          systemPrompt += `\n- ${sub.name}`;
+          if (sub.description) {
+            systemPrompt += `: ${sub.description}`;
+          }
+        }
+      } else {
+        // Detailed prompt for public models
+        systemPrompt = `Dirac is a XML-based language. To define a subroutine with parameters:
 
 \`\`\`xml
 <subroutine name="greet" param-name="string">
@@ -451,26 +486,27 @@ CRITICAL: When defining parameters:
 - Inside the subroutine, access with: <variable name="username"/>
 - When calling: <mytag username="John" /> (use parameter name directly)
 `;
-      systemPrompt += 'Now, You are an expert Dirac XML code generator.\nAllowed Dirac XML tags (use ONLY these tags):';
-      for (const sub of subroutines) {
-        systemPrompt += `\n- ${sub.name} : ${sub.description || ''}`;
-        systemPrompt += `\n\tEx: <${sub.name}`;
-        if (sub.parameters && sub.parameters.length > 0) {
-          for (const p of sub.parameters) {
-            systemPrompt += ` ${p.name}="${(p as any).example || 'string'}"`;
+        systemPrompt += 'Now, You are an expert Dirac XML code generator.\nAllowed Dirac XML tags (use ONLY these tags):';
+        for (const sub of subroutines) {
+          systemPrompt += `\n- ${sub.name} : ${sub.description || ''}`;
+          systemPrompt += `\n\tEx: <${sub.name}`;
+          if (sub.parameters && sub.parameters.length > 0) {
+            for (const p of sub.parameters) {
+              systemPrompt += ` ${p.name}="${(p as any).example || 'string'}"`;
+            }
           }
+          let example = (sub as any).meta?.body?.example || '';
+          example = example.replace(/&quot;/g, '"').replace(/&#58;/g, ':'); 
+          systemPrompt += '>'+example+'</' + sub.name + '>';
         }
-        let example = (sub as any).meta?.body?.example || '';
-        example = example.replace(/&quot;/g, '"').replace(/&#58;/g, ':'); 
-        systemPrompt += '>'+example+'</' + sub.name + '>';
+        systemPrompt += '\n\nIMPORTANT INSTRUCTIONS:';
+        systemPrompt += '\n1. Output ONLY valid XML tags from the list above';
+        systemPrompt += '\n2. Do NOT include any explanations, descriptions, or extra text';
+        systemPrompt += '\n3. Do NOT use bullet points or formatting - just pure XML';
+        systemPrompt += '\n4. Do NOT invent tags - only use tags from the list above';
+        systemPrompt += '\n5. Start your response directly with the XML tag (e.g., <add ...>)';
+        systemPrompt += '\n\nDouble-check: Does your response contain ONLY XML tags? If not, remove all non-XML text.';
       }
-      systemPrompt += '\n\nIMPORTANT INSTRUCTIONS:';
-      systemPrompt += '\n1. Output ONLY valid XML tags from the list above';
-      systemPrompt += '\n2. Do NOT include any explanations, descriptions, or extra text';
-      systemPrompt += '\n3. Do NOT use bullet points or formatting - just pure XML';
-      systemPrompt += '\n4. Do NOT invent tags - only use tags from the list above';
-      systemPrompt += '\n5. Start your response directly with the XML tag (e.g., <add ...>)';
-      systemPrompt += '\n\nDouble-check: Does your response contain ONLY XML tags? If not, remove all non-XML text.';
       
       // For first call, add system prompt as separate system message
       if (dialogHistory.length === 0) {
