@@ -701,6 +701,7 @@ Commands:
   :scheduled      List all scheduled runs (run-at)
   :cancel <name>  Cancel a scheduled run
   :cancelall      Cancel all scheduled runs
+  :save-training  Save LLM dialog as training data (opens in editor)
   :exit           Exit shell
 
 Syntax:
@@ -1080,6 +1081,101 @@ Examples:
           console.log('All scheduled runs cancelled.');
         } catch (error) {
           console.error('Error cancelling runs:', error instanceof Error ? error.message : String(error));
+        }
+        break;
+
+      case 'save-training':
+        try {
+          const dialogVar = this.client 
+            ? (await this.client.getState()).variables.find((v: any) => v.name === '__llm_dialog__')
+            : this.session.variables.find((v: any) => v.name === '__llm_dialog__');
+          
+          if (!dialogVar || !dialogVar.value) {
+            console.log('No LLM dialog to save');
+            break;
+          }
+          
+          // Parse the dialog (it's stored as JSON string)
+          const dialog = typeof dialogVar.value === 'string' 
+            ? JSON.parse(dialogVar.value)
+            : dialogVar.value;
+          
+          if (!Array.isArray(dialog) || dialog.length === 0) {
+            console.log('Dialog is empty');
+            break;
+          }
+          
+          // Wrap in messages format
+          const trainingExample = { messages: dialog };
+          
+          // Create temp file
+          const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0] + '-' + Date.now();
+          const tempFile = path.join(os.tmpdir(), `dirac-training-${timestamp}.jsonl`);
+          
+          // Write formatted JSON to temp file
+          fs.writeFileSync(tempFile, JSON.stringify(trainingExample, null, 2), 'utf-8');
+          
+          console.log('Opening in editor...');
+          
+          // Open in editor
+          const editor = process.env.EDITOR || process.env.VISUAL || 'vi';
+          const { spawnSync } = await import('child_process');
+          const result = spawnSync(editor, [tempFile], {
+            stdio: 'inherit',
+            shell: true,
+          });
+          
+          if (result.error) {
+            fs.unlinkSync(tempFile);
+            console.error(`Failed to open editor: ${result.error.message}`);
+            break;
+          }
+          
+          if (result.status !== 0) {
+            fs.unlinkSync(tempFile);
+            console.error(`Editor exited with code ${result.status}`);
+            break;
+          }
+          
+          // Ask where to save
+          const answer = await new Promise<string>((resolve) => {
+            this.rl.question('Save to file (or press Enter to cancel): ', resolve);
+          });
+          
+          if (!answer.trim()) {
+            fs.unlinkSync(tempFile);
+            console.log('Cancelled');
+            break;
+          }
+          
+          // Determine save path
+          let savePath: string;
+          if (answer.startsWith('/') || answer.startsWith('~')) {
+            // Absolute path
+            savePath = answer.replace(/^~/, os.homedir());
+          } else if (answer.includes('/')) {
+            // Relative path
+            savePath = path.resolve(answer);
+          } else {
+            // Just filename - save to ~/.dirac/training/
+            const trainingDir = path.join(os.homedir(), '.dirac', 'training');
+            fs.mkdirSync(trainingDir, { recursive: true });
+            savePath = path.join(trainingDir, answer.endsWith('.jsonl') ? answer : `${answer}.jsonl`);
+          }
+          
+          // Read edited content and minify (single line for .jsonl)
+          const editedContent = fs.readFileSync(tempFile, 'utf-8');
+          const editedData = JSON.parse(editedContent);
+          
+          // Append as single line
+          fs.appendFileSync(savePath, JSON.stringify(editedData) + '\n');
+          
+          // Clean up
+          fs.unlinkSync(tempFile);
+          
+          console.log(`✓ Saved training example to ${savePath}`);
+        } catch (error) {
+          console.error('Error saving training data:', error instanceof Error ? error.message : String(error));
         }
         break;
 
