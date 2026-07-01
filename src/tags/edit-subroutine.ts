@@ -5,6 +5,8 @@
  *   <edit-subroutine name="my-sub" />
  *   <edit-subroutine name="my-sub" editor="vi" />
  *   <edit-subroutine name="my-sub" editor="code" />
+ *   <edit-subroutine name="my-sub" format="xml" />      (default: braket)
+ *   <edit-subroutine name="my-sub" format="braket" />
  * 
  * This extracts a subroutine, saves to temp file, opens in editor,
  * then re-imports the edited version.
@@ -12,6 +14,7 @@
  * Attributes:
  *   - name: subroutine name (required)
  *   - editor: editor command (default: $EDITOR or vi)
+ *   - format: "braket" or "xml" (default: "braket")
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
@@ -22,10 +25,12 @@ import { join } from 'path';
 import { spawnSync } from 'child_process';
 import { integrate } from '../runtime/interpreter.js';
 import { DiracParser } from '../runtime/parser.js';
+import { BraKetParser } from '../runtime/braket-parser.js';
 
 export async function executeEditSubroutine(session: DiracSession, element: DiracElement): Promise<void> {
   const name = element.attributes.name;
   const editor = element.attributes.editor || process.env.EDITOR || process.env.VISUAL || 'vi';
+  const format = element.attributes.format || 'braket'; // Default to braket format
   
   if (!name) {
     throw new Error('<edit-subroutine> requires name attribute');
@@ -84,9 +89,23 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
     }
   }
   
+  // Convert to requested format
+  let content: string;
+  if (format === 'braket') {
+    content = serializeSubroutineToBraKet(subroutine);
+    if (session.debug) {
+      console.error(`[edit-subroutine] Using bra-ket format`);
+    }
+  } else {
+    content = xml;
+    if (session.debug) {
+      console.error(`[edit-subroutine] Using XML format`);
+    }
+  }
+  
   // Always use temp file for editing (don't modify source files directly)
   const tempFile = join(tmpdir(), `dirac-edit-${name}-${Date.now()}.di`);
-  writeFileSync(tempFile, xml, 'utf-8');
+  writeFileSync(tempFile, content, 'utf-8');
   
   if (session.debug) {
     console.error(`[edit-subroutine] Wrote '${name}' to temp file: ${tempFile}`);
@@ -129,8 +148,17 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
   }
   
   // Parse and execute the edited subroutine to re-register it
+  // If format was braket, convert back to XML first
+  let xmlContent: string;
+  if (format === 'braket') {
+    const braketParser = new BraKetParser();
+    xmlContent = braketParser.parse(editedContent);
+  } else {
+    xmlContent = editedContent;
+  }
+  
   const parser = new DiracParser();
-  const ast = parser.parse(editedContent);
+  const ast = parser.parse(xmlContent);
   await integrate(session, ast);
   
   // Mark the subroutine as modified and restore original sourcePath
@@ -141,6 +169,118 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
   }
   
   emit(session, `Subroutine '${name}' updated in session (use save-subroutine to persist)\n`);
+}
+
+/**
+ * Serialize a subroutine to bra-ket format
+ */
+function serializeSubroutineToBraKet(sub: any): string {
+  const lines: string[] = [];
+  
+  // Add comment header
+  lines.push(`# Editing subroutine: ${sub.name}`);
+  lines.push('');
+  
+  // Serialize the element in bra-ket notation
+  serializeElementToBraKet(sub.element, lines, 0);
+  
+  return lines.join('\n');
+}
+
+function serializeElementToBraKet(el: any, lines: string[], indent: number): void {
+  const indentStr = '  '.repeat(indent);
+  
+  // Handle text nodes
+  if (!el.tag || el.tag === '') {
+    if (el.text) {
+      // Don't add text nodes as separate lines - they'll be handled inline
+      // Just return and let parent handle them
+    }
+    return;
+  }
+  
+  // Special handling for subroutine (use bra notation)
+  if (el.tag === 'subroutine') {
+    const name = el.attributes?.name || 'unnamed';
+    let braLine = `${indentStr}<${name}`;
+    
+    // Add parameter attributes as direct attributes (not param-)
+    // Convert param-xxx to just xxx
+    // Parameters go BEFORE the | in bra notation
+    if (el.attributes) {
+      for (const [key, value] of Object.entries(el.attributes)) {
+        if (key !== 'name' && typeof value === 'string') {
+          // Remove 'param-' prefix if present
+          const attrName = key.startsWith('param-') ? key.substring(6) : key;
+          braLine += ` ${attrName}=${value}`;
+        }
+      }
+    }
+    
+    braLine += '|';
+    lines.push(braLine);
+    
+    // Process children
+    if (el.children && el.children.length > 0) {
+      for (const child of el.children) {
+        serializeElementToBraKet(child, lines, indent + 1);
+      }
+    }
+    
+    return;
+  }
+  
+  // Ket notation for all other tags
+  let ketLine = `${indentStr}|${el.tag}`;
+  
+  // Add attributes
+  if (el.attributes) {
+    for (const [key, value] of Object.entries(el.attributes)) {
+      if (typeof value === 'string') {
+        // Quote value if it contains spaces
+        const needsQuotes = value.includes(' ') || value.includes('=');
+        ketLine += ` ${key}=${needsQuotes ? '"' + value + '"' : value}`;
+      }
+    }
+  }
+  
+  ketLine += '>';
+  
+  // Check if tag has children - need to detect mixed content (text + elements)
+  if (el.children && el.children.length > 0) {
+    // Check if content is inline (all text or simple inline elements)
+    const hasComplexChildren = el.children.some((c: any) => 
+      c.tag && c.tag !== 'variable' && (c.children?.length > 0 || c.tag === 'subroutine')
+    );
+    
+    if (!hasComplexChildren) {
+      // Inline content - build it as a single line
+      let inlineContent = '';
+      for (const child of el.children) {
+        if (!child.tag || child.tag === '') {
+          // Text node
+          inlineContent += child.text || '';
+        } else if (child.tag === 'variable') {
+          // Inline variable
+          const varName = child.attributes?.name || '';
+          inlineContent += `|variable name=${varName}>`;
+        } else {
+          // Other simple inline tag
+          inlineContent += `|${child.tag}>`;
+        }
+      }
+      lines.push(ketLine + inlineContent);
+    } else {
+      // Has complex children - multiline
+      lines.push(ketLine);
+      for (const child of el.children) {
+        serializeElementToBraKet(child, lines, indent + 1);
+      }
+    }
+  } else {
+    // Self-closing (no children)
+    lines.push(ketLine);
+  }
 }
 
 /**

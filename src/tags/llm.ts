@@ -607,30 +607,6 @@ CRITICAL: When defining parameters:
         }
       }
 
-      // Helper: Check if response contains executable Dirac code
-      const containsDiracCode = (response: string): boolean => {
-        const trimmed = response.trim();
-        
-        // For custom provider: must have <dirac> wrapper
-        if (isCustom) {
-          return trimmed.includes('<dirac>') || trimmed.includes('<dirac ');
-        }
-        
-        // For public providers: check if it looks like XML/Dirac code
-        // Look for any XML tag pattern
-        return /<[a-zA-Z_][\w-]*(\s|>|\/)/m.test(trimmed);
-      };
-      
-      // Check if response contains code before entering execution loop
-      if (!containsDiracCode(result)) {
-        if (session.debug) {
-          console.error('[LLM] Response does not contain Dirac code, skipping execution');
-        }
-        // Just emit the plain text response
-        emit(session, result);
-        return;
-      }
-
       // Feedback loop: execute, capture output, send back to LLM, repeat
       let iteration = 0;
       

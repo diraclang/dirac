@@ -1,7 +1,8 @@
 <!-- Exported subroutine -->
 
 <subroutine name="ai"
-            description="AI assistant with context loading (internal wrapper - use llm tag directly instead)">
+            description="AI assistant with context loading (internal wrapper - use llm tag directly instead)"
+            visible="subroutine" >
   
   
   
