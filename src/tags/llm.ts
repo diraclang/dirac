@@ -616,6 +616,9 @@ CRITICAL: When defining parameters:
           console.error(`[LLM] Feedback iteration ${iteration}/${maxIterations}`);
         }
         
+        // Track corrections for feedback
+        let correctionMessages: string[] = [];
+        
         // Only replace triple backtick code blocks if replace-tick="true" is set
         let diracCode = result.trim();
         if (replaceTick && diracCode.startsWith('```')) {
@@ -725,8 +728,22 @@ CRITICAL: When defining parameters:
             // Apply auto-corrections if enabled
             if (autocorrect) {
               dynamicAST = applyCorrectedTags(dynamicAST, validation.results);
+              
+              // Collect all correction/warning messages
+              for (const result of validation.results) {
+                if (result.corrected) {
+                  correctionMessages.push(`Auto-corrected: <${result.originalTag}> → <${result.tagName}> (similarity: ${result.similarity?.toFixed(2)})`);
+                }
+                if (result.warnings.length > 0) {
+                  correctionMessages.push(...result.warnings);
+                }
+              }
+              
               if (session.debug) {
                 console.error('[LLM] Applied auto-corrections to tags');
+                if (correctionMessages.length > 0) {
+                  console.error('[LLM] Corrections:', correctionMessages.join('; '));
+                }
               }
             }
           }
@@ -783,8 +800,12 @@ CRITICAL: When defining parameters:
               console.error(`[LLM] Execution output (${executionOutput.length} chars):\n${executionOutput}\n`);
             }
             
-            // Build feedback prompt
-            const feedbackPrompt = `The code executed successfully. Here is the output:\n\`\`\`\n${executionOutput}\n\`\`\`\n\nPlease review the output carefully. If the output is correct and complete, respond with ONLY the tag "<DONE />" and nothing else. If the output is incorrect or incomplete, generate corrected Dirac XML code.`;
+            // Build feedback prompt with corrections (if any)
+            let feedbackPrompt = '';
+            if (correctionMessages.length > 0) {
+              feedbackPrompt = `Note: The following auto-corrections were applied:\n${correctionMessages.join('\n')}\n\n`;
+            }
+            feedbackPrompt += `The code executed successfully. Here is the output:\n\`\`\`\n${executionOutput}\n\`\`\`\n\nPlease review the output carefully. If the output is correct and complete, respond with ONLY the tag "<DONE />" and nothing else. If the output is incorrect or incomplete, generate corrected Dirac XML code.`;
             
             if (session.debug) {
               console.error(`[LLM] Feedback prompt:\n${feedbackPrompt}\n`);
