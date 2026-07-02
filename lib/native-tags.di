@@ -18,6 +18,7 @@
      ============================================================ -->
 
 <subroutine name="defvar"
+  meta-hide-from-llm="true"
   description="Define a new variable with optional visibility"
   param-name="string:required:Variable name"
   param-value="string:optional:Initial value (or use children/text)"
@@ -27,6 +28,7 @@
 </subroutine>
 
 <subroutine name="assign"
+  meta-hide-from-llm="true"
   description="Assign new value to existing variable"
   param-name="string:required:Variable name to update"
   param-value="string:optional:New value (or use children/text)"
@@ -37,12 +39,14 @@
 </subroutine>
 
 <subroutine name="variable"
+  meta-hide-from-llm="true"
   description="Retrieve and output variable value"
   param-name="string:required:Variable name to retrieve">
   <!-- Use $varname in attributes or ${varname} in text for substitution -->
 </subroutine>
 
 <subroutine name="environment"
+  meta-hide-from-llm="true"
   description="Read environment variable value"
   param-name="string:required:Environment variable name">
 </subroutine>
@@ -52,12 +56,14 @@
      ============================================================ -->
 
 <subroutine name="output"
+  meta-hide-from-llm="true"
   description="Emit content to stdout or file"
   param-file="string:optional:File path for writing output">
   <!-- Children are executed and output captured -->
 </subroutine>
 
 <subroutine name="input"
+  meta-hide-from-llm="true"
   description="Read from stdin or file"
   param-source="string:required:Input source|stdin|file"
   param-mode="string:optional:Reading mode (default: all)|all|line"
@@ -70,6 +76,7 @@
      ============================================================ -->
 
 <subroutine name="if"
+  meta-hide-from-llm="true"
   description="Conditional execution with cond/then/else children"
   visible="subroutine">
   <!--   <if> -->
@@ -81,6 +88,7 @@
 </subroutine>
 
 <subroutine name="test-if"
+  meta-hide-from-llm="true"
   description="Attribute-based conditional execution"
   param-test="string:required:Value or expression to test"
   param-eq="string:optional:Compare equal to value"
@@ -93,6 +101,7 @@
 </subroutine>
 
 <subroutine name="loop"
+  meta-hide-from-llm="true"
   description="Iterate fixed number of times"
   param-count="string:required:Number of iterations (supports variable substitution)"
   param-var="string:optional:Loop counter variable name (default: i)">
@@ -101,6 +110,7 @@
 </subroutine>
 
 <subroutine name="foreach"
+  meta-hide-from-llm="true"
   description="Iterate over XML elements"
   param-from="string:required:XML content or variable (starts with $ or &lt;)"
   param-as="string:optional:Iterator variable name (default: item)"
@@ -108,6 +118,7 @@
 </subroutine>
 
 <subroutine name="break"
+  meta-hide-from-llm="true"
   description="Exit current loop or foreach iteration">
   <!-- Use with conditionals for while-loop behavior -->
 </subroutine>
@@ -117,6 +128,7 @@
      ============================================================ -->
 
 <subroutine name="expr"
+  meta-hide-from-llm="true"
   description="Arithmetic and logical operations"
   param-eval="string:required:Operation to perform"
   param-op="string:optional:Alias for eval attribute">
@@ -125,6 +137,7 @@
 </subroutine>
 
 <subroutine name="eval"
+  meta-hide-from-llm="true"
   description="Evaluate JavaScript expression with full context"
   param-name="string:optional:Variable name to store result"
   param-expr="string:optional:JavaScript code (or use text content)">
@@ -138,6 +151,7 @@
      ============================================================ -->
 
 <subroutine name="subroutine"
+  meta-hide-from-llm="true"
   description="Define reusable code block"
   param-name="string:required:Subroutine name"
   param-description="string:optional:Human-readable description"
@@ -153,6 +167,7 @@
 </subroutine>
 
 <subroutine name="call"
+  meta-hide-from-llm="true"
   description="Invoke defined subroutine"
   param-name="string:required:Subroutine name to call"
   param-subroutine="string:optional:Alias for name attribute">
@@ -161,6 +176,7 @@
 </subroutine>
 
 <subroutine name="parameters"
+  meta-hide-from-llm="true"
   description="Access parameters passed to subroutine"
   param-select="string:required:Parameter selector">
   <!-- select="*" : All child elements (returns output) -->
@@ -169,11 +185,13 @@
 </subroutine>
 
 <subroutine name="available-subroutines"
+  meta-hide-from-llm="true"
   description="List all registered subroutines as XML">
   <!-- Useful with <foreach> to iterate over subroutines -->
 </subroutine>
 
 <subroutine name="list-subroutines"
+  meta-hide-from-llm="true"
   description="List subroutines in specified format"
   param-format="string:optional:Output format (default: text)|text|json|xml"
   param-output="string:optional:Variable name to store result">
@@ -181,6 +199,7 @@
 </subroutine>
 
 <subroutine name="save-subroutine"
+  meta-hide-from-llm="true"
   description="Save subroutine definition to disk"
   param-name="string:required:Subroutine name to save"
   param-file="string:optional:Explicit file path"
@@ -197,6 +216,7 @@
 </subroutine>
 
 <subroutine name="edit-subroutine"
+  meta-hide-from-llm="true"
   description="Edit subroutine definition in external editor"
   param-name="string:required:Subroutine name to edit"
   param-editor="string:optional:Editor command (default: $EDITOR or vi)">
@@ -207,6 +227,7 @@
 </subroutine>
 
 <subroutine name="subroutine-index"
+  meta-hide-from-llm="true"
   description="Search and manage subroutine knowledge base"
   param-path="string:optional:Directory to index or search"
   param-query="string:optional:Natural language search query"
@@ -217,6 +238,7 @@
 </subroutine>
 
 <subroutine name="index-subroutines"
+  meta-hide-from-llm="true"
   description="Index subroutines from files or directories for later search"
   param-path="string:required:File or directory path to index">
   <!-- Recursively scans .di files and extracts subroutine definitions -->
@@ -225,6 +247,7 @@
 </subroutine>
 
 <subroutine name="search-subroutines"
+  meta-hide-from-llm="true"
   description="Search indexed subroutines by name or description"
   param-query="string:required:Search query (name or description keywords)"
   param-limit="string:optional:Maximum results to return (default: 10)"
@@ -240,6 +263,7 @@
      ============================================================ -->
 
 <subroutine name="execute"
+  meta-hide-from-llm="true"
   description="Execute dynamically generated DIRAC code"
   param-source="string:optional:Variable containing DIRAC code">
   <!-- Strips markdown code blocks if present -->
@@ -247,6 +271,7 @@
 </subroutine>
 
 <subroutine name="system"
+  meta-hide-from-llm="true"
   description="Execute shell commands"
   param-background="string:optional:Run in background without waiting|true|false">
   <!-- Command built from text content or children -->
@@ -258,6 +283,7 @@
      ============================================================ -->
 
 <subroutine name="import"
+  meta-hide-from-llm="true"
   description="Import subroutines from other DIRAC files"
   param-src="string:required:File path or package name">
   <!-- Supports ./ ../ / for paths, otherwise searches node_modules -->
@@ -266,6 +292,7 @@
 </subroutine>
 
 <subroutine name="require_module"
+  meta-hide-from-llm="true"
   description="Load Node.js module into variable"
   param-name="string:required:Module name to import"
   param-var="string:optional:Variable name to store module (defaults to name)">
@@ -278,6 +305,7 @@
      ============================================================ -->
 
 <subroutine name="llm"
+  meta-hide-from-llm="true"
   description="Invoke Large Language Model with validation"
   param-provider="string:optional:LLM provider for this call|anthropic|openai|ollama|custom"
   param-model="string:optional:Model name or use DEFAULT_MODEL env var"
@@ -308,6 +336,7 @@
 </subroutine>
 
 <subroutine name="load-context"
+  meta-hide-from-llm="true"
   description="Load subroutine definitions as LLM context"
   param-limit="string:optional:Maximum subroutines to include"
   param-import="string:optional:Also import subroutines (default: true)|true|false"
@@ -323,6 +352,7 @@
      ============================================================ -->
 
 <subroutine name="try"
+  meta-hide-from-llm="true"
   description="Establish exception boundary">
   <!--   <try> -->
   <!--     <defvar name="x" value="${undefined}" /> -->
@@ -332,12 +362,14 @@
 </subroutine>
 
 <subroutine name="catch"
+  meta-hide-from-llm="true"
   description="Catch exceptions by name"
   param-name="string:optional:Exception name to catch (default: exception)">
   <!-- Catches exceptions between current position and last <try> boundary -->
 </subroutine>
 
 <subroutine name="throw"
+  meta-hide-from-llm="true"
   description="Throw named exception"
   param-name="string:optional:Exception name (default: exception)">
   <!-- Children become exception payload -->
@@ -345,6 +377,7 @@
 </subroutine>
 
 <subroutine name="exception"
+  meta-hide-from-llm="true"
   description="Access caught exception content"
   param-name="string:optional:Exception variable name">
 </subroutine>
@@ -354,6 +387,7 @@
      ============================================================ -->
 
 <subroutine name="attr"
+  meta-hide-from-llm="true"
   description="Extract attribute from XML element"
   param-name="string:required:Attribute name to extract"
   param-from="string:required:Variable containing XML element">
@@ -366,6 +400,7 @@
      ============================================================ -->
 
 <subroutine name="schedule"
+  meta-hide-from-llm="true"
   description="Run tasks on interval without blocking"
   param-interval="string:required:Seconds between executions"
   param-name="string:optional:Task identifier for logging">
@@ -375,6 +410,7 @@
 </subroutine>
 
 <subroutine name="cron"
+  meta-hide-from-llm="true"
   description="Run tasks on cron schedule without blocking"
   param-time="string:required:Cron expression (minute hour day month weekday)"
   param-name="string:optional:Job identifier for logging">
@@ -389,6 +425,7 @@
 </subroutine>
 
 <subroutine name="run-at"
+  meta-hide-from-llm="true"
   description="Run task once at future time without blocking"
   param-time="string:required:When to execute"
   param-name="string:optional:Run identifier for logging">
@@ -410,6 +447,7 @@
      ============================================================ -->
 
 <subroutine name="mongodb"
+  meta-hide-from-llm="true"
   description="MongoDB database operations"
   param-connection="string:required:MongoDB connection string"
   param-database="string:required:Database name"
@@ -426,6 +464,7 @@
      ============================================================ -->
 
 <subroutine name="tag-check"
+  meta-hide-from-llm="true"
   description="Validate tag name availability">
   <!-- Used during subroutine validation -->
 </subroutine>
