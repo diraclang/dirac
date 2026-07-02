@@ -745,6 +745,19 @@ CRITICAL: When defining parameters:
                   console.error('[LLM] Corrections:', correctionMessages.join('; '));
                 }
               }
+              
+              // Add correction feedback to dialog immediately (so it's saved even if no next iteration)
+              if (correctionMessages.length > 0 && feedbackMode) {
+                const correctionFeedback = `System: Auto-corrections applied:\n${correctionMessages.join('\n')}`;
+                dialogHistory.push({ role: 'user', content: correctionFeedback });
+                
+                // Update dialog variable immediately
+                if (contextVar) {
+                  setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
+                } else if (saveDialog) {
+                  setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
+                }
+              }
             }
           }
           
@@ -800,12 +813,8 @@ CRITICAL: When defining parameters:
               console.error(`[LLM] Execution output (${executionOutput.length} chars):\n${executionOutput}\n`);
             }
             
-            // Build feedback prompt with corrections (if any)
-            let feedbackPrompt = '';
-            if (correctionMessages.length > 0) {
-              feedbackPrompt = `Note: The following auto-corrections were applied:\n${correctionMessages.join('\n')}\n\n`;
-            }
-            feedbackPrompt += `The code executed successfully. Here is the output:\n\`\`\`\n${executionOutput}\n\`\`\`\n\nPlease review the output carefully. If the output is correct and complete, respond with ONLY the tag "<DONE />" and nothing else. If the output is incorrect or incomplete, generate corrected Dirac XML code.`;
+            // Build feedback prompt (corrections already added to dialog earlier if any)
+            const feedbackPrompt = `The code executed successfully. Here is the output:\n\`\`\`\n${executionOutput}\n\`\`\`\n\nPlease review the output carefully. If the output is correct and complete, respond with ONLY the tag "<DONE />" and nothing else. If the output is incorrect or incomplete, generate corrected Dirac XML code.`;
             
             if (session.debug) {
               console.error(`[LLM] Feedback prompt:\n${feedbackPrompt}\n`);
