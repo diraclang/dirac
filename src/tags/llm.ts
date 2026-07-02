@@ -784,7 +784,7 @@ CRITICAL: When defining parameters:
             }
             
             // Build feedback prompt
-            const feedbackPrompt = `The code executed successfully. Here is the output:\n\`\`\`\n${executionOutput}\n\`\`\`\n\nPlease review the output carefully. If the output is correct and complete, respond with ONLY the word "DONE" and nothing else. If the output is incorrect or incomplete, generate corrected Dirac XML code.`;
+            const feedbackPrompt = `The code executed successfully. Here is the output:\n\`\`\`\n${executionOutput}\n\`\`\`\n\nPlease review the output carefully. If the output is correct and complete, respond with ONLY the tag "<DONE />" and nothing else. If the output is incorrect or incomplete, generate corrected Dirac XML code.`;
             
             if (session.debug) {
               console.error(`[LLM] Feedback prompt:\n${feedbackPrompt}\n`);
@@ -835,11 +835,11 @@ CRITICAL: When defining parameters:
               console.error(`[LLM] Feedback response:\n${result}\n`);
             }
             
-            // Check if LLM says we're done (check at start of response)
-            const responseStart = result.trim().substring(0, 100).toUpperCase();
-            if (responseStart.startsWith('DONE') || result.trim().toLowerCase().includes('looks correct') || result.trim().toLowerCase().includes('looks good')) {
+            // Check if LLM says we're done (look for <DONE /> tag)
+            const trimmedResult = result.trim();
+            if (trimmedResult.includes('<DONE />') || trimmedResult.includes('<DONE/>')) {
               if (session.debug) {
-                console.error(`[LLM] Feedback loop terminating - LLM indicated completion\n`);
+                console.error(`[LLM] Feedback loop terminating - LLM indicated completion with <DONE />\n`);
               }
               break;
             }
