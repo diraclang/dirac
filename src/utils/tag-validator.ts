@@ -18,6 +18,7 @@ export interface ValidationResult {
   errors: string[];
   warnings: string[];
   similarity?: number;
+  attributeCorrections?: { [oldAttr: string]: string }; // Map of old attr name -> new attr name
 }
 
 // Helper: get embedding server config from config.yml
@@ -44,7 +45,7 @@ async function getEmbeddings(tags: string[]): Promise<number[][]> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ model, prompt: tag })
     });
-    const data = await response.json();
+    const data: any = await response.json();
     return data.embedding;
   }));
 }
@@ -95,6 +96,7 @@ export async function validateTag(
     corrected: false,
     errors: [],
     warnings: [],
+    attributeCorrections: {},
   };
   
   // Check if tag exists
@@ -111,10 +113,22 @@ export async function validateTag(
         }
       }
       
-      // Check for unknown attributes
+      // Check for unknown attributes and auto-correct if enabled
       for (const attr in element.attributes) {
         if (!paramNames.includes(attr)) {
-          result.warnings.push(`Unknown attribute: ${attr}`);
+          if (autocorrect && paramNames.length > 0) {
+            // Try to find best matching parameter name
+            const best = await getBestTagMatch(attr, paramNames);
+            if (best.score >= similarityCutoff) {
+              result.attributeCorrections![attr] = best.tag;
+              result.corrected = true;
+              result.warnings.push(`Auto-corrected attribute: ${attr}="${element.attributes[attr]}" → ${best.tag}="${element.attributes[attr]}" (similarity: ${best.score.toFixed(2)})`);
+            } else {
+              result.warnings.push(`Unknown attribute: ${attr} (no similar match found)`);
+            }
+          } else {
+            result.warnings.push(`Unknown attribute: ${attr}`);
+          }
         }
       }
     }
@@ -143,9 +157,21 @@ export async function validateTag(
             }
           }
           
+          // Check for unknown attributes and auto-correct
           for (const attr in element.attributes) {
             if (!paramNames.includes(attr)) {
-              result.warnings.push(`Unknown attribute: ${attr}`);
+              if (paramNames.length > 0) {
+                // Try to find best matching parameter name
+                const attrBest = await getBestTagMatch(attr, paramNames);
+                if (attrBest.score >= similarityCutoff) {
+                  result.attributeCorrections![attr] = attrBest.tag;
+                  result.warnings.push(`Auto-corrected attribute: ${attr}="${element.attributes[attr]}" → ${attrBest.tag}="${element.attributes[attr]}" (similarity: ${attrBest.score.toFixed(2)})`);
+                } else {
+                  result.warnings.push(`Unknown attribute: ${attr} (no similar match found)`);
+                }
+              } else {
+                result.warnings.push(`Unknown attribute: ${attr}`);
+              }
             }
           }
         }
@@ -217,7 +243,18 @@ export function applyCorrectedTags(ast: DiracElement, results: ValidationResult[
     if (element.tag && element.tag !== 'dirac' && element.tag !== '') {
       const result = results[resultIndex++];
       if (result && result.corrected) {
+        // Correct tag name
         element = { ...element, tag: result.tagName };
+        
+        // Correct attribute names if any
+        if (result.attributeCorrections && Object.keys(result.attributeCorrections).length > 0) {
+          const newAttributes: { [key: string]: string } = {};
+          for (const [oldAttr, value] of Object.entries(element.attributes)) {
+            const newAttr = result.attributeCorrections[oldAttr] || oldAttr;
+            newAttributes[newAttr] = value;
+          }
+          element = { ...element, attributes: newAttributes };
+        }
       }
     }
     
