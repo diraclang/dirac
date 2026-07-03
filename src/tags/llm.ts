@@ -217,6 +217,48 @@ function serializeElement(element: DiracElement, prompt: string): string {
   return lines.join('\n');
 }
 
+/**
+ * Simple serialization without metadata - for showing corrected code
+ */
+function serializeSimple(el: DiracElement, indent: string, lines: string[]): void {
+  if (el.text && !el.tag) {
+    const trimmed = el.text.trim();
+    if (trimmed) {
+      lines.push(indent + trimmed);
+    }
+    return;
+  }
+  
+  if (!el.tag) return;
+  
+  // Opening tag
+  let tag = `${indent}<${el.tag}`;
+  
+  // Add attributes
+  if (el.attributes) {
+    for (const [key, value] of Object.entries(el.attributes)) {
+      tag += ` ${key}="${value.replace(/"/g, '&quot;')}"`;
+    }
+  }
+  
+  // Self-closing or with content
+  if (!el.children || el.children.length === 0) {
+    if (el.text) {
+      lines.push(tag + '>');
+      lines.push(indent + '  ' + el.text);
+      lines.push(`${indent}</${el.tag}>`);
+    } else {
+      lines.push(tag + ' />');
+    }
+  } else {
+    lines.push(tag + '>');
+    for (const child of el.children) {
+      serializeSimple(child, indent + '  ', lines);
+    }
+    lines.push(`${indent}</${el.tag}>`);
+  }
+}
+
 
 export async function executeLLM(session: DiracSession, element: DiracElement): Promise<void> {
   if (!session.llmClient) {
@@ -775,7 +817,16 @@ CRITICAL: When defining parameters:
             
             // Add correction feedback to dialog after all retries (if any corrections were made)
             if (correctionMessages.length > 0 && feedbackMode) {
-              const correctionFeedback = `System: Auto-corrections applied:\n${correctionMessages.join('\n')}`;
+              // Serialize only the children (skip DIRAC-ROOT wrapper and metadata)
+              const correctedCodeLines: string[] = [];
+              for (const child of dynamicAST.children) {
+                if (child.tag && child.tag !== 'DIRAC-ROOT') {
+                  serializeSimple(child, '', correctedCodeLines);
+                }
+              }
+              const correctedCode = correctedCodeLines.join('\n');
+              
+              const correctionFeedback = `System: Auto-corrections applied:\n${correctionMessages.join('\n')}\n\nActual code executed:\n\`\`\`xml\n${correctedCode}\n\`\`\``;
               dialogHistory.push({ role: 'user', content: correctionFeedback });
               
               // Update dialog variable immediately
