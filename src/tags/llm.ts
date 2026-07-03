@@ -591,6 +591,9 @@ CRITICAL: When defining parameters:
       const maxRetries = parseInt(element.attributes['max-retries'] || '0', 10);
       const feedbackMode = element.attributes['feedback'] === 'true';
       
+      // Always log validation settings (not just in debug mode)
+      console.error(`[LLM] Execute mode - validate: ${validateTags}, autocorrect: ${autocorrect}, feedback: ${feedbackMode}, debug: ${session.debug}`);
+      
       // Support variable substitution in max-iterations attribute
       const maxIterationsAttr = substituteAttribute(session, element.attributes['max-iterations'] || '3');
       const maxIterations = parseInt(maxIterationsAttr, 10);
