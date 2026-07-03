@@ -240,11 +240,14 @@ export function applyCorrectedTags(ast: DiracElement, results: ValidationResult[
   let resultIndex = 0;
   
   function correctElement(element: DiracElement): DiracElement {
-    if (element.tag && element.tag !== 'dirac' && element.tag !== '') {
+    // Skip text nodes, whitespace-only tags, and root wrapper tags (must match validateElement logic)
+    if (element.tag && element.tag !== 'dirac' && element.tag !== 'DIRAC-ROOT' && element.tag.trim() !== '') {
       const result = results[resultIndex++];
-      if (result && result.corrected) {
-        // Correct tag name
-        element = { ...element, tag: result.tagName };
+      if (result) {
+        // Correct tag name if needed
+        if (result.corrected && result.tagName !== element.tag) {
+          element = { ...element, tag: result.tagName };
+        }
         
         // Correct attribute names if any
         if (result.attributeCorrections && Object.keys(result.attributeCorrections).length > 0) {
