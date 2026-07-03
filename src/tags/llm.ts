@@ -645,8 +645,25 @@ CRITICAL: When defining parameters:
           
           // Validate tags if requested
           if (validateTags) {
+            if (session.debug) {
+              console.error(`[LLM] Validation enabled, autocorrect: ${autocorrect}`);
+            }
             const { validateDiracCode, applyCorrectedTags } = await import('../utils/tag-validator.js');
             let validation = await validateDiracCode(session, dynamicAST, { autocorrect });
+            
+            if (session.debug) {
+              console.error(`[LLM] Validation result: valid=${validation.valid}, results count=${validation.results.length}`);
+              if (validation.results.length > 0) {
+                console.error(`[LLM] Validation details:`, validation.results.map(r => ({
+                  tag: r.tagName,
+                  originalTag: r.originalTag,
+                  corrected: r.corrected,
+                  attrCorrections: r.attributeCorrections,
+                  warnings: r.warnings
+                })));
+              }
+            }
+            
             let retryCount = 0;
             
             while (!validation.valid && retryCount < maxRetries) {

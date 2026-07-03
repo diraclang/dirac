@@ -83,6 +83,10 @@ export async function validateTag(
 ): Promise<ValidationResult> {
   const { autocorrect = false, similarityCutoff = SIMILARITY_CUTOFF } = options;
   
+  if (session.debug) {
+    console.error(`[VALIDATE] Tag: <${element.tag}>, autocorrect: ${autocorrect}, attributes:`, Object.keys(element.attributes));
+  }
+  
   // Get allowed subroutine names
   const { getAvailableSubroutines } = await import('../runtime/session.js');
   const subroutines = getAvailableSubroutines(session);
@@ -101,10 +105,17 @@ export async function validateTag(
   
   // Check if tag exists
   if (allowed.has(tagName)) {
+    if (session.debug) {
+      console.error(`[VALIDATE] Tag <${tagName}> is valid`);
+    }
     // Tag name is valid, now check required and unknown parameters
     const sub = subroutines.find(s => s.name === tagName);
     if (sub && Array.isArray(sub.parameters)) {
       const paramNames = sub.parameters.map(p => p.name);
+      
+      if (session.debug) {
+        console.error(`[VALIDATE] Tag <${tagName}> has ${paramNames.length} parameters:`, paramNames);
+      }
       
       // Check for missing required parameters
       for (const param of sub.parameters) {
@@ -116,6 +127,9 @@ export async function validateTag(
       // Check for unknown attributes and auto-correct if enabled
       for (const attr in element.attributes) {
         if (!paramNames.includes(attr)) {
+          if (session.debug) {
+            console.error(`[VALIDATE] Unknown attribute '${attr}' on <${tagName}>`);
+          }
           if (autocorrect && paramNames.length > 0) {
             let correctedAttr: string | null = null;
             let similarityScore = 0;
@@ -127,17 +141,32 @@ export async function validateTag(
               result.attributeCorrections![attr] = correctedAttr;
               result.corrected = true;
               result.warnings.push(`Auto-corrected attribute: ${attr}="${element.attributes[attr]}" → ${correctedAttr}="${element.attributes[attr]}" (only parameter available)`);
+              if (session.debug) {
+                console.error(`[VALIDATE] Auto-corrected (single param): ${attr} → ${correctedAttr}`);
+              }
             } else {
               // Try to find best matching parameter name using similarity
+              if (session.debug) {
+                console.error(`[VALIDATE] Checking similarity for '${attr}' against:`, paramNames);
+              }
               const best = await getBestTagMatch(attr, paramNames);
+              if (session.debug) {
+                console.error(`[VALIDATE] Best match: ${best.tag} with score ${best.score.toFixed(2)}, cutoff: ${similarityCutoff}`);
+              }
               if (best.score >= similarityCutoff) {
                 correctedAttr = best.tag;
                 similarityScore = best.score;
                 result.attributeCorrections![attr] = correctedAttr;
                 result.corrected = true;
                 result.warnings.push(`Auto-corrected attribute: ${attr}="${element.attributes[attr]}" → ${correctedAttr}="${element.attributes[attr]}" (similarity: ${similarityScore.toFixed(2)})`);
+                if (session.debug) {
+                  console.error(`[VALIDATE] Auto-corrected (similarity): ${attr} → ${correctedAttr}`);
+                }
               } else {
                 result.warnings.push(`Unknown attribute: ${attr} (no similar match found, best: ${best.tag} with score ${best.score.toFixed(2)})`);
+                if (session.debug) {
+                  console.error(`[VALIDATE] No correction (score too low): ${attr}, best was ${best.tag} (${best.score.toFixed(2)})`);
+                }
               }
             }
           } else {
@@ -266,14 +295,19 @@ export function applyCorrectedTags(ast: DiracElement, results: ValidationResult[
       if (result) {
         // Correct tag name if needed
         if (result.corrected && result.tagName !== element.tag) {
+          console.error(`[APPLY-CORRECTION] Tag: ${element.tag} → ${result.tagName}`);
           element = { ...element, tag: result.tagName };
         }
         
         // Correct attribute names if any
         if (result.attributeCorrections && Object.keys(result.attributeCorrections).length > 0) {
+          console.error(`[APPLY-CORRECTION] Attributes on <${element.tag}>:`, result.attributeCorrections);
           const newAttributes: { [key: string]: string } = {};
           for (const [oldAttr, value] of Object.entries(element.attributes)) {
             const newAttr = result.attributeCorrections[oldAttr] || oldAttr;
+            if (newAttr !== oldAttr) {
+              console.error(`[APPLY-CORRECTION]   ${oldAttr}="${value}" → ${newAttr}="${value}"`);
+            }
             newAttributes[newAttr] = value;
           }
           element = { ...element, attributes: newAttributes };
