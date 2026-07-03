@@ -667,6 +667,34 @@ CRITICAL: When defining parameters:
               }
             }
             
+            // Apply auto-corrections immediately after first validation (if enabled)
+            if (autocorrect) {
+              console.error(`[LLM] Applying corrections from initial ${validation.results.length} validation results`);
+              
+              // Collect all correction/warning messages from FIRST validation
+              for (const result of validation.results) {
+                if (result.corrected) {
+                  correctionMessages.push(`Auto-corrected: <${result.originalTag}> → <${result.tagName}> (similarity: ${result.similarity?.toFixed(2)})`);
+                }
+                if (result.warnings.length > 0) {
+                  correctionMessages.push(...result.warnings);
+                }
+              }
+              
+              console.error('[LLM] Initial correction messages collected:', correctionMessages.length);
+              if (correctionMessages.length > 0) {
+                console.error('[LLM] Corrections:', correctionMessages.join('; '));
+              }
+              
+              // Apply the corrections to the AST
+              dynamicAST = applyCorrectedTags(dynamicAST, validation.results);
+              console.error('[LLM] Applied initial auto-corrections to AST');
+              
+              // Re-validate the corrected AST to check if corrections fixed all issues
+              validation = await validateDiracCode(session, dynamicAST, { autocorrect: false });
+              console.error(`[LLM] Re-validation after corrections: valid=${validation.valid}`);
+            }
+            
             let retryCount = 0;
             
             while (!validation.valid && retryCount < maxRetries) {
@@ -745,38 +773,16 @@ CRITICAL: When defining parameters:
               throw new Error(`Tag validation failed after ${maxRetries} retries:\n${validation.errorMessages.join('\n')}`);
             }
             
-            // Apply auto-corrections if enabled
-            if (autocorrect) {
-              dynamicAST = applyCorrectedTags(dynamicAST, validation.results);
+            // Add correction feedback to dialog after all retries (if any corrections were made)
+            if (correctionMessages.length > 0 && feedbackMode) {
+              const correctionFeedback = `System: Auto-corrections applied:\n${correctionMessages.join('\n')}`;
+              dialogHistory.push({ role: 'user', content: correctionFeedback });
               
-              // Collect all correction/warning messages
-              for (const result of validation.results) {
-                if (result.corrected) {
-                  correctionMessages.push(`Auto-corrected: <${result.originalTag}> → <${result.tagName}> (similarity: ${result.similarity?.toFixed(2)})`);
-                }
-                if (result.warnings.length > 0) {
-                  correctionMessages.push(...result.warnings);
-                }
-              }
-              
-              if (session.debug) {
-                console.error('[LLM] Applied auto-corrections to tags');
-                if (correctionMessages.length > 0) {
-                  console.error('[LLM] Corrections:', correctionMessages.join('; '));
-                }
-              }
-              
-              // Add correction feedback to dialog immediately (so it's saved even if no next iteration)
-              if (correctionMessages.length > 0 && feedbackMode) {
-                const correctionFeedback = `System: Auto-corrections applied:\n${correctionMessages.join('\n')}`;
-                dialogHistory.push({ role: 'user', content: correctionFeedback });
-                
-                // Update dialog variable immediately
-                if (contextVar) {
-                  setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
-                } else if (saveDialog) {
-                  setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
-                }
+              // Update dialog variable immediately
+              if (contextVar) {
+                setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
+              } else if (saveDialog) {
+                setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
               }
             }
           }
