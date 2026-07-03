@@ -117,14 +117,28 @@ export async function validateTag(
       for (const attr in element.attributes) {
         if (!paramNames.includes(attr)) {
           if (autocorrect && paramNames.length > 0) {
-            // Try to find best matching parameter name
-            const best = await getBestTagMatch(attr, paramNames);
-            if (best.score >= similarityCutoff) {
-              result.attributeCorrections![attr] = best.tag;
+            let correctedAttr: string | null = null;
+            let similarityScore = 0;
+            
+            // Special case: if there's only ONE parameter, use it regardless of similarity
+            if (paramNames.length === 1) {
+              correctedAttr = paramNames[0];
+              similarityScore = 1.0; // Perfect match by elimination
+              result.attributeCorrections![attr] = correctedAttr;
               result.corrected = true;
-              result.warnings.push(`Auto-corrected attribute: ${attr}="${element.attributes[attr]}" → ${best.tag}="${element.attributes[attr]}" (similarity: ${best.score.toFixed(2)})`);
+              result.warnings.push(`Auto-corrected attribute: ${attr}="${element.attributes[attr]}" → ${correctedAttr}="${element.attributes[attr]}" (only parameter available)`);
             } else {
-              result.warnings.push(`Unknown attribute: ${attr} (no similar match found)`);
+              // Try to find best matching parameter name using similarity
+              const best = await getBestTagMatch(attr, paramNames);
+              if (best.score >= similarityCutoff) {
+                correctedAttr = best.tag;
+                similarityScore = best.score;
+                result.attributeCorrections![attr] = correctedAttr;
+                result.corrected = true;
+                result.warnings.push(`Auto-corrected attribute: ${attr}="${element.attributes[attr]}" → ${correctedAttr}="${element.attributes[attr]}" (similarity: ${similarityScore.toFixed(2)})`);
+              } else {
+                result.warnings.push(`Unknown attribute: ${attr} (no similar match found, best: ${best.tag} with score ${best.score.toFixed(2)})`);
+              }
             }
           } else {
             result.warnings.push(`Unknown attribute: ${attr}`);
@@ -161,13 +175,19 @@ export async function validateTag(
           for (const attr in element.attributes) {
             if (!paramNames.includes(attr)) {
               if (paramNames.length > 0) {
-                // Try to find best matching parameter name
-                const attrBest = await getBestTagMatch(attr, paramNames);
-                if (attrBest.score >= similarityCutoff) {
-                  result.attributeCorrections![attr] = attrBest.tag;
-                  result.warnings.push(`Auto-corrected attribute: ${attr}="${element.attributes[attr]}" → ${attrBest.tag}="${element.attributes[attr]}" (similarity: ${attrBest.score.toFixed(2)})`);
+                // Special case: if there's only ONE parameter, use it regardless of similarity
+                if (paramNames.length === 1) {
+                  result.attributeCorrections![attr] = paramNames[0];
+                  result.warnings.push(`Auto-corrected attribute: ${attr}="${element.attributes[attr]}" → ${paramNames[0]}="${element.attributes[attr]}" (only parameter available)`);
                 } else {
-                  result.warnings.push(`Unknown attribute: ${attr} (no similar match found)`);
+                  // Try to find best matching parameter name using similarity
+                  const attrBest = await getBestTagMatch(attr, paramNames);
+                  if (attrBest.score >= similarityCutoff) {
+                    result.attributeCorrections![attr] = attrBest.tag;
+                    result.warnings.push(`Auto-corrected attribute: ${attr}="${element.attributes[attr]}" → ${attrBest.tag}="${element.attributes[attr]}" (similarity: ${attrBest.score.toFixed(2)})`);
+                  } else {
+                    result.warnings.push(`Unknown attribute: ${attr} (no similar match found, best: ${attrBest.tag} with score ${attrBest.score.toFixed(2)})`);
+                  }
                 }
               } else {
                 result.warnings.push(`Unknown attribute: ${attr}`);
