@@ -632,9 +632,10 @@ CRITICAL: When defining parameters:
       const autocorrect = element.attributes['autocorrect'] === 'true';
       const maxRetries = parseInt(element.attributes['max-retries'] || '0', 10);
       const feedbackMode = element.attributes['feedback'] === 'true';
+      const confirmCorrections = element.attributes['confirm-corrections'] === 'true';
       
       // Always log validation settings (not just in debug mode)
-      console.error(`[LLM] Execute mode - validate: ${validateTags}, autocorrect: ${autocorrect}, feedback: ${feedbackMode}, debug: ${session.debug}`);
+      console.error(`[LLM] Execute mode - validate: ${validateTags}, autocorrect: ${autocorrect}, feedback: ${feedbackMode}, confirm-corrections: ${confirmCorrections}, debug: ${session.debug}`);
       
       // Support variable substitution in max-iterations attribute
       const maxIterationsAttr = substituteAttribute(session, element.attributes['max-iterations'] || '3');
@@ -826,14 +827,73 @@ CRITICAL: When defining parameters:
               }
               const correctedCode = correctedCodeLines.join('\n');
               
-              const correctionFeedback = `System: Auto-corrections applied:\n${correctionMessages.join('\n')}\n\nActual code executed:\n\`\`\`xml\n${correctedCode}\n\`\`\``;
-              dialogHistory.push({ role: 'user', content: correctionFeedback });
-              
-              // Update dialog variable immediately
-              if (contextVar) {
-                setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
-              } else if (saveDialog) {
-                setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
+              // If confirm-corrections is enabled, ask LLM to confirm before executing
+              if (confirmCorrections) {
+                const correctionFeedback = `System: Your submitted code had errors and was auto-corrected:\n${correctionMessages.join('\n')}\n\nCorrected code:\n\`\`\`xml\n${correctedCode}\n\`\`\`\n\nIf you resubmit this corrected code, I will execute it for you. Please review and resubmit the corrected code, or provide a different solution.`;
+                dialogHistory.push({ role: 'user', content: correctionFeedback });
+                
+                // Update dialog variable immediately
+                if (contextVar) {
+                  setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
+                } else if (saveDialog) {
+                  setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
+                }
+                
+                console.error('[LLM] Corrections made - waiting for LLM confirmation (not executing yet)');
+                
+                // Call LLM to get confirmation/corrected response
+                if (isOpenAI) {
+                  const response = await llmClient.chat.completions.create({
+                    model,
+                    max_tokens: maxTokens,
+                    temperature,
+                    messages: dialogHistory,
+                  });
+                  result = response.choices[0]?.message?.content || '';
+                } else if (isOllama) {
+                  const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
+                  result = await llmClient.complete(ollamaPrompt, {
+                    model,
+                    temperature,
+                    max_tokens: maxTokens,
+                  });
+                } else if (isCustom) {
+                  const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+                  result = await llmClient.complete(customPrompt, {
+                    model,
+                    temperature,
+                    max_tokens: maxTokens,
+                    messages: dialogHistory,
+                  });
+                } else {
+                  result = await callAnthropic(llmClient, model, maxTokens, temperature, dialogHistory);
+                }
+                
+                // Add response to dialog history
+                dialogHistory.push({ role: 'assistant', content: result });
+                
+                // Update dialog variable
+                if (contextVar) {
+                  setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
+                } else if (saveDialog) {
+                  setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
+                }
+                
+                console.error(`[LLM] LLM confirmation response:\n${result}\n`);
+                
+                // Continue to next iteration to process the LLM's corrected response
+                continue;
+              } else {
+                // Default behavior: execute immediately and show what was executed
+                const correctionFeedback = `System: Auto-corrections applied:\n${correctionMessages.join('\n')}\n\nActual code executed:\n\`\`\`xml\n${correctedCode}\n\`\`\``;
+                dialogHistory.push({ role: 'user', content: correctionFeedback });
+                
+                // Update dialog variable immediately
+                if (contextVar) {
+                  setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
+                } else if (saveDialog) {
+                  setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
+                }
               }
             }
           }

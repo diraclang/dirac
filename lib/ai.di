@@ -32,7 +32,7 @@
   
   
   
-  <llm execute="true" save-dialog="true" show="boundary" feedback="true" validate="true" autocorrect="true">
+  <llm execute="true" save-dialog="true" show="boundary" feedback="true" validate="true" autocorrect="true" confirm-corrections="true">
     
     
     
