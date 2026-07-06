@@ -701,7 +701,7 @@ Commands:
   :scheduled      List all scheduled runs (run-at)
   :cancel <name>  Cancel a scheduled run
   :cancelall      Cancel all scheduled runs
-  :save-training  Save LLM dialog as training data (opens in editor)
+  :save-training [mode=full|pruned|both]  Save LLM dialog as training data (opens in editor)
   :exit           Exit shell
 
 Syntax:
@@ -1086,6 +1086,26 @@ Examples:
 
       case 'save-training':
         try {
+          // Use the full cmd string to preserve arguments
+          const fullCommand = cmd.slice(1); // Remove leading ':'
+          const saveArgs = fullCommand.split(/\s+/).slice(1); // Skip 'save-training'
+          let saveMode = 'full'; // 'full', 'pruned', 'both'
+          
+          console.error(`[DEBUG] Full command: "${fullCommand}"`);
+          console.error(`[DEBUG] Args:`, saveArgs);
+          
+          for (const arg of saveArgs) {
+            if (arg.startsWith('mode=')) {
+              saveMode = arg.split('=')[1];
+              console.error(`[DEBUG] Set mode to: ${saveMode}`);
+            } else if (arg === 'prune=true') {
+              saveMode = 'pruned';
+              console.error(`[DEBUG] Set mode to pruned`);
+            }
+          }
+          
+          console.error(`[DEBUG] Final saveMode: ${saveMode}`);
+          
           const dialogVar = this.client 
             ? (await this.client.getState()).variables.find((v: any) => v.name === '__llm_dialog__')
             : this.session.variables.find((v: any) => v.name === '__llm_dialog__');
@@ -1105,15 +1125,87 @@ Examples:
             break;
           }
           
-          // Wrap in messages format
-          const trainingExample = { messages: dialog };
+          // Helper function to prune correction dialogs
+          const pruneCorrections = (msgs: any[]): any[] => {
+            const pruned: any[] = [];
+            let skipNext = false;
+            let correctionCount = 0;
+            
+            for (let i = 0; i < msgs.length; i++) {
+              const msg = msgs[i];
+              
+              // Always keep system message
+              if (msg.role === 'system') {
+                pruned.push(msg);
+                continue;
+              }
+              
+              // Skip if marked by previous iteration
+              if (skipNext) {
+                skipNext = false;
+                continue;
+              }
+              
+              // Detect correction feedback from system
+              if (msg.role === 'user' && 
+                  (msg.content.includes('System: Your submitted code had errors') ||
+                   msg.content.includes('System: Auto-corrections applied'))) {
+                correctionCount++;
+                console.error(`[PRUNE] Found correction message at index ${i}`);
+                
+                // This is a correction message - skip it and the wrong assistant response before it
+                if (pruned.length > 0 && pruned[pruned.length - 1].role === 'assistant') {
+                  console.error(`[PRUNE] Removing wrong assistant response`);
+                  pruned.pop(); // Remove the wrong assistant response
+                }
+                
+                // Skip this correction message
+                // Next message should be the corrected assistant response - keep it
+                if (i + 1 < msgs.length && msgs[i + 1].role === 'assistant') {
+                  console.error(`[PRUNE] Keeping corrected assistant response`);
+                  pruned.push(msgs[i + 1]);
+                  skipNext = true; // Skip it in next iteration since we added it here
+                }
+                continue;
+              }
+              
+              // Keep all other messages
+              pruned.push(msg);
+            }
+            
+            console.error(`[PRUNE] Processed ${msgs.length} messages, found ${correctionCount} corrections, result has ${pruned.length} messages`);
+            return pruned;
+          };
           
-          // Create temp file
+          // Prepare training example(s)
+          const fullExample = { messages: dialog };
+          const prunedExample = { messages: pruneCorrections(dialog) };
+          
+          // Show what will be saved
+          console.log(`\nMode: ${saveMode}`);
+          if (saveMode === 'full' || saveMode === 'both') {
+            console.log(`Full dialog: ${dialog.length} messages`);
+          }
+          if (saveMode === 'pruned' || saveMode === 'both') {
+            console.log(`Pruned dialog: ${prunedExample.messages.length} messages (removed ${dialog.length - prunedExample.messages.length} correction messages)`);
+          }
+          
+          // Create temp file with appropriate content
           const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0] + '-' + Date.now();
           const tempFile = path.join(os.tmpdir(), `dirac-training-${timestamp}.jsonl`);
           
+          let tempContent: string;
+          if (saveMode === 'both') {
+            // Show both versions with clear separation
+            tempContent = `// FULL VERSION (with corrections)\n${JSON.stringify(fullExample, null, 2)}\n\n// PRUNED VERSION (mistakes removed)\n${JSON.stringify(prunedExample, null, 2)}`;
+          } else if (saveMode === 'pruned') {
+            tempContent = JSON.stringify(prunedExample, null, 2);
+          } else {
+            tempContent = JSON.stringify(fullExample, null, 2);
+          }
+          
           // Write formatted JSON to temp file
-          fs.writeFileSync(tempFile, JSON.stringify(trainingExample, null, 2), 'utf-8');
+          fs.writeFileSync(tempFile, tempContent, 'utf-8');
           
           console.log('Opening in editor...');
           
@@ -1163,17 +1255,53 @@ Examples:
             savePath = path.join(trainingDir, answer.endsWith('.jsonl') ? answer : `${answer}.jsonl`);
           }
           
-          // Read edited content and minify (single line for .jsonl)
+          // Read edited content and save
           const editedContent = fs.readFileSync(tempFile, 'utf-8');
-          const editedData = JSON.parse(editedContent);
           
-          // Append as single line
-          fs.appendFileSync(savePath, JSON.stringify(editedData) + '\n');
+          // Handle 'both' mode - extract both JSON objects
+          if (saveMode === 'both') {
+            // Remove comments and split by newlines to find JSON objects
+            const lines = editedContent.split('\n');
+            let fullJson = '';
+            let prunedJson = '';
+            let inFull = false;
+            let inPruned = false;
+            let braceCount = 0;
+            
+            for (const line of lines) {
+              if (line.includes('// FULL VERSION')) {
+                inFull = true;
+                continue;
+              }
+              if (line.includes('// PRUNED VERSION')) {
+                inFull = false;
+                inPruned = true;
+                continue;
+              }
+              
+              if (inFull) {
+                fullJson += line + '\n';
+              } else if (inPruned) {
+                prunedJson += line + '\n';
+              }
+            }
+            
+            // Parse and save both
+            const fullData = JSON.parse(fullJson.trim());
+            const prunedData = JSON.parse(prunedJson.trim());
+            
+            fs.appendFileSync(savePath, JSON.stringify(fullData) + '\n');
+            fs.appendFileSync(savePath, JSON.stringify(prunedData) + '\n');
+            console.log(`✓ Saved 2 training examples (full + pruned) to ${savePath}`);
+          } else {
+            // Single entry
+            const editedData = JSON.parse(editedContent);
+            fs.appendFileSync(savePath, JSON.stringify(editedData) + '\n');
+            console.log(`✓ Saved training example (${saveMode}) to ${savePath}`);
+          }
           
           // Clean up
           fs.unlinkSync(tempFile);
-          
-          console.log(`✓ Saved training example to ${savePath}`);
         } catch (error) {
           console.error('Error saving training data:', error instanceof Error ? error.message : String(error));
         }
