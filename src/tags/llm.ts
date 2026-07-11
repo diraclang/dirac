@@ -695,7 +695,7 @@ CRITICAL: When defining parameters:
               console.error(`[LLM] Validation enabled, autocorrect: ${autocorrect}`);
             }
             const { validateDiracCode, applyCorrectedTags } = await import('../utils/tag-validator.js');
-            let validation = await validateDiracCode(session, dynamicAST, { autocorrect });
+            let validation = await validateDiracCode(session, dynamicAST, { autocorrect, deepValidation: true });
             
             if (session.debug) {
               console.error(`[LLM] Validation result: valid=${validation.valid}, results count=${validation.results.length}`);
@@ -734,7 +734,7 @@ CRITICAL: When defining parameters:
               console.error('[LLM] Applied initial auto-corrections to AST');
               
               // Re-validate the corrected AST to check if corrections fixed all issues
-              validation = await validateDiracCode(session, dynamicAST, { autocorrect: false });
+              validation = await validateDiracCode(session, dynamicAST, { autocorrect: false, deepValidation: true });
               console.error(`[LLM] Re-validation after corrections: valid=${validation.valid}`);
             }
             
@@ -809,7 +809,7 @@ CRITICAL: When defining parameters:
               }
               
               dynamicAST = parser.parse(diracCode);
-              validation = await validateDiracCode(session, dynamicAST, { autocorrect });
+              validation = await validateDiracCode(session, dynamicAST, { autocorrect, deepValidation: true });
             }
             
             if (!validation.valid) {
@@ -899,7 +899,32 @@ CRITICAL: When defining parameters:
           }
           
           // Execute the validated (and possibly corrected) code
-          await integrate(session, dynamicAST);
+          let executionError: string | null = null;
+          try {
+            await integrate(session, dynamicAST);
+          } catch (execError) {
+            executionError = execError instanceof Error ? execError.message : String(execError);
+            console.error(`[LLM] Execution error: ${executionError}`);
+            
+            // In feedback mode, add execution error to dialog and retry
+            if (feedbackMode && iteration < maxIterations) {
+              const errorFeedback = `System: Your code executed but encountered a runtime error:\n${executionError}\n\nPlease fix the error and try again.`;
+              dialogHistory.push({ role: 'user', content: errorFeedback });
+              
+              // Update dialog variable
+              if (contextVar) {
+                setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
+              } else if (saveDialog) {
+                setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
+              }
+              
+              // Continue to next iteration (don't dump or check callbacks)
+              continue;
+            } else {
+              // Not in feedback mode or max iterations reached, re-throw
+              throw execError;
+            }
+          }
           
           // Dump generated subroutines to ~/.dirac/lib/TIMESTAMP/
           if (iteration === 1) { // Only dump on first successful execution

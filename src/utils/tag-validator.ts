@@ -19,6 +19,8 @@ export interface ValidationResult {
   warnings: string[];
   similarity?: number;
   attributeCorrections?: { [oldAttr: string]: string }; // Map of old attr name -> new attr name
+  typeErrors?: string[]; // Type validation errors
+  nestedValidation?: ValidationResult[]; // Validation results for nested tags
 }
 
 // Helper: get embedding server config from config.yml
@@ -71,6 +73,78 @@ async function getBestTagMatch(candidate: string, allowed: string[]): Promise<{t
 }
 
 /**
+ * Validate parameter type against expected type
+ */
+function validateParameterType(
+  paramName: string,
+  value: string,
+  expectedType?: string
+): { valid: boolean; error?: string } {
+  if (!expectedType) {
+    return { valid: true }; // No type specified, accept anything
+  }
+  
+  const type = expectedType.split(':')[0].toLowerCase(); // Extract type from "string:required:desc"
+  
+  switch (type) {
+    case 'boolean':
+      if (value !== 'true' && value !== 'false' && value !== '') {
+        return {
+          valid: false,
+          error: `Parameter '${paramName}' expects boolean (true/false), got: ${value}`
+        };
+      }
+      break;
+    case 'number':
+    case 'integer':
+      if (value !== '' && isNaN(Number(value))) {
+        return {
+          valid: false,
+          error: `Parameter '${paramName}' expects number, got: ${value}`
+        };
+      }
+      break;
+    case 'string':
+      // Strings always valid
+      break;
+    default:
+      // Unknown type, accept it
+      break;
+  }
+  
+  return { valid: true };
+}
+
+/**
+ * Deep validation: validate all nested tags within an element
+ */
+async function validateNestedTags(
+  session: DiracSession,
+  element: DiracElement,
+  options: {
+    autocorrect?: boolean;
+    similarityCutoff?: number;
+  } = {}
+): Promise<ValidationResult[]> {
+  const results: ValidationResult[] = [];
+  
+  for (const child of element.children) {
+    if (child.tag && child.tag.trim() !== '') {
+      const result = await validateTag(session, child, options);
+      results.push(result);
+      
+      // Recursively validate children
+      if (child.children && child.children.length > 0) {
+        const nestedResults = await validateNestedTags(session, child, options);
+        results.push(...nestedResults);
+      }
+    }
+  }
+  
+  return results;
+}
+
+/**
  * Validate a single tag element against available subroutines
  */
 export async function validateTag(
@@ -79,9 +153,10 @@ export async function validateTag(
   options: {
     autocorrect?: boolean;
     similarityCutoff?: number;
+    deepValidation?: boolean; // Enable deep validation of nested tags
   } = {}
 ): Promise<ValidationResult> {
-  const { autocorrect = false, similarityCutoff = SIMILARITY_CUTOFF } = options;
+  const { autocorrect = false, similarityCutoff = SIMILARITY_CUTOFF, deepValidation = false } = options;
   
   // Always log validation (not just in debug mode)
   console.error(`[VALIDATE] Tag: <${element.tag}>, autocorrect: ${autocorrect}, attributes:`, Object.keys(element.attributes));
@@ -100,6 +175,8 @@ export async function validateTag(
     errors: [],
     warnings: [],
     attributeCorrections: {},
+    typeErrors: [],
+    nestedValidation: [],
   };
   
   // Check if tag exists
@@ -121,6 +198,12 @@ export async function validateTag(
       
       // Check for unknown attributes and auto-correct if enabled
       for (const attr in element.attributes) {
+        // Skip validation for param-* and meta-* on <subroutine> tag (these are wildcard patterns)
+        if (tagName === 'subroutine' && (attr.startsWith('param-') || attr.startsWith('meta-'))) {
+          console.error(`[VALIDATE] Skipping validation for wildcard attribute '${attr}' on <subroutine>`);
+          continue;
+        }
+        
         if (!paramNames.includes(attr)) {
           console.error(`[VALIDATE] Unknown attribute '${attr}' on <${tagName}>`);
           if (autocorrect && paramNames.length > 0) {
@@ -154,6 +237,31 @@ export async function validateTag(
             }
           } else {
             result.warnings.push(`Unknown attribute: ${attr}`);
+          }
+        }
+      }
+      
+      // Type validation: check if parameter values match expected types
+      for (const attr in element.attributes) {
+        const param = sub.parameters.find(p => p.name === attr);
+        if (param && param.type) {
+          const typeCheck = validateParameterType(attr, element.attributes[attr], param.type);
+          if (!typeCheck.valid && typeCheck.error) {
+            result.typeErrors!.push(typeCheck.error);
+            result.errors.push(typeCheck.error);
+          }
+        }
+      }
+      
+      // Deep validation: if this is a subroutine definition, validate all nested tags
+      if (deepValidation && tagName === 'subroutine' && element.children && element.children.length > 0) {
+        console.error(`[VALIDATE] Deep validation of <subroutine name="${element.attributes.name}">`);
+        result.nestedValidation = await validateNestedTags(session, element, options);
+        
+        // Collect errors from nested validation
+        for (const nestedResult of result.nestedValidation) {
+          if (!nestedResult.valid) {
+            result.warnings.push(`Nested tag <${nestedResult.originalTag}>: ${nestedResult.errors.join(', ')}`);
           }
         }
       }
@@ -229,14 +337,17 @@ export async function validateDiracCode(
   options: {
     autocorrect?: boolean;
     similarityCutoff?: number;
+    deepValidation?: boolean; // Enable deep validation of nested tags
   } = {}
 ): Promise<{
   valid: boolean;
   results: ValidationResult[];
   errorMessages: string[];
+  typeErrors: string[];
 }> {
   const results: ValidationResult[] = [];
   const errorMessages: string[] = [];
+  const typeErrors: string[] = [];
   
   // Recursively validate all elements
   async function validateElement(element: DiracElement) {
@@ -247,6 +358,11 @@ export async function validateDiracCode(
       
       if (!result.valid) {
         errorMessages.push(`<${result.originalTag}>: ${result.errors.join(', ')}`);
+      }
+      
+      // Collect type errors
+      if (result.typeErrors && result.typeErrors.length > 0) {
+        typeErrors.push(...result.typeErrors);
       }
     }
     
@@ -262,6 +378,7 @@ export async function validateDiracCode(
     valid: errorMessages.length === 0,
     results,
     errorMessages,
+    typeErrors,
   };
 }
 
