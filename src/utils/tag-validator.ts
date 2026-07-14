@@ -21,6 +21,7 @@ export interface ValidationResult {
   attributeCorrections?: { [oldAttr: string]: string }; // Map of old attr name -> new attr name
   typeErrors?: string[]; // Type validation errors
   nestedValidation?: ValidationResult[]; // Validation results for nested tags
+  scopeValidation?: import('./scope-validator.js').ScopeValidationResult; // Scope validation for subroutines
 }
 
 // Helper: get embedding server config from config.yml
@@ -116,6 +117,32 @@ function validateParameterType(
 }
 
 /**
+ * Check if attribute value contains invalid XML tags (common LLM mistake)
+ */
+function validateAttributeValue(
+  attrName: string,
+  value: string
+): { valid: boolean; error?: string; warning?: string } {
+  // Check for <variable> tags in attribute values (should use ${} instead)
+  if (value.includes('<variable')) {
+    return {
+      valid: false,
+      error: `Attribute '${attrName}' contains <variable> tag - use \${varname} syntax in attributes instead`,
+    };
+  }
+  
+  // Check for other XML-like tags in attribute values
+  if (/<[a-zA-Z]/.test(value) && !value.includes('${')) {
+    return {
+      valid: false,
+      warning: `Attribute '${attrName}' appears to contain XML tags - attribute values should use \${} syntax for variables`,
+    };
+  }
+  
+  return { valid: true };
+}
+
+/**
  * Deep validation: validate all nested tags within an element
  */
 async function validateNestedTags(
@@ -177,6 +204,7 @@ export async function validateTag(
     attributeCorrections: {},
     typeErrors: [],
     nestedValidation: [],
+    scopeValidation: undefined,
   };
   
   // Check if tag exists
@@ -244,8 +272,20 @@ export async function validateTag(
       // Type validation: check if parameter values match expected types
       for (const attr in element.attributes) {
         const param = sub.parameters.find(p => p.name === attr);
+        const attrValue = element.attributes[attr];
+        
+        // Check for invalid XML tags in attribute values
+        const attrValueCheck = validateAttributeValue(attr, attrValue);
+        if (!attrValueCheck.valid && attrValueCheck.error) {
+          result.errors.push(attrValueCheck.error);
+        }
+        if (attrValueCheck.warning) {
+          result.warnings.push(attrValueCheck.warning);
+        }
+        
+        // Type checking
         if (param && param.type) {
-          const typeCheck = validateParameterType(attr, element.attributes[attr], param.type);
+          const typeCheck = validateParameterType(attr, attrValue, param.type);
           if (!typeCheck.valid && typeCheck.error) {
             result.typeErrors!.push(typeCheck.error);
             result.errors.push(typeCheck.error);
@@ -263,6 +303,29 @@ export async function validateTag(
           if (!nestedResult.valid) {
             result.warnings.push(`Nested tag <${nestedResult.originalTag}>: ${nestedResult.errors.join(', ')}`);
           }
+        }
+        
+        // Scope validation: check parameter and variable references
+        const { validateSubroutineScope } = await import('./scope-validator.js');
+        result.scopeValidation = validateSubroutineScope(element);
+        
+        console.error(`[VALIDATE] Scope validation for <subroutine name="${element.attributes.name}">:`, {
+          errors: result.scopeValidation.errors.length,
+          warnings: result.scopeValidation.warnings.length,
+          undefinedParams: result.scopeValidation.undefinedParameters,
+          undefinedVars: result.scopeValidation.undefinedVariables,
+          unusedParams: result.scopeValidation.unusedParameters,
+          unusedVars: result.scopeValidation.unusedVariables,
+        });
+        
+        // Add scope warnings to main warnings
+        if (result.scopeValidation.warnings.length > 0) {
+          result.warnings.push(...result.scopeValidation.warnings.map(w => `Scope: ${w}`));
+        }
+        
+        // Add scope errors to main errors (if any)
+        if (result.scopeValidation.errors.length > 0) {
+          result.errors.push(...result.scopeValidation.errors.map(e => `Scope: ${e}`));
         }
       }
     }
@@ -349,6 +412,59 @@ export async function validateDiracCode(
   const errorMessages: string[] = [];
   const typeErrors: string[] = [];
   
+  // IMPORTANT: Extract subroutine names defined in this AST so we can validate calls to them
+  const localSubroutineNames = new Set<string>();
+  const localSubroutineElements = new Map<string, DiracElement>();
+  function extractLocalSubroutines(element: DiracElement) {
+    if (element.tag === 'subroutine' && element.attributes.name) {
+      localSubroutineNames.add(element.attributes.name);
+      localSubroutineElements.set(element.attributes.name, element);
+    }
+    for (const child of element.children) {
+      extractLocalSubroutines(child);
+    }
+  }
+  extractLocalSubroutines(ast);
+  
+  if (localSubroutineNames.size > 0) {
+    console.error(`[VALIDATE] Found ${localSubroutineNames.size} local subroutine definitions:`, Array.from(localSubroutineNames));
+  }
+  
+  // Temporarily add local subroutines to session for validation
+  const tempSubroutines: any[] = [];
+  for (const subName of localSubroutineNames) {
+    const subElement = localSubroutineElements.get(subName)!;
+    
+    // Extract parameters from param-* attributes
+    const parameters: any[] = [];
+    for (const attr in subElement.attributes) {
+      if (attr.startsWith('param-')) {
+        const paramName = attr.slice(6); // Remove 'param-' prefix
+        const paramSpec = subElement.attributes[attr];
+        // Parse "type:required|optional:description:example"
+        const parts = paramSpec.split(':');
+        parameters.push({
+          name: paramName,
+          type: parts[0] || 'string',
+          required: parts[1] === 'required',
+          description: parts[2] || '',
+          example: parts[3] || '',
+        });
+      }
+    }
+    
+    console.error(`[VALIDATE] Temp subroutine '${subName}' has ${parameters.length} parameters:`, parameters.map(p => p.name));
+    
+    const tempSub = {
+      name: subName,
+      element: subElement,
+      boundary: session.variables.length,
+      parameters: parameters,
+    };
+    session.subroutines.push(tempSub);
+    tempSubroutines.push(tempSub);
+  }
+  
   // Recursively validate all elements
   async function validateElement(element: DiracElement) {
     // Skip text nodes, whitespace-only tags, and root wrapper tags
@@ -373,6 +489,14 @@ export async function validateDiracCode(
   }
   
   await validateElement(ast);
+  
+  // Remove temporary subroutines from session
+  for (const tempSub of tempSubroutines) {
+    const index = session.subroutines.indexOf(tempSub);
+    if (index > -1) {
+      session.subroutines.splice(index, 1);
+    }
+  }
   
   return {
     valid: errorMessages.length === 0,

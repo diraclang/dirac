@@ -664,6 +664,7 @@ CRITICAL: When defining parameters:
         
         // Track corrections for feedback
         let correctionMessages: string[] = [];
+        let hasTagCorrections = false; // Track if there were actual tag/attribute corrections (not just warnings)
         
         // Only replace triple backtick code blocks if replace-tick="true" is set
         let diracCode = result.trim();
@@ -686,16 +687,20 @@ CRITICAL: When defining parameters:
         
         try {
           // Parse the LLM's output as Dirac code
+          console.error(`[LLM] Iteration ${iteration}: Parsing LLM response`);
           const parser = new DiracParser();
           let dynamicAST = parser.parse(diracCode);
+          console.error(`[LLM] Iteration ${iteration}: Parse successful`);
           
           // Validate tags if requested
           if (validateTags) {
+            console.error(`[LLM] Iteration ${iteration}: Starting validation (autocorrect: ${autocorrect}, deepValidation: true)`);
             if (session.debug) {
               console.error(`[LLM] Validation enabled, autocorrect: ${autocorrect}`);
             }
             const { validateDiracCode, applyCorrectedTags } = await import('../utils/tag-validator.js');
             let validation = await validateDiracCode(session, dynamicAST, { autocorrect, deepValidation: true });
+            console.error(`[LLM] Iteration ${iteration}: Validation complete - valid: ${validation.valid}, errors: ${validation.errorMessages.length}`);
             
             if (session.debug) {
               console.error(`[LLM] Validation result: valid=${validation.valid}, results count=${validation.results.length}`);
@@ -717,10 +722,16 @@ CRITICAL: When defining parameters:
               // Collect all correction/warning messages from FIRST validation
               for (const result of validation.results) {
                 if (result.corrected) {
+                  hasTagCorrections = true; // Mark that we had actual corrections
                   correctionMessages.push(`Auto-corrected: <${result.originalTag}> → <${result.tagName}> (similarity: ${result.similarity?.toFixed(2)})`);
                 }
                 if (result.warnings.length > 0) {
-                  correctionMessages.push(...result.warnings);
+                  // Filter out scope warnings from correction messages (they're informational only)
+                  const nonScopeWarnings = result.warnings.filter(w => !w.startsWith('Scope:'));
+                  if (nonScopeWarnings.length > 0) {
+                    hasTagCorrections = true; // Non-scope warnings are actual issues
+                    correctionMessages.push(...nonScopeWarnings);
+                  }
                 }
               }
               
@@ -740,8 +751,11 @@ CRITICAL: When defining parameters:
             
             let retryCount = 0;
             
+            console.error(`[LLM] Iteration ${iteration}: Entering retry loop (validation.valid: ${validation.valid}, maxRetries: ${maxRetries})`);
+            
             while (!validation.valid && retryCount < maxRetries) {
               retryCount++;
+              console.error(`[LLM] Iteration ${iteration}: Retry ${retryCount}/${maxRetries} - validation failed with errors:`, validation.errorMessages);
               if (session.debug) {
                 console.error(`[LLM] Validation failed (attempt ${retryCount}/${maxRetries}):`, validation.errorMessages);
               }
@@ -813,11 +827,15 @@ CRITICAL: When defining parameters:
             }
             
             if (!validation.valid) {
+              console.error(`[LLM] Iteration ${iteration}: VALIDATION FAILED after ${maxRetries} retries. Throwing error.`);
               throw new Error(`Tag validation failed after ${maxRetries} retries:\n${validation.errorMessages.join('\n')}`);
             }
             
+            console.error(`[LLM] Iteration ${iteration}: Validation passed, checking for corrections (hasTagCorrections: ${hasTagCorrections}, correctionMessages: ${correctionMessages.length})`);
+            
             // Add correction feedback to dialog after all retries (if any corrections were made)
-            if (correctionMessages.length > 0 && feedbackMode) {
+            if (hasTagCorrections && correctionMessages.length > 0 && feedbackMode) {
+              console.error(`[LLM] Iteration ${iteration}: Has tag corrections, preparing feedback (confirmCorrections: ${confirmCorrections})`);
               // Serialize only the children (skip DIRAC-ROOT wrapper and metadata)
               const correctedCodeLines: string[] = [];
               for (const child of dynamicAST.children) {
@@ -898,15 +916,20 @@ CRITICAL: When defining parameters:
             }
           }
           
+          console.error(`[LLM] Iteration ${iteration}: About to execute code`);
+          
           // Execute the validated (and possibly corrected) code
           let executionError: string | null = null;
           try {
+            console.error(`[LLM] Iteration ${iteration}: Calling integrate()`);
             await integrate(session, dynamicAST);
+            console.error(`[LLM] Iteration ${iteration}: integrate() completed successfully`);
           } catch (execError) {
             executionError = execError instanceof Error ? execError.message : String(execError);
+            console.error(`[LLM] Iteration ${iteration}: EXECUTION ERROR: ${executionError}`);
             console.error(`[LLM] Execution error: ${executionError}`);
             
-            // In feedback mode, add execution error to dialog and retry
+            // In feedback mode, add execution error to dialog and get LLM to fix it
             if (feedbackMode && iteration < maxIterations) {
               const errorFeedback = `System: Your code executed but encountered a runtime error:\n${executionError}\n\nPlease fix the error and try again.`;
               dialogHistory.push({ role: 'user', content: errorFeedback });
@@ -918,7 +941,45 @@ CRITICAL: When defining parameters:
                 setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
               }
               
-              // Continue to next iteration (don't dump or check callbacks)
+              // Call LLM to get fixed code
+              if (isOpenAI) {
+                const response = await llmClient.chat.completions.create({
+                  model,
+                  max_tokens: maxTokens,
+                  temperature,
+                  messages: dialogHistory,
+                });
+                result = response.choices[0]?.message?.content || '';
+              } else if (isOllama) {
+                const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
+                result = await llmClient.complete(ollamaPrompt, {
+                  model,
+                  temperature,
+                  max_tokens: maxTokens,
+                });
+              } else if (isCustom) {
+                const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+                result = await llmClient.complete(customPrompt, {
+                  model,
+                  temperature,
+                  max_tokens: maxTokens,
+                  messages: dialogHistory,
+                });
+              } else {
+                result = await callAnthropic(llmClient, model, maxTokens, temperature, dialogHistory);
+              }
+              
+              // Add LLM's response to dialog
+              dialogHistory.push({ role: 'assistant', content: result });
+              
+              // Update dialog variable again with LLM response
+              if (contextVar) {
+                setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
+              } else if (saveDialog) {
+                setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
+              }
+              
+              // Continue to next iteration with new response
               continue;
             } else {
               // Not in feedback mode or max iterations reached, re-throw
@@ -1043,14 +1104,85 @@ CRITICAL: When defining parameters:
           }
           
         } catch (parseError) {
-          // If parsing fails, treat as plain text
-          if (session.debug) {
-            console.error(`[LLM] Failed to parse as Dirac, treating as text: ${parseError}`);
+          console.error(`[LLM] Iteration ${iteration}: ERROR CAUGHT: ${parseError instanceof Error ? parseError.message : String(parseError)}`);
+          
+          // Check if this is a validation error (not XML parse error)
+          const errorMsg = parseError instanceof Error ? parseError.message : String(parseError);
+          const isValidationError = errorMsg.includes('Tag validation failed') || 
+                                    errorMsg.includes('Attribute') || 
+                                    errorMsg.includes('contains <variable> tag');
+          
+          // In feedback mode, send validation errors back to LLM for correction
+          if (isValidationError && feedbackMode && iteration < maxIterations) {
+            console.error(`[LLM] Iteration ${iteration}: VALIDATION ERROR - sending to LLM for correction`);
+            
+            const errorFeedback = `System: Your code had validation errors:\n${errorMsg}\n\nPlease fix these errors and generate valid Dirac XML code. Remember:\n- Use \${varname} syntax in attributes instead of <variable name="..." /> tags\n- Only use allowed tags and attributes`;
+            dialogHistory.push({ role: 'user', content: errorFeedback });
+            
+            // Update dialog variable
+            if (contextVar) {
+              setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
+            } else if (saveDialog) {
+              setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
+            }
+            
+            // Call LLM to get fixed code
+            if (isOpenAI) {
+              const response = await llmClient.chat.completions.create({
+                model,
+                max_tokens: maxTokens,
+                temperature,
+                messages: dialogHistory,
+              });
+              result = response.choices[0]?.message?.content || '';
+            } else if (isOllama) {
+              const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
+              result = await llmClient.complete(ollamaPrompt, {
+                model,
+                temperature,
+                max_tokens: maxTokens,
+              });
+            } else if (isCustom) {
+              const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+              result = await llmClient.complete(customPrompt, {
+                model,
+                temperature,
+                max_tokens: maxTokens,
+                messages: dialogHistory,
+              });
+            } else {
+              result = await callAnthropic(llmClient, model, maxTokens, temperature, dialogHistory);
+            }
+            
+            // Add new response to dialog
+            dialogHistory.push({ role: 'assistant', content: result });
+            
+            // Update dialog variable
+            if (contextVar) {
+              setVariable(session, contextVar, JSON.stringify(dialogHistory), true);
+            } else if (saveDialog) {
+              setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
+            }
+            
+            if (session.debug) {
+              console.error(`[LLM] LLM correction response:\n${result}\n`);
+            }
+            
+            // Continue to next iteration to process the corrected response
+            continue;
+          } else {
+            // Actual parse error or no feedback mode - treat as text
+            console.error(`[LLM] Iteration ${iteration}: PARSE ERROR (or no feedback): ${errorMsg}`);
+            if (session.debug) {
+              console.error(`[LLM] Failed to parse as Dirac, treating as text: ${parseError}`);
+            }
+            emit(session, result);
+            break; // Exit feedback loop
           }
-          emit(session, result);
-          break; // Exit feedback loop on parse error
         }
       } // end while loop
+      
+      console.error(`[LLM] Exited feedback loop after ${iteration} iterations`);
     } else {
       // Otherwise emit to output as text
       emit(session, result);
