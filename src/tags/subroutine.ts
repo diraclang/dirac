@@ -65,6 +65,7 @@ export function executeSubroutine(session: DiracSession, element: DiracElement):
   };
   
   // Pass meta as a field in the subroutine registry, not on the element
+  // Also pass currentFile as sourcePath to track where subroutine came from
   registerSubroutine(
     session,
     name,
@@ -72,6 +73,7 @@ export function executeSubroutine(session: DiracSession, element: DiracElement):
     description,
     parameters.length > 0 ? parameters : undefined,
     Object.keys(meta).length > 0 ? meta : undefined,
-    visible
+    visible,
+    session.currentFile
   );
 }

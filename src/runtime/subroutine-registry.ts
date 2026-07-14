@@ -81,6 +81,9 @@ export class SubroutineRegistry {
   async indexDirectory(dirPath: string): Promise<number> {
     let count = 0;
     
+    // Resolve to absolute path first
+    const absoluteDirPath = path.isAbsolute(dirPath) ? dirPath : path.resolve(process.cwd(), dirPath);
+    
     const scanDir = (dir: string) => {
       const entries = fs.readdirSync(dir, { withFileTypes: true });
       
@@ -95,7 +98,7 @@ export class SubroutineRegistry {
       }
     };
     
-    scanDir(dirPath);
+    scanDir(absoluteDirPath);
     this.saveIndex();
     return count;
   }
@@ -115,6 +118,9 @@ export class SubroutineRegistry {
       // Extract subroutines
       const subroutines = this.extractSubroutines(ast, filePath);
       this.index.subroutines.push(...subroutines);
+      
+      // Persist the updated index to disk
+      this.saveIndex();
       
       return subroutines.length;
     } catch (err) {
@@ -202,17 +208,23 @@ export class SubroutineRegistry {
         // Multi-word token matching
         let tokenMatchCount = 0;
         for (const queryToken of queryTokens) {
+          // Skip very short tokens (like "me", "a", "to") to avoid false matches
+          if (queryToken.length <= 2) {
+            continue;
+          }
+          
           // Match in name tokens
           if (nameTokens.some(nt => nt === queryToken)) {
             score += 40; // Exact token match
             tokenMatchCount++;
-          } else if (nameTokens.some(nt => nt.includes(queryToken))) {
-            score += 20; // Partial token match
+          } else if (nameTokens.some(nt => nt.startsWith(queryToken))) {
+            score += 20; // Prefix match (e.g., "play" matches "player")
             tokenMatchCount++;
           }
           
-          // Match in description
-          if (lowerDesc.includes(queryToken)) {
+          // Match in description (word boundary only)
+          const descWords = lowerDesc.split(/[\s\-_]+/);
+          if (descWords.some(w => w === queryToken || w.startsWith(queryToken))) {
             score += 15;
             tokenMatchCount++;
           }
@@ -223,7 +235,7 @@ export class SubroutineRegistry {
             if (lowerParamName === queryToken) {
               score += 10;
               tokenMatchCount++;
-            } else if (lowerParamName.includes(queryToken)) {
+            } else if (lowerParamName.startsWith(queryToken)) {
               score += 5;
             }
           }
@@ -261,5 +273,38 @@ export class SubroutineRegistry {
       totalFiles: files.size,
       lastUpdated: new Date(this.index.lastUpdated),
     };
+  }
+
+  /**
+   * Auto-index stdlib if index is empty (first run)
+   * Returns true if indexing was performed
+   */
+  async autoIndexStdlib(): Promise<boolean> {
+    // Skip if index already has subroutines
+    if (this.index.subroutines.length > 0) {
+      return false;
+    }
+
+    try {
+      // Try to find dirac-stdlib package
+      const { createRequire } = await import('module');
+      const require = createRequire(import.meta.url);
+      
+      const stdlibPackagePath = require.resolve('dirac-stdlib/package.json');
+      const stdlibLibPath = path.join(path.dirname(stdlibPackagePath), 'lib');
+      
+      if (fs.existsSync(stdlibLibPath)) {
+        console.log('First run detected. Indexing standard library...');
+        const count = await this.indexDirectory(stdlibLibPath);
+        console.log(`Indexed ${count} subroutines from dirac-stdlib`);
+        console.log('You can now use |load-context> to find and load subroutines!\n');
+        return true;
+      }
+    } catch (err) {
+      // dirac-stdlib not found or error - that's okay, just skip
+      // Silently fail - not a critical error
+    }
+    
+    return false;
   }
 }

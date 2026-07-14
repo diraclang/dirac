@@ -11,10 +11,8 @@
 
 import type { DiracSession, DiracElement } from '../types/index.js';
 import { emit } from '../runtime/session.js';
-import { SubroutineRegistry } from '../runtime/subroutine-registry.js';
+import { registry } from './subroutine-index.js';
 import { executeImport } from './import.js';
-
-const registry = new SubroutineRegistry();
 
 export async function executeLoadContext(session: DiracSession, element: DiracElement): Promise<void> {
   // Get query from attribute or text content (like <llm>)

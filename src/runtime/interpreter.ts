@@ -31,12 +31,15 @@ import { executeListSubroutines } from '../tags/list-subroutines.js';
 import { executeIndexSubroutines, executeSearchSubroutines, executeRegistryStats } from '../tags/subroutine-index.js';
 import { executeLoadContext } from '../tags/load-context.js';
 import { executeSaveSubroutine } from '../tags/save-subroutine.js';
+import { executeEditSubroutine } from '../tags/edit-subroutine.js';
 import { executeForeach } from '../tags/foreach.js';
 import { executeBreak } from '../tags/break.js';
 import { executeAttr } from '../tags/attr.js';
 import { executeEnvironment } from '../tags/environment.js';
 import { executeInput } from '../tags/input.js';
 import { executeSchedule } from '../tags/schedule.js';
+import { executeCron } from '../tags/cron.js';
+import { executeRunAt } from '../tags/run-at.js';
 
 export async function integrate(session: DiracSession, element: DiracElement): Promise<void> {
   // Check execution limits
@@ -181,6 +184,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         await executeSaveSubroutine(session, element);
         break;
         
+      case 'edit-subroutine':
+        await executeEditSubroutine(session, element);
+        break;
+        
       case 'foreach':
         await executeForeach(session, element);
         break;
@@ -199,6 +206,14 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'schedule':
         await executeSchedule(session, element);
+        break;
+        
+      case 'cron':
+        await executeCron(session, element);
+        break;
+        
+      case 'run-at':
+        await executeRunAt(session, element);
         break;
 
       case 'require_module':

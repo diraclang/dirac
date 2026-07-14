@@ -2,30 +2,37 @@
  * <save-subroutine> tag - Save a subroutine definition to a file
  * 
  * Usage:
+ *   <save-subroutine name="my-sub" />  <!-- saves to ~/.dirac/lib/TIMESTAMP/my-sub.di -->
  *   <save-subroutine name="my-sub" file="./my-sub.di" />
  *   <save-subroutine name="ai" file="ai.di" format="xml" />
  *   <save-subroutine name="greeting" file="lib/greeting.di" format="braket" />
+ *   <save-subroutine name="greet" path="utils" />  <!-- saves to ~/.dirac/lib/utils/greet.di -->
  * 
  * This extracts a subroutine from the session and writes it to a file
  * in either XML or bra-ket notation.
+ * 
+ * Attributes:
+ *   - name: subroutine name (required)
+ *   - file: explicit file path (optional, uses default if omitted)
+ *   - path: directory name under ~/.dirac/lib/ (optional)
+ *   - format: 'xml' or 'braket' (default: 'xml')
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
 import { emit } from '../runtime/session.js';
-import { writeFileSync, mkdirSync } from 'fs';
-import { resolve, dirname } from 'path';
+import { writeFileSync, mkdirSync, existsSync } from 'fs';
+import { resolve, dirname, join } from 'path';
+import { homedir } from 'os';
+import { registry } from './subroutine-index.js';
 
 export async function executeSaveSubroutine(session: DiracSession, element: DiracElement): Promise<void> {
   const name = element.attributes.name;
   const file = element.attributes.file;
+  const pathAttr = element.attributes.path;
   const format = element.attributes.format || 'xml'; // 'xml' or 'braket'
   
   if (!name) {
     throw new Error('<save-subroutine> requires name attribute');
-  }
-  
-  if (!file) {
-    throw new Error('<save-subroutine> requires file attribute');
   }
   
   // Find the subroutine in the session (get the full object, not just element)
@@ -50,17 +57,59 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
     content = generateXMLNotation(subroutine);
   }
   
-  // Resolve file path (relative to cwd)
-  const filePath = resolve(process.cwd(), file);
+  // Determine file path with simplified logic
+  let filePath: string;
+  
+  if (file) {
+    // Explicit file path (user override)
+    filePath = resolve(process.cwd(), file);
+  } else if (subroutine.sourcePath && existsSync(dirname(subroutine.sourcePath))) {
+    // Use existing sourcePath if available (for edited subroutines)
+    filePath = subroutine.sourcePath;
+  } else if (pathAttr) {
+    // Path is a directory name under ~/.dirac/lib/
+    const targetDir = join(homedir(), '.dirac', 'lib', pathAttr);
+    filePath = join(targetDir, `${name}.di`);
+  } else {
+    // Default: ~/.dirac/lib/user/name.di (canonical location)
+    const defaultDir = join(homedir(), '.dirac', 'lib', 'user');
+    filePath = join(defaultDir, `${name}.di`);
+  }
   
   // Create directory if it doesn't exist
   const dir = dirname(filePath);
-  mkdirSync(dir, { recursive: true });
+  if (!existsSync(dir)) {
+    mkdirSync(dir, { recursive: true });
+  }
   
   // Write to file
   writeFileSync(filePath, content, 'utf-8');
   
   emit(session, `Subroutine '${name}' saved to: ${filePath}\n`);
+  
+  // Update subroutine metadata: clear modified flag and set sourcePath
+  const savedSub = session.subroutines.find(s => s.name === name);
+  if (savedSub) {
+    savedSub.sourcePath = filePath;
+    savedSub.modified = false;
+  }
+  
+  if (session.debug) {
+    console.error(`[save-subroutine] Saved '${name}' to: ${filePath}`);
+  }
+  
+  // Re-index the file to update the subroutine registry
+  try {
+    const count = registry.indexFile(filePath);
+    if (session.debug) {
+      console.error(`[save-subroutine] Re-indexed ${filePath}: ${count} subroutine(s)`);
+    }
+  } catch (error) {
+    // Don't fail if indexing fails, just warn
+    if (session.debug) {
+      console.error(`[save-subroutine] Warning: Failed to re-index: ${error}`);
+    }
+  }
 }
 
 /**

@@ -22,6 +22,7 @@ interface ScheduledTask {
   name: string;
   intervalId: NodeJS.Timeout;
   interval: number;
+  isRunning: boolean;  // Track if task is currently executing
 }
 
 // Global registry of scheduled tasks
@@ -57,14 +58,17 @@ export async function executeSchedule(session: DiracSession, element: DiracEleme
   
   console.log(`[schedule] Starting task "${name}" (every ${intervalSeconds}s)`);
   
+  // Track running state for this task
+  let isRunning = false;
+  
   // Run immediately once
-  executeTask(session, taskElement, name).catch(err => {
+  executeTask(session, taskElement, name, () => isRunning, (value) => { isRunning = value; }).catch(err => {
     console.error(`[schedule] Error in task "${name}":`, err.message);
   });
   
   // Schedule repeated execution
   const intervalId = setInterval(() => {
-    executeTask(session, taskElement, name).catch(err => {
+    executeTask(session, taskElement, name, () => isRunning, (value) => { isRunning = value; }).catch(err => {
       console.error(`[schedule] Error in task "${name}":`, err.message);
     });
   }, intervalMs);
@@ -73,18 +77,34 @@ export async function executeSchedule(session: DiracSession, element: DiracEleme
   scheduledTasks.set(name, {
     name,
     intervalId,
-    interval: intervalSeconds
+    interval: intervalSeconds,
+    isRunning: false
   });
   
   // Don't wait for completion - return immediately (non-blocking)
 }
 
-async function executeTask(session: DiracSession, element: DiracElement, name: string): Promise<void> {
+async function executeTask(
+  session: DiracSession, 
+  element: DiracElement, 
+  name: string,
+  getIsRunning: () => boolean,
+  setIsRunning: (value: boolean) => void
+): Promise<void> {
+  // Skip if previous execution still running
+  if (getIsRunning()) {
+    console.log(`[schedule] Skipping task "${name}" - previous execution still running`);
+    return;
+  }
+  
+  setIsRunning(true);
   try {
     // Execute the children in the current session context
     await integrateChildren(session, element);
   } catch (error: any) {
     console.error(`[schedule] Task "${name}" failed:`, error.message);
+  } finally {
+    setIsRunning(false);
   }
 }
 

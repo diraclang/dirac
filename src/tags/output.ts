@@ -11,6 +11,7 @@ import * as path from 'path';
 
 export async function executeOutput(session: DiracSession, element: DiracElement): Promise<void> {
   const fileAttr = element.attributes?.file;
+  const modeAttr = element.attributes?.mode; // 'append' (default) or 'overwrite'
   const filePath = fileAttr ? substituteAttribute(session, fileAttr) : null;
   
   // If writing to a file, collect content first
@@ -34,8 +35,20 @@ export async function executeOutput(session: DiracSession, element: DiracElement
       fs.mkdirSync(dir, { recursive: true });
     }
     
-    // Append to file
-    fs.appendFileSync(filePath, content + '\n', 'utf8');
+    // Write to file based on mode
+    const mode = modeAttr || 'append';
+    if (mode === 'overwrite') {
+      fs.writeFileSync(filePath, content + '\n', 'utf8');
+      if (session.debug) {
+        console.error(`[OUTPUT] Wrote (overwrite) to ${filePath}: ${content.substring(0, 50)}...`);
+      }
+    } else {
+      // Default: append mode
+      fs.appendFileSync(filePath, content + '\n', 'utf8');
+      if (session.debug) {
+        console.error(`[OUTPUT] Appended to ${filePath}: ${content.substring(0, 50)}...`);
+      }
+    }
     return;
   }
   

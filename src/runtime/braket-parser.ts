@@ -125,16 +125,27 @@ export class BraKetParser {
       return { indent, type: 'empty', raw };
     }
 
+    // Comment line (starts with #)
+    if (content.startsWith('#')) {
+      return { indent, type: 'empty', raw };
+    }
+
     // Bra: <name| or <name attrs|
-    const braMatch = content.match(/^<([a-zA-Z_][a-zA-Z0-9_-]*)\s*([^|]*)\|$/);
-    if (braMatch) {
-      return {
-        indent,
-        type: 'bra',
-        tag: braMatch[1],
-        attrs: braMatch[2].trim() || undefined,
-        raw
-      };
+    // Need to handle | inside quoted strings, so we can't use [^|]*
+    // Match: <tagname ... | where ... can contain quoted strings with |
+    if (content.startsWith('<') && content.endsWith('|')) {
+      const tagMatch = content.match(/^<([a-zA-Z_][a-zA-Z0-9_-]*)\s*/);
+      if (tagMatch) {
+        const tagName = tagMatch[1];
+        const afterTag = content.substring(tagMatch[0].length, content.length - 1); // Remove trailing |
+        return {
+          indent,
+          type: 'bra',
+          tag: tagName,
+          attrs: afterTag.trim() || undefined,
+          raw
+        };
+      }
     }
 
     // Ket: |tag> or |tag attrs> or |tag>text

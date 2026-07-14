@@ -1,0 +1,1626 @@
+\documentclass[11pt,a4paper]{article}
+
+% Packages
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{braket}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage{booktabs}
+\usepackage{geometry}
+\usepackage{cite}
+
+% Page geometry
+\geometry{
+  a4paper,
+  left=25mm,
+  right=25mm,
+  top=25mm,
+  bottom=25mm
+}
+
+% Hyperref setup
+\hypersetup{
+    colorlinks=true,
+    linkcolor=blue,
+    citecolor=blue,
+    urlcolor=blue,
+}
+
+% Code listing setup
+\lstset{
+    basicstyle=\ttfamily\small,
+    breaklines=true,
+    frame=single,
+    numbers=left,
+    numberstyle=\tiny,
+    backgroundcolor=\color{gray!10},
+    keywordstyle=\color{blue},
+    commentstyle=\color{green!60!black},
+    stringstyle=\color{red!80!black},
+}
+
+% Theorem environments
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{lemma}[theorem]{Lemma}
+\newtheorem{corollary}[theorem]{Corollary}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+
+% Title and authors
+\title{\textbf{Bra-Ket Duality: Unifying Symbolic and Neural Computation Through Dirac Notation}}
+
+\author{
+Zhi Wang, Thomas Wang\\
+\textit{Diraclang}\\
+}
+
+\date{}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+We demonstrate that symbolic computation (function invocation, pattern matching) and neural computation (transformer attention, vector operations) are not merely analogous but mathematically identical under bra-ket notation from quantum mechanics. The key insight is that both paradigms perform inner product operations to determine computational actions: symbolic systems use discrete metrics (exact name matching), while neural systems use continuous metrics (cosine similarity). We prove that symbolic tag-checking is equivalent to a single-layer neural network in the limit of zero temperature, and show that transformer attention is literally a bra-ket operator with the sandwich structure $M_1 \ket{o}\bra{o} M_2 \ket{x}$, where $\ket{o}\bra{o}$ represents self-projection over context tokens. A key contribution is identifying that parameters in symbolic expressions (e.g., $\ket{\text{action param=value}}$) correspond to context mixing through vector addition in neural networks---the continuous analog of discrete parameter binding. This unification explains why large language models can successfully perform tool-calling and symbolic reasoning: they implement differentiable versions of traditional symbolic dispatch mechanisms. We introduce DIRAC, a practical programming language that seamlessly integrates both computational paradigms, demonstrating that the theoretical unification has concrete engineering applications. Our work provides a mathematical foundation for hybrid symbolic-neural architectures and addresses critiques about the limitations of pure neural approaches by showing how system-level intelligence emerges from their composition.
+\end{abstract}
+
+\textbf{Keywords:} bra-ket notation, symbolic computation, neural networks, transformer attention, quantum mechanics, unified computing paradigm
+
+\section{Introduction: A Simple Example}
+
+\subsection{The Aristotle Syllogism}
+
+Let's start with the most famous example in logic:
+
+\begin{quote}
+\textbf{All humans are mortal}\\
+\textbf{Socrates is human}\\
+\textbf{Therefore, Socrates is mortal}
+\end{quote}
+
+How would you implement this reasoning in code?
+
+\textbf{Traditional approach (symbolic):}
+\begin{lstlisting}[language=Python]
+# Define facts as chained rules
+rules = {
+    'human': 'mortal',
+    'Socrates': 'human'
+}
+
+# Chain lookup through rules
+def what_is(entity):
+    if entity in rules:
+        return what_is(rules[entity])  # Recursive chain
+    return entity
+
+# Chains: Socrates -> human -> mortal
+print(what_is('Socrates'))  # Output: mortal
+\end{lstlisting}
+
+This recursively follows the chain: ``Socrates'' $\to$ ``human'' $\to$ ``mortal'', stopping when no more rules apply. It works through exact dictionary lookup.
+
+\textbf{Neural network approach:}
+Train a model on examples like ``Socrates $\to$ mortal'', ``Plato $\to$ mortal'', etc. The network learns associations through continuous vector representations.
+
+\textbf{Our insight:} These are the same operation, just with different ``similarity metrics''!
+
+\subsection{The Bra-Ket Formulation}
+
+In quantum mechanics notation (bra-ket), we can write:
+
+\textbf{Symbolic version:}
+\begin{itemize}
+\item ``All humans are mortal'' = $\ket{\text{mortal}}\bra{\text{human}}$ (an operator)
+\item ``Socrates is human'' = $\ket{\text{human}}\bra{\text{Socrates}}$ (another operator)
+\end{itemize}
+
+Chain them together:
+\begin{equation}
+\ket{\text{mortal}}\bra{\text{human}} \cdot \ket{\text{human}}\bra{\text{Socrates}} \cdot \ket{\text{Socrates}}
+\end{equation}
+
+The middle parts cancel (like ``human'' appears in both bra and ket):
+\begin{equation}
+\ket{\text{mortal}} \underbrace{\braket{\text{human}|\text{human}}}_{=1} \braket{\text{Socrates}|\text{Socrates}} = \ket{\text{mortal}}
+\end{equation}
+
+\textbf{Neural version:}
+Same mathematical structure, but now consider learned embeddings $\ket{\text{human}_{\text{emb}}}$ and $\ket{\text{Socrates}_{\text{emb}}}$. The inner product $\braket{\text{human}_{\text{emb}}|\text{Socrates}_{\text{emb}}}$ might be 0.85 (high similarity, since Socrates is human) rather than exact 1. The network computes:
+\begin{equation}
+\ket{\text{mortal}}\bra{\text{human}_{\text{emb}}} \cdot \ket{\text{human}_{\text{emb}}}\bra{\text{Socrates}_{\text{emb}}} \cdot \ket{\text{Socrates}_{\text{emb}}}
+\end{equation}
+
+where each inner product is a \textbf{similarity score} instead of exact match.
+
+\subsection{Why This Matters}
+
+This simple example reveals something profound:
+
+\begin{center}
+\textbf{Symbolic reasoning} = Function lookup with exact matching\\
+\textbf{Neural reasoning} = Function lookup with similarity matching\\
+\textbf{Same mathematical structure!}
+\end{center}
+
+The bra-ket notation makes this visible. Both systems:
+\begin{enumerate}
+\item Have ``operators'' (functions/rules) of the form $\ket{\text{output}}\bra{\text{input}}$
+\item Use inner products $\braket{\text{pattern}|\text{query}}$ to check matches
+\item Chain operators to perform multi-step reasoning
+\end{enumerate}
+
+The only difference:
+\begin{itemize}
+\item \textbf{Symbolic:} $\braket{\text{pattern}|\text{query}} \in \{0, 1\}$ (discrete, exact)
+\item \textbf{Neural:} $\braket{\text{pattern}|\text{query}} \in [0, 1]$ (continuous, fuzzy)
+\end{itemize}
+
+This explains why LLMs can do function calling and tool use---they're implementing differentiable versions of symbolic dispatch!
+
+\subsection{The Broader Context}
+
+For decades, AI research has oscillated between two paradigms:
+
+\textbf{Symbolic AI} (dominant 1950s-1980s, resurgent in modern tool-use): Logic-based reasoning, explicit rules, theorem proving---interpretable but brittle
+
+\textbf{Neural AI} (explored since 1940s, dominant 1990s-present): Learned representations, gradient descent, continuous optimization---flexible but opaque
+
+These approaches have always coexisted, with one dominating mainstream research while the other survived on the fringe. The perceptron (1958) and early neural networks existed during symbolic AI's ``golden age,'' just as expert systems and logic programming continued during the neural network revival (sparked by backpropagation's popularization in 1986).
+
+The rise of large language models raises a deeper question: LLMs perform tasks like tool-calling and multi-step reasoning despite being ``merely'' neural networks trained on text. While most researchers distinguish this from traditional symbolic AI (knowledge graphs, frames, formal logic), examining the mathematical structure reveals something surprising. \textbf{Both symbolic knowledge representation and neural networks share the same underlying structure---tensor operations that can be expressed as bra-ket inner products.}
+
+Our thesis: \textbf{Knowledge representation (whether symbolic or neural), function dispatch, and attention mechanisms all use the same mathematical operation}---inner products to match patterns and select/combine results. The traditional ``symbolic vs. neural'' divide is really about discrete vs. continuous similarity metrics, not fundamentally different computation.
+
+\subsection{The Bra-Ket Insight}
+
+Our central thesis: \textbf{Symbolic and neural computation share the same mathematical structure---bra-ket inner products from quantum mechanics.}
+
+In quantum mechanics, bra-ket notation provides an elegant way to express:
+\begin{itemize}
+\item States as vectors: $\ket{\psi}$ (ket)
+\item Dual vectors: $\bra{\phi}$ (bra)
+\item Inner products: $\braket{\phi|\psi}$ (projection/measurement)
+\item Operators: $\ket{\psi}\bra{\phi}$ (outer product)
+\end{itemize}
+
+We show that:
+\begin{itemize}
+\item \textbf{Symbolic function lookup} = $\braket{\text{def}|\text{call}}$ with discrete metric
+\item \textbf{Neural attention} = $\sum_i \ket{v_i} \braket{k_i|q_j}$ with continuous metric
+\item \textbf{Both are inner products} differing only in metric space and selection mechanism
+\end{itemize}
+
+This is not metaphor---it's mathematical identity.
+
+\subsection{A Concrete Example: Function Calls}
+
+Let's see this with something familiar---calling a function:
+
+\textbf{Symbolic (Python):}
+\begin{lstlisting}[language=Python]
+def greet(name):
+    return f"Hello, {name}!"
+
+result = greet("Alice")  # Output: "Hello, Alice!"
+\end{lstlisting}
+
+\textbf{Bra-ket form:}
+\begin{itemize}
+\item Pattern (bra): $\bra{\text{greet name}}$ matches calls to ``greet'' with any name parameter
+\item Action (ket): output template that produces ``Hello, [name]''
+\item Function call: $\ket{\text{greet Alice}}$
+\item Matching: 
+\begin{equation}
+\braket{\text{greet name}|\text{greet Alice}} = 1 \text{ (exact match with binding: name} \mapsto \text{Alice)}
+\end{equation}
+\item Result: ``Hello, Alice!'' (text output from template)
+\end{itemize}
+
+\textbf{Neural (Transformer Attention):}
+
+Imagine the model has seen training examples:
+\begin{itemize}
+\item ``greet Alice'' $\to$ ``Hello, Alice!''
+\item ``greet Bob'' $\to$ ``Hello, Bob!''
+\end{itemize}
+
+When given input ``greet Carol'', the attention mechanism:
+\begin{enumerate}
+\item Computes similarity: query ``greet Carol'' vs keys [``greet Alice'', ``greet Bob'']
+\item Gets high scores (cosine similarity $\approx$ 0.9 for both)
+\item Returns weighted average of values [``Hello, Alice!'', ``Hello, Bob!'']
+\item Produces ``Hello, Carol!''
+\end{enumerate}
+
+\textbf{Same structure:} 
+\begin{equation}
+\sum_i \ket{\text{value}_i} \braket{\text{key}_i|\text{query}}
+\end{equation}
+
+The transformer is doing \textbf{soft function dispatch}---looking up similar patterns instead of exact matches!
+
+\subsection{Side-by-Side Comparison}
+
+Here's the key insight in table form:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{llll}
+\toprule
+\textbf{Aspect} & \textbf{Symbolic (Python)} & \textbf{Neural (Transformer)} & \textbf{Bra-Ket Form} \\
+\midrule
+\textbf{Data} & Function name: ``greet'' & Word embedding: [0.2, -0.5, ...] & Vector $\ket{\text{greet}}$ \\
+\textbf{Match} & Exact string comparison & Cosine similarity & Inner product $\braket{\text{key}|\text{query}}$ \\
+\textbf{Result} & 0 or 1 (binary) & 0.0 to 1.0 (continuous) & Real number \\
+\textbf{Selection} & Single match wins & Weighted average of all & $\sum_i \text{weight}_i \cdot \text{value}_i$ \\
+\textbf{Operator} & Function definition & Attention weights & $\ket{\text{value}}\bra{\text{key}}$ \\
+\bottomrule
+\end{tabular}
+\caption{Comparison of symbolic, neural, and bra-ket representations}
+\end{table}
+
+\textbf{The punchline:} Both columns use the same mathematical operation---bra-ket inner products---just with different metrics!
+
+\textbf{This explains:}
+\begin{itemize}
+\item Why LLMs can call functions and use tools (soft dispatch)
+\item Why fine-tuning works (adjusting similarity metrics)
+\item Why prompting works (changing query vectors)
+\item Why retrieval-augmented generation works (adding more key-value pairs)
+\end{itemize}
+
+\subsection{Why This Matters}
+
+Understanding this equivalence has profound implications:
+
+\begin{enumerate}
+\item \textbf{Theoretical:} Symbolic AI is a special case of neural networks (discrete limit)
+\item \textbf{Practical:} Hybrid systems can seamlessly compose both paradigms
+\item \textbf{Engineering:} We can design languages that unify symbolic and neural operations
+\item \textbf{Explanatory:} This is why LLMs can use tools---they're doing differentiable function lookup!
+\end{enumerate}
+
+\subsection{Contributions}
+
+This paper makes the following contributions:
+
+\begin{enumerate}
+\item \textbf{Intuitive examples:} Step-by-step walkthrough of Aristotle's syllogism and function calls showing identical mathematical structure in symbolic and neural systems
+
+\item \textbf{Mathematical unification:} Formal proof that symbolic tag-checking equals a single-layer neural network with discrete metric (Theorem~\ref{thm:equivalence})
+
+\item \textbf{Compact attention notation:} Derivation showing transformer attention has sandwich structure $M_1 \ket{o}\bra{o} M_2 \ket{x}$ where self-projection $\ket{o}\bra{o}$ acts as ``memory''
+
+\item \textbf{Practical demonstration:} DIRAC programming language implementing symbolic-neural integration with bra-ket syntax
+
+\item \textbf{Architectural framework:} Guidelines for building hybrid systems that preserve differentiability while enabling symbolic control
+\end{enumerate}
+
+\subsection{Paper Organization}
+
+We structure this paper to build from concrete examples to formal theory:
+
+\begin{itemize}
+\item \textbf{Section 1 (This section):} Simple examples showing the core insight---Aristotle's syllogism and function calls in both symbolic and neural forms
+
+\item \textbf{Section 2:} Symbolic computation formalized---how function calls, pattern matching, and composition work in bra-ket form
+
+\item \textbf{Section 3:} Neural computation formalized---deriving the compact sandwich form $M_1 \ket{o}\bra{o} M_2 \ket{x}$ for transformer attention
+
+\item \textbf{Section 4:} Core equivalence theorem---proof that symbolic = discrete limit of neural, with duality table
+
+\item \textbf{Section 5:} DIRAC language---practical demonstration of symbolic-neural integration
+
+\item \textbf{Section 6:} Related work---positioning relative to symbolic AI, neural networks, and hybrid systems
+
+\item \textbf{Section 7:} Discussion and future directions---implications, limitations, and open questions
+
+\item \textbf{Appendix A:} Mathematical preliminaries on bra-ket notation for readers unfamiliar with quantum mechanics formalism
+\end{itemize}
+
+\textbf{Reading guide:} If you want intuition, read Sections 1, 2, 3, and 5. If you want formal proofs, focus on Sections 3, 4, and Appendix A.
+
+\section{Symbolic Computation as Bra-Ket Operations}
+
+For readers unfamiliar with bra-ket notation, see Appendix A for mathematical background. Here we use it intuitively: $\ket{x}$ is a vector (ket), $\bra{y}$ is a dual vector (bra), and $\braket{y|x}$ is their inner product (a number measuring similarity).
+
+\subsection{Function Invocation as Inner Product}
+
+Consider a function definition:
+\begin{lstlisting}[language=Python]
+def greet(name):
+    return f"Hello, {name}!"
+\end{lstlisting}
+
+In traditional notation:
+\begin{itemize}
+\item \textbf{Definition signature:} \texttt{greet(name)} --- the pattern to match
+\item \textbf{Function body:} \texttt{f"Hello, \{name\}!"} --- the action to perform
+\item \textbf{Function call:} \texttt{greet("Alice")} --- the invocation
+\end{itemize}
+
+\textbf{Bra-ket formulation:}
+
+Define:
+\begin{itemize}
+\item $\ket{\text{action}}$ = function body (what to execute)
+\item $\bra{\text{pattern}}$ = function signature (what to match)
+\item $\ket{\text{call}}$ = invocation (input)
+\end{itemize}
+
+The function lookup process:
+\begin{equation}
+\text{match} = \braket{\text{pattern}|\text{call}}
+\end{equation}
+
+If match succeeds (equals 1 in discrete metric):
+\begin{equation}
+\text{result} = \ket{\text{action}}
+\end{equation}
+
+\textbf{Example:} For calling \texttt{greet} with ``Alice'':
+\begin{itemize}
+\item $\ket{\text{call}} = \ket{\text{greet Alice}}$
+\item $\bra{\text{pattern}} = \bra{\text{greet name}}$
+\item $\braket{\text{pattern}|\text{call}} = 1$ (exact match on function name, binding: name $\mapsto$ Alice)
+\item Execute $\ket{\text{action}}$ (output template) $\to$ returns: ``Hello, Alice!'' (text output)
+\end{itemize}
+
+\subsection{Multiple Function Dispatch}
+
+With multiple function definitions:
+
+\begin{equation}
+\text{output} = \sum_i \ket{\text{action}_i} \cdot \theta(\braket{\text{pattern}_i|\text{call}} - 1)
+\end{equation}
+
+where $\theta(x)$ is the Heaviside step function: $\theta(x) = 1$ if $x \geq 0$, else $0$.
+
+\textbf{Important:} In real symbolic systems, at most \textbf{one} pattern matches exactly, so only one term in the sum is non-zero:
+\begin{itemize}
+\item Each $\braket{\text{pattern}_i|\text{call}}$ checks one function signature
+\item For exact matching (discrete metric), $\braket{\text{pattern}_i|\text{call}} \in \{0, 1\}$
+\item Typically only one $i$ has $\braket{\text{pattern}_i|\text{call}} = 1$, others are 0
+\item The sum notation represents ``check all definitions, return the one that matches''
+\item If multiple patterns match, this indicates ambiguity (usually an error in symbolic systems)
+\end{itemize}
+
+The summation form in equation (2.3) is written to \textbf{parallel the neural case} (equation 4.2), where multiple patterns can have non-zero similarity scores and contribute to a weighted output. In symbolic AI, the sum degenerates to a single term.
+
+\textbf{Discrete metric:} The inner product $\braket{\text{pattern}|\text{call}}$ uses discrete matching:
+\begin{itemize}
+\item $1$ if names and argument types match exactly
+\item $0$ otherwise
+\end{itemize}
+
+\subsection{Pattern Matching with Parameters}
+
+In DIRAC/DISH, a single pattern can match multiple inputs by binding parameters:
+
+\textbf{DIRAC definition:}
+\begin{lstlisting}
+<greet time|
+  |output> Good |variable name=time>
+\end{lstlisting}
+
+\textbf{Bra-ket representation:}
+\begin{itemize}
+\item $\bra{\text{pattern}} = \bra{\text{greet time}}$ (matches any call to ``greet'' with a time parameter)
+\item $\ket{\text{action}}$ = template that outputs ``Good [time]''
+\end{itemize}
+
+For input $\ket{\text{greet morning}}$:
+\begin{equation}
+\braket{\text{greet time}|\text{greet morning}} = 1 \quad \text{with binding: time} \mapsto \text{``morning''}
+\end{equation}
+
+Returns: ``Good morning'' (text output, not a ket)
+
+For input $\ket{\text{greet evening}}$:
+\begin{equation}
+\braket{\text{greet time}|\text{greet evening}} = 1 \quad \text{with binding: time} \mapsto \text{``evening''}
+\end{equation}
+
+Returns: ``Good evening'' (text output, not a ket)
+
+The pattern $\bra{\text{greet time}}$ matches any call of the form $\ket{\text{greet X}}$, binding the parameter to create the appropriate output. The \texttt{|output>} action produces final text, not another ket for further processing.
+
+\subsection{Chaining Subroutine Calls}
+
+When a subroutine's body contains another ket (not \texttt{|output>}), it chains to call that subroutine. This naturally arises from the bra-ket operator structure.
+
+\textbf{Example:} The Aristotle syllogism from Section 1:
+
+\begin{lstlisting}
+<Socrates|
+  |human>
+
+<human|
+  |mortal>
+
+<mortal|
+  |output> All things must end.
+\end{lstlisting}
+
+Calling $\ket{\text{Socrates}}$ triggers a chain:
+
+\begin{equation}
+\ket{\text{mortal}}\bra{\text{human}} \cdot \ket{\text{human}}\bra{\text{Socrates}} \cdot \ket{\text{Socrates}}
+\end{equation}
+
+\textbf{Step-by-step execution:}
+\begin{enumerate}
+\item $\braket{\text{Socrates}|\text{Socrates}} = 1$ $\to$ pattern matches
+\item Execute body: $\ket{\text{human}}$ (another ket, so continue chaining)
+\item $\braket{\text{human}|\text{human}} = 1$ $\to$ pattern matches
+\item Execute body: $\ket{\text{mortal}}$ (another ket, so continue chaining)
+\item $\braket{\text{mortal}|\text{mortal}} = 1$ $\to$ pattern matches
+\item Execute body: \texttt{|output>} $\to$ produces final text: ``All things must end.''
+\end{enumerate}
+
+The inner products $\braket{\text{human}|\text{human}}$ and $\braket{\text{mortal}|\text{mortal}}$ both equal 1, so the operators compose seamlessly. This is \textbf{operator composition}---the mathematical structure underlying subroutine chaining.
+
+\subsection{Symbolic Summary}
+
+\textbf{Key insight:} Symbolic computation uses:
+\begin{itemize}
+\item \textbf{Discrete inner products} for pattern matching
+\item \textbf{Exact matching} (0 or 1)
+\item \textbf{Winner-take-all} selection
+\item \textbf{Compositional operators} for chaining
+\end{itemize}
+
+Next, we show neural computation uses the same structure with continuous metrics.
+
+\section{Neural Computation as Bra-Ket Operations}
+
+\subsection{Neural Networks as Weighted Sums}
+
+Consider a single-layer neural network:
+\begin{equation}
+y = \sigma(Wx + b)
+\end{equation}
+
+where $W$ is an $m \times n$ weight matrix, $x$ is an $n$-dimensional input vector, $b$ is an $m$-dimensional bias vector, and $\sigma$ is activation function applied element-wise.
+
+\textbf{Bra-ket formulation:}
+
+The matrix $W$ has rows $\bra{w_i}$ for $i = 1, \ldots, m$. The matrix-vector product $Wx$ gives a vector with components:
+\begin{equation}
+(Wx)_i = \braket{w_i|x}
+\end{equation}
+
+So the $i$-th output component is:
+\begin{equation}
+y_i = \sigma\left(\braket{w_i|x} + b_i\right)
+\end{equation}
+
+The full output vector is:
+\begin{equation}
+\ket{y} = \sigma(W\ket{x} + \ket{b})
+\end{equation}
+
+We can also write this as a sum over basis vectors $\ket{\alpha_i}$ (the $i$-th standard basis vector or eigenvector of the output space):
+\begin{equation}
+\ket{y} = \sum_i y_i \ket{\alpha_i} = \sum_i \sigma\left(\braket{w_i|x} + b_i\right) \ket{\alpha_i}
+\end{equation}
+
+\textbf{Compare to symbolic:}
+\begin{align}
+\text{symbolic} &= \sum_i \ket{\alpha_i} \cdot \theta(\braket{\text{pattern}_i|x} - 1) \\
+\text{neural} &= \sum_i \ket{\alpha_i} \cdot \sigma(\braket{w_i|x} + b_i)
+\end{align}
+
+The structures are identical! The only differences:
+\begin{itemize}
+\item Symbolic: discrete metric, step function $\theta$ (hard selection at threshold = 1)
+\item Neural: continuous metric, sigmoid $\sigma$ (soft selection)
+\end{itemize}
+
+\subsection{Transformer Attention: The Central Mechanism}
+
+Transformer attention is the cornerstone of modern AI. We now show it's literally a bra-ket operator.
+
+\subsubsection{Standard Attention Definition}
+
+For a sequence of token embeddings $\{\ket{o_i}\}_{i=1}^n$:
+
+\textbf{Projections:}
+\begin{itemize}
+\item Query: $\ket{q_j} = M_q \ket{o_j}$
+\item Keys: $\ket{k_i} = M_k \ket{o_i}$
+\item Values: $\ket{v_i} = M_v \ket{o_i}$
+\end{itemize}
+
+where $M_q, M_k, M_v$ are learned projection matrices.
+
+\textbf{Attention output:}
+\begin{equation}
+\text{output}_j = \sum_i \alpha_{ij} \ket{v_i}
+\end{equation}
+
+where attention weights:
+\begin{equation}
+\alpha_{ij} = \frac{\exp(\braket{k_i|q_j} / \sqrt{d})}{\sum_{i'} \exp(\braket{k_{i'}|q_j} / \sqrt{d})}
+\end{equation}
+
+\subsubsection{Operator Formulation}
+
+Rewrite as:
+\begin{equation}
+\text{output}_j = \sum_i \ket{v_i} \braket{k_i|q_j}
+\end{equation}
+
+Factor out the query:
+\begin{equation}
+\text{output}_j = \left(\sum_i \ket{v_i} \bra{k_i}\right) \ket{q_j}
+\end{equation}
+
+\textbf{Key insight:} $\sum_i \ket{v_i} \bra{k_i}$ is a \textbf{linear operator} built from context tokens!
+
+This operator:
+\begin{itemize}
+\item Takes query $\ket{q_j}$ as input
+\item Projects onto each key direction $\bra{k_i}$
+\item Returns weighted sum of values $\ket{v_i}$
+\end{itemize}
+
+\subsubsection{Compact Sandwich Form}
+
+Now substitute the definitions of keys, values, and queries:
+\begin{equation}
+\sum_i \ket{v_i} \bra{k_i} = \sum_i (M_v \ket{o_i})(\bra{o_i} M_k^T)
+\end{equation}
+
+Factor out matrices:
+\begin{equation}
+= M_v \left(\sum_i \ket{o_i}\bra{o_i}\right) M_k^T
+\end{equation}
+
+Define the \textbf{self-projection operator}:
+\begin{equation}
+P = \sum_i \ket{o_i}\bra{o_i}
+\end{equation}
+
+This projects onto the subspace spanned by all token embeddings---it's the ``memory'' of all context.
+
+Then:
+\begin{equation}
+\sum_i \ket{v_i} \bra{k_i} = M_v \, P \, M_k^T
+\end{equation}
+
+And the full attention output:
+\begin{equation}
+\text{output}_j = M_v \, P \, M_k^T M_q \ket{o_j}
+\end{equation}
+
+\textbf{Final compact form:} Define $M_1 = M_v$ and $M_2 = M_k^T M_q$:
+
+\begin{equation}
+\boxed{\text{output}_j = M_1 \ket{o}\bra{o} M_2 \ket{x}}
+\end{equation}
+
+where $\ket{x} = \ket{o_j}$ is the input token.
+
+\subsubsection{Interpretation of Sandwich Structure}
+
+The operator $M_1 \, P \, M_2$ has clear semantics:
+
+\begin{enumerate}
+\item \textbf{$M_2$ transforms input:} Projects $\ket{x}$ into ``query space''---formulates the question
+
+\item \textbf{$P = \ket{o}\bra{o}$ performs lookup:} Self-projection over context tokens---searches memory
+
+\item \textbf{$M_1$ transforms output:} Projects matched results into ``answer space''---interprets response
+\end{enumerate}
+
+\textbf{Physical analogy:}
+\begin{itemize}
+\item $M_2$: Asking a question
+\item $P$: Looking up answers in a book (context)
+\item $M_1$: Interpreting what you found
+\end{itemize}
+
+\textbf{Symbolic parallel:}
+\begin{itemize}
+\item DIRAC function call: Discrete lookup ($\braket{\text{def}|\text{call}} = 0$ or $1$)
+\item Transformer attention: Continuous lookup ($\braket{k_i|q_j} \in [0,1]$ after softmax)
+\item \textbf{Same mathematical structure:} Inner product determines action
+\end{itemize}
+
+\subsection{Why This Matters}
+
+The sandwich form $M_1 \ket{o}\bra{o} M_2 \ket{x}$ reveals:
+
+\begin{enumerate}
+\item \textbf{Attention is function dispatch:} The self-projection $P$ acts like a dictionary/database of available functions
+
+\item \textbf{Differentiability:} Unlike symbolic systems, every component is differentiable---enabling gradient-based learning
+
+\item \textbf{Soft selection:} Instead of winner-take-all, attention weights all matches---more robust to noise
+
+\item \textbf{Memory mechanism:} $P = \sum_i \ket{o_i}\bra{o_i}$ explicitly represents ``what's available in context''
+\end{enumerate}
+
+\subsection{Concrete Example: Knowledge Representation}
+
+To make this concrete, consider a classic knowledge representation problem with IS-A and HAS-A relationships.
+
+\textbf{Knowledge base:}
+\begin{enumerate}
+\item \textbf{IS-A relationship:} ``Zhi is Asian'' $\to$ $\ket{\text{Asian}}\bra{\text{Zhi}}$
+\item \textbf{HAS-A relationship:} ``Asians have black hair'' $\to$ $\ket{\text{black}}\bra{\text{hair}}\bra{\text{Asian}}$ (a tensor with two bras)
+\end{enumerate}
+
+\textbf{Query:} ``What is Zhi's hair color?''
+
+\textbf{Symbolic reasoning:}
+
+Apply the IS-A relationship first:
+\begin{equation}
+\ket{\text{Asian}}\bra{\text{Zhi}}\ket{\text{Zhi}} = \ket{\text{Asian}} \cdot 1 = \ket{\text{Asian}}
+\end{equation}
+
+Now apply the HAS-A relationship:
+\begin{equation}
+\ket{\text{black}}\bra{\text{hair}}\bra{\text{Asian}}\ket{\text{Asian}} = \ket{\text{black}}\bra{\text{hair}} \cdot 1
+\end{equation}
+
+Finally, query with ``hair'':
+\begin{equation}
+\ket{\text{black}}\bra{\text{hair}}\ket{\text{hair}} = \ket{\text{black}} \cdot 1 = \ket{\text{black}}
+\end{equation}
+
+\textbf{Answer:} Black
+
+\textbf{Neural analog:}
+
+In a neural network, the same relationships are represented with continuous similarities:
+\begin{itemize}
+\item IS-A: $\braket{\text{Asian embedding}|\text{Zhi embedding}} \approx 0.9$ (high similarity)
+\item HAS-A: $\bra{\text{hair}}\bra{\text{Asian}}\ket{\text{query}}$ computes attention over the knowledge base
+\end{itemize}
+
+The transformer attention mechanism implements exactly this multi-hop reasoning:
+\begin{enumerate}
+\item First hop: $\ket{\text{Zhi}}$ attends to $\ket{\text{Asian}}$ (via IS-A similarity)
+\item Second hop: $\ket{\text{Asian}}$ attends to $\ket{\text{black hair}}$ (via HAS-A similarity)
+\item Final output: Context-enriched $\ket{\text{color}'}$ encoding ``Zhi's hair is black''
+\end{enumerate}
+
+\textbf{Key insight:} The tensor structure $\ket{\text{black}}\bra{\text{hair}}\bra{\text{Asian}}$ in symbolic KR is identical to the multi-head attention structure in transformers---both represent multi-way relationships through nested bra-ket products.
+
+\section{The Mathematical Duality: Core Theorem}
+
+\subsection{Formal Equivalence Statement}
+
+\begin{theorem}[Symbolic-Neural Equivalence]
+\label{thm:equivalence}
+Let $\{\ket{\alpha_i}, \bra{\beta_i}\}_{i=1}^n$ be a set of action-pattern pairs (function definitions).
+
+\textbf{Symbolic system:} For input $\ket{x}$, select $\ket{\alpha_i}$ if $\braket{\beta_i|x} = 1$ (exact match):
+\begin{equation}
+\text{output}_{\text{sym}} = \sum_i \ket{\alpha_i} \cdot \theta(\braket{\beta_i|x} - \tau)
+\end{equation}
+
+where $\theta(z)$ is the Heaviside step function: $\theta(z) = 1$ if $z \geq 0$, else 0, and $\tau = 1$ for exact matching.
+
+\textbf{Neural system:} For input $\ket{x}$, compute weighted sum:
+\begin{equation}
+\text{output}_{\text{neu}} = \sum_i \ket{\alpha_i} \cdot \sigma\left(\frac{\braket{\beta_i|x} - \tau}{\epsilon}\right)
+\end{equation}
+
+where $\sigma$ is sigmoid function, $\tau$ is threshold, $\epsilon$ controls sharpness.
+
+\textbf{Claim:}
+\begin{equation}
+\lim_{\epsilon \to 0} \text{output}_{\text{neu}} = \text{output}_{\text{sym}}
+\end{equation}
+\end{theorem}
+
+\begin{proof}
+Recall sigmoid:
+\begin{equation}
+\sigma(z) = \frac{1}{1 + e^{-z}}
+\end{equation}
+
+Consider $\sigma(z/\epsilon)$ as $\epsilon \to 0$:
+\begin{itemize}
+\item If $z > 0$: $\sigma(z/\epsilon) \to 1$ (since $z/\epsilon \to +\infty$)
+\item If $z < 0$: $\sigma(z/\epsilon) \to 0$ (since $z/\epsilon \to -\infty$)
+\item If $z = 0$: $\sigma(0) = 0.5$
+\end{itemize}
+
+For our case, $z = \braket{\beta_i|x} - \tau$:
+\begin{itemize}
+\item If $\braket{\beta_i|x} > \tau$: $\sigma\left(\frac{\braket{\beta_i|x} - \tau}{\epsilon}\right) \to 1$
+\item If $\braket{\beta_i|x} < \tau$: $\sigma\left(\frac{\braket{\beta_i|x} - \tau}{\epsilon}\right) \to 0$
+\end{itemize}
+
+Setting $\tau$ slightly below 1 (e.g., $\tau = 0.99$), the neural system converges to:
+\begin{equation}
+\text{output}_{\text{neu}} \to \sum_i \ket{\alpha_i} \cdot \mathbb{1}(\braket{\beta_i|x} = 1) = \text{output}_{\text{sym}}
+\end{equation}
+
+where $\mathbb{1}(\cdot)$ is indicator function.
+\end{proof}
+
+\begin{corollary}
+Symbolic tag-checking is the zero-temperature limit of a single-layer neural network.
+\end{corollary}
+
+\textbf{Key observations:}
+
+\begin{enumerate}
+\item \textbf{Unified form:} Both equations have the same structure: $\sum_i \ket{\alpha_i} \cdot f(\braket{\beta_i|x} - \tau)$ where $f$ is either step function $\theta$ or sigmoid $\sigma$.
+
+\item \textbf{Threshold flexibility:} 
+\begin{itemize}
+\item $\tau = 1$: Rigid exact matching (symbolic case)
+\item $\tau < 1$ (e.g., 0.8): Approximate matching (fuzzy symbolic or neural case)
+\item This is exactly what DIRAC uses for tag matching and similarity-based dispatch!
+\end{itemize}
+
+\item \textbf{Temperature parameter $\epsilon$:}
+\begin{itemize}
+\item $\epsilon \to 0$: Sharp boundary, $\sigma(z/\epsilon) \to \theta(z)$ (neural becomes symbolic)
+\item $\epsilon$ small: Approximate step function (used in practice)
+\item $\epsilon$ large: Smooth weighting (fully neural)
+\end{itemize}
+\end{enumerate}
+
+\subsection{The Duality Table}
+
+The correspondence between symbolic and neural paradigms:
+
+\begin{table}[h]
+\centering
+\small
+\begin{tabular}{lllp{3cm}}
+\toprule
+\textbf{Aspect} & \textbf{Symbolic} & \textbf{Neural} & \textbf{Bra-Ket} \\
+\midrule
+\textbf{Match} & Exact (name lookup) & Similarity (cosine, dot product) & $\braket{\beta|x}$ \\
+\textbf{Metric} & Discrete (0 or 1) & Continuous ($[0,1]$) & Inner product space \\
+\textbf{Selection} & Winner-take-all & Weighted average & argmax vs. softmax \\
+\textbf{Composition} & Function nesting & Layer stacking & Operator product \\
+\textbf{Learning} & Manual (programming) & Automatic (gradient descent) & Parameter optimization \\
+\textbf{Binding} & Late (runtime lookup) & Early (learned weights) & Basis vector choice \\
+\textbf{Context} & Scope/environment & Hidden state & State vector $\ket{h}$ \\
+\textbf{Chaining} & Call stack & Recurrence/attention & Sequential operators \\
+\bottomrule
+\end{tabular}
+\caption{Duality between symbolic and neural computation}
+\end{table}
+
+\subsection{Implications}
+
+\textbf{For AI theory:}
+\begin{itemize}
+\item Symbolic AI is not ``different'' from neural networks---it's a special case (discrete metric, zero temperature)
+\item The ``symbolic vs. neural'' debate is about continuous vs. discrete inner products, not fundamentally different computation
+\end{itemize}
+
+\textbf{For engineering:}
+\begin{itemize}
+\item We can build hybrid systems that interpolate between discrete and continuous
+\item Differentiability and symbolic control are compatible---just use appropriate thresholds and metrics
+\end{itemize}
+
+\textbf{For understanding LLMs:}
+\begin{itemize}
+\item Tool-calling works because attention implements differentiable function dispatch
+\item ``Emergent'' symbolic behavior isn't mysterious---LLMs learn continuous approximations to discrete operations
+\end{itemize}
+
+\subsection{Parameters and Context Mixing: A Key Insight}
+
+The previous sections established that symbolic and neural systems share the same bra-ket structure for pattern matching and selection. However, there's a subtle but important question: \textbf{What is the neural correspondent of parameters in symbolic expressions?}
+
+\textbf{The parameter puzzle:}
+
+In quantum mechanics, bra-ket notation is parameter-free:
+\begin{itemize}
+\item $\ket{\psi}$: a state vector
+\item $\braket{\phi|\psi}$: inner product
+\item $\ket{\phi}\bra{\psi}$: operator
+\end{itemize}
+
+But in symbolic AI, we need \textbf{parameterized states}:
+\begin{itemize}
+\item $\ket{\text{set-background color=red}}$
+\item $\ket{\text{kick object=ball}}$
+\item $\ket{\text{greet person="Alice"}}$
+\end{itemize}
+
+The parameter ``color=red'' or ``object=ball'' modifies the base action. This is not standard quantum notation---it's an extension for symbolic computation.
+
+\textbf{The neural correspondent: Context mixing}
+
+In neural networks, parameters correspond to \textbf{context blending through vector addition}:
+
+\begin{table}[h]
+\centering
+\begin{tabular}{ll}
+\toprule
+\textbf{Symbolic} & \textbf{Neural} \\
+\midrule
+$\ket{\text{action param=value}}$ & $\ket{\text{action}} + \alpha \cdot \ket{\text{value}}$ \\
+Parameter binding (discrete) & Context mixing (continuous) \\
+Creates parameterized state & Creates context-enriched embedding \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\textbf{Example: Building context}
+
+\textbf{Symbolic sequence:}
+\begin{equation}
+\ket{\text{Zhi}} \xrightarrow{\text{add context}} \ket{\text{Zhi wrote}} \xrightarrow{\text{add context}} \ket{\text{Zhi wrote code}}
+\end{equation}
+
+Each step \textbf{binds a new parameter} to the growing expression.
+
+\textbf{Neural equivalent (attention):}
+\begin{equation}
+\ket{\text{code}'} = \sum_i \alpha_i \ket{v_i} = \alpha_{\text{Zhi}} \ket{\text{Zhi}} + \alpha_{\text{wrote}} \ket{\text{wrote}} + \alpha_{\text{code}} \ket{\text{code}}
+\end{equation}
+
+The weighted sum \textbf{mixes context vectors} to create an embedding that encodes ``code in the context of Zhi writing.''
+
+\textbf{Why this matters:}
+
+\begin{enumerate}
+\item \textbf{RNN context accumulation:}
+\begin{equation}
+h_t = W_h h_{t-1} + W_x x_t + b
+\end{equation}
+The vector addition injects new information ($x_t$) into accumulated context ($h_{t-1}$), similar to binding a new parameter to a symbolic expression.
+
+\item \textbf{Attention context composition:}
+\begin{equation}
+\text{output}_j = \sum_i \alpha_{ij} \ket{v_i}
+\end{equation}
+The weighted sum fills in ``parameters'' by blending relevant context vectors.
+
+\item \textbf{Parameter-value duality:}
+\begin{itemize}
+\item Symbolic: $\ket{\text{function param}_1\text{=}v_1 \text{ param}_2\text{=}v_2}$ is a discrete structure
+\item Neural: $\ket{f} + \alpha_1 \ket{v_1} + \alpha_2 \ket{v_2}$ is a continuous blend
+\end{itemize}
+\end{enumerate}
+
+\textbf{Hardware instruction analogy:}
+
+This is analogous to how CPU instructions encode operations:
+
+\begin{lstlisting}
+Machine instruction:  [opcode][arg1][arg2][arg3]
+Example:             [ADD   ][R1  ][R2  ][R3  ]
+\end{lstlisting}
+
+In vector form:
+\begin{equation}
+\ket{\text{instruction}} = \ket{\text{opcode}} + \ket{\text{arg}_1} + \ket{\text{arg}_2} + \ket{\text{arg}_3}
+\end{equation}
+
+\textbf{Symbolic (discrete):}
+\begin{itemize}
+\item Different bit positions for opcode vs arguments
+\item Exact values: ADD=0x01, R1=0x10, R2=0x11
+\item Hardware decodes by position: bits [0-7]=opcode, bits [8-15]=arg1, etc.
+\end{itemize}
+
+\textbf{Neural (continuous):}
+\begin{itemize}
+\item Different dimensions in embedding space for operation vs arguments
+\item Continuous values: embeddings in $\mathbb{R}^d$
+\item Network decodes by learned attention: which dimensions encode operation vs parameters
+\end{itemize}
+
+The neural network learns to \textbf{partition the embedding space} the way hardware partitions instruction bits---some dimensions encode the ``opcode'' (what action), others encode ``arguments'' (what parameters). Vector addition combines these components into a unified representation.
+
+\textbf{The insight:}
+
+Vector addition in neural networks (whether in RNNs or attention) is not arbitrary---it's the \textbf{continuous analog of parameter binding} in symbolic systems. When we write $\ket{\text{kick object=ball}}$, the neural network approximates this by mixing the embeddings of ``kick'' and ``ball'' in a learned vector space, similar to how a CPU instruction combines opcode and argument bits.
+
+This explains why LLMs can perform complex reasoning: they're continuously interpolating over the space of parameterized symbolic expressions. The difference from traditional symbolic AI is that parameters are filled \textbf{fuzzily} (through vector arithmetic) rather than \textbf{discretely} (through exact binding).
+
+\section{DIRAC: Practical Symbolic-Neural Integration}
+
+\subsection{Language Overview}
+
+DIRAC is a programming language that:
+\begin{itemize}
+\item Uses bra-ket syntax for symbolic operations
+\item Integrates neural operations (embeddings, LLM calls)
+\item Supports both exact and similarity-based matching
+\item Enables seamless composition of symbolic and neural code
+\end{itemize}
+
+\textbf{Example: Simple function call}
+
+DIRAC supports both XML syntax and bra-ket shorthand:
+
+\textbf{XML syntax:}
+\begin{lstlisting}[language=XML]
+<subroutine name="greet" param-person="string:required:Person to greet">
+  <output>Hello, <variable name="person"/>!</output>
+</subroutine>
+
+<greet person="Alice"/>
+\end{lstlisting}
+
+\textbf{Bra-ket shorthand syntax:}
+\begin{lstlisting}
+<greet person="string"|
+  |output> Hello, |variable name="person">
+\end{lstlisting}
+
+Call (ket):
+\begin{lstlisting}
+|greet person="Alice">
+\end{lstlisting}
+
+Or simplified:
+\begin{lstlisting}
+|greet Alice>
+\end{lstlisting}
+
+\textbf{Semantic interpretation:}
+
+The subroutine definition \texttt{<greet person="string"|} creates a pattern (bra) that can match against calls (kets).
+
+When a call \texttt{|greet person="Alice">} is executed:
+\begin{enumerate}
+\item \textbf{Pattern matching} via inner product: $\braket{\text{greet pattern}|\text{call}}$ checks if the call matches the signature
+\item If match succeeds (returns 1), the body executes with the bound parameters
+\item The output is produced by evaluating the ket: $\ket{\text{output}} = \ket{\text{``Hello, Alice!''}}$
+\end{enumerate}
+
+This is \textbf{exactly} the symbolic dispatch pattern from Section 2: match via inner product, execute when match succeeds.
+
+\subsection{Embedding-Based Tag Matching}
+
+DIRAC supports \textbf{neural tag matching} using embeddings:
+
+\begin{lstlisting}[language=XML]
+<subroutine name="calculate"
+            param-expression="string:required:Mathematical expression">
+  <!-- Tags can be used for semantic search -->
+  <eval name="result"><!-- math logic --></eval>
+  <output><variable name="result"/></output>
+</subroutine>
+\end{lstlisting}
+
+For a call with semantic matching:
+\begin{lstlisting}[language=XML]
+<!-- Direct call by name -->
+<calculate expression="2 + 2"/>
+
+<!-- Or use search-subroutines for semantic lookup -->
+<search-subroutines query="arithmetic evaluate" limit="5"/>
+\end{lstlisting}
+
+The system:
+\begin{enumerate}
+\item Computes embeddings of call tags: [``arithmetic'', ``evaluate'']
+\item Computes embeddings of definition tags: [``math'', ``computation'']
+\item Calculates similarity: $\braket{\text{def-tags}|\text{call-tags}}$ (cosine similarity)
+\item If similarity > threshold, executes \texttt{calculate}
+\end{enumerate}
+
+\textbf{This is exactly the neural dispatch we formalized!}
+
+\subsection{The Aristotle Example}
+
+Classic syllogistic reasoning:
+\begin{itemize}
+\item All humans are mortal
+\item Socrates is human
+\item Therefore, Socrates is mortal
+\end{itemize}
+
+\textbf{Symbolic DIRAC:}
+\begin{lstlisting}[language=XML]
+<!-- Define relationships as nested subroutines -->
+<subroutine name="human">
+  <mortal/>
+</subroutine>
+
+<subroutine name="Socrates">
+  <human/>
+</subroutine>
+
+<!-- Chain inference: calling Socrates invokes human which invokes mortal -->
+<Socrates/>
+<!-- Output: executes mortal -->
+\end{lstlisting}
+
+Or in Dirac's bra-ket shorthand:
+\begin{lstlisting}
+<human|
+  |mortal>
+  
+<Socrates|
+  |human>
+\end{lstlisting}
+
+In bra-ket form:
+\begin{equation}
+\ket{\text{mortal}}\bra{\text{human}} \cdot \ket{\text{human}}\bra{\text{Socrates}} \cdot \ket{\text{Socrates}} = \ket{\text{mortal}}
+\end{equation}
+
+\textbf{Neural analog (transformer attention):}
+\begin{itemize}
+\item Context contains facts: ``Socrates is human'', ``Humans are mortal''
+\item Query: ``Is Socrates mortal?''
+\item Attention mechanism:
+\begin{itemize}
+\item High weight on ``Socrates is human'' (query matches ``Socrates'')
+\item High weight on ``Humans are mortal'' (intermediate result matches ``human'')
+\item Output: High probability for ``mortal''
+\end{itemize}
+\end{itemize}
+
+Same logical structure, different implementation!
+
+\subsection{LLM Integration}
+
+DIRAC can delegate to LLMs for fuzzy/neural reasoning:
+
+\begin{lstlisting}[language=XML]
+<llm model="gpt-4" execute="true" feedback="true" max-iterations="5">
+  You are a helpful assistant. Analyze this code and suggest improvements:
+  
+  <variable name="code"/>
+  
+  You can use these DIRAC tags:
+  - <eval>JavaScript code</eval>
+  - <system>shell command</system>
+  - <search-subroutines query="..."/> 
+</llm>
+\end{lstlisting}
+
+The LLM:
+\begin{itemize}
+\item Receives context (system prompt, user code)
+\item Generates response using attention mechanism ($M_1 \ket{o}\bra{o} M_2 \ket{x}$)
+\item Can invoke DIRAC actions (symbolic operations)
+\item Creates \textbf{ReAct loop:} reasoning + acting
+\end{itemize}
+
+This demonstrates \textbf{system-level intelligence:}
+\begin{itemize}
+\item Neural component (LLM) handles fuzzy reasoning
+\item Symbolic component (DIRAC) handles precise operations
+\item Composition creates capabilities beyond either alone
+\end{itemize}
+
+\subsection{Subroutine Management}
+
+DIRAC maintains a \textbf{distributed knowledge base}:
+
+\begin{lstlisting}[language=bash]
+~/.dirac/
+  lib/
+    system/         # Built-in functions
+    user/           # User-defined
+    project/        # Project-specific
+\end{lstlisting}
+
+When calling a subroutine:
+\begin{enumerate}
+\item Check session (recently defined)
+\item Search user library (saved definitions)
+\item Search project library (shared with team)
+\item Search system library (built-ins)
+\end{enumerate}
+
+This is \textbf{lazy loading with neural search:}
+\begin{itemize}
+\item Index subroutines by name and tags
+\item Use embeddings for similarity matching
+\item Load on-demand (not all in memory)
+\end{itemize}
+
+\textbf{Bra-ket view:} The library is a massive operator:
+\begin{equation}
+\mathcal{L} = \sum_i \ket{\text{subroutine}_i}\bra{\text{signature}_i}
+\end{equation}
+
+Calling a subroutine = applying this operator to input.
+
+\subsection{DISH: The DIRAC Shell}
+
+\textbf{DISH (DIRAC Shell)} is a practical implementation of neural-symbolic integration, analogous to bash in Unix but supporting both traditional shell commands and DIRAC's bra-ket notation.
+
+\textbf{Example session:}
+\begin{lstlisting}[language=bash]
+$ dish
+dish> ls -la                    # Regular Unix command
+dish> |greet "Alice">          # DIRAC ket (function call)
+Hello, Alice!
+
+dish> <calculate expr="2+2"|   # Define subroutine inline
+  |eval> <variable name="expr">
+
+dish> |calculate expr="5*3">   # Call it
+15
+\end{lstlisting}
+
+\textbf{Key innovation: Context-aware LLM integration}
+
+When DISH encounters an \texttt{<llm>} tag, it implements \textbf{automatic tool discovery}:
+
+\begin{enumerate}
+\item \textbf{Scan available subroutines:} Before calling the LLM, DISH searches the environment for all available DIRAC subroutines (session, user library, project library, system library)
+
+\item \textbf{Push to context stack:} The subroutine signatures are pushed onto a context stack
+
+\item \textbf{Augment LLM prompt:} When sending the request to the LLM, DISH attaches the available subroutines as part of the system prompt:
+\begin{lstlisting}
+You have access to the following DIRAC subroutines:
+- <calculate expr="string">: Evaluates mathematical expressions
+- <search-file pattern="string">: Searches files for patterns
+- <fetch-url url="string">: Fetches content from URLs
+...
+\end{lstlisting}
+
+\item \textbf{LLM generates DIRAC tags:} The LLM can now respond with DIRAC tags (e.g., \texttt{<calculate expr="...">}) because it knows what's available
+
+\item \textbf{Execute returned tags:} DISH parses and executes the DIRAC tags returned by the LLM
+\end{enumerate}
+
+\textbf{This is the context mechanism that unifies symbolic and neural:}
+
+\textbf{Mathematically:}
+\begin{itemize}
+\item Available subroutines form a basis: $\{\ket{\alpha_1}\bra{\beta_1}, \ket{\alpha_2}\bra{\beta_2}, \ldots\}$
+\item The context stack creates the self-projection operator: $P = \sum_i \ket{\beta_i}\bra{\beta_i}$
+\item LLM attention: $M_1 P M_2 \ket{x}$ where $P$ encodes what tools are available
+\item LLM output: A ket like \texttt{|calculate expr="42+17">} that matches one of the $\bra{\beta_i}$ patterns
+\end{itemize}
+
+\textbf{This solves the tool-calling problem:}
+\begin{itemize}
+\item \textbf{Traditional approach:} Hard-code tool schemas in LLM API calls (brittle, vendor-specific)
+\item \textbf{DIRAC approach:} Dynamically discover available subroutines and inject into context (flexible, extensible)
+\end{itemize}
+
+The LLM's attention mechanism ($M_1 \ket{o}\bra{o} M_2 \ket{x}$) naturally implements tool selection because the context $\ket{o}$ includes the tool definitions, and the query $\ket{x}$ is the user's request.
+
+\subsection{Getting Started with DIRAC}
+
+DIRAC is available as an open-source npm package. To install:
+
+\begin{lstlisting}[language=bash]
+npm install -g dirac-lang
+\end{lstlisting}
+
+This installs the DIRAC interpreter and DISH shell globally. After installation, you can:
+
+\textbf{Run DIRAC files:}
+\begin{lstlisting}[language=bash]
+dirac myprogram.di
+\end{lstlisting}
+
+\textbf{Launch DISH (interactive shell):}
+\begin{lstlisting}[language=bash]
+dish
+\end{lstlisting}
+
+\textbf{Quick example:}
+\begin{lstlisting}[language=bash]
+dish> |greet "World">
+Hello, World!
+
+dish> <calculate expr|
+  |eval> <variable name="expr">
+
+dish> |calculate expr="2+2">
+4
+\end{lstlisting}
+
+For more information, documentation, and examples, visit: \url{https://diraclang.org}
+
+\section{Related Work and Positioning}
+
+\subsection{Symbolic AI Heritage}
+
+\textbf{Classical symbolic systems:}
+\begin{itemize}
+\item Lisp (McCarthy, 1960): S-expressions, function application
+\item Prolog (Colmerauer, 1972): Logic programming, unification
+\item Expert systems (1980s): Rule-based reasoning
+\end{itemize}
+
+\textbf{McCarthy's observation on structural equivalence:}
+McCarthy noted that Lisp S-expressions and XML share the same fundamental structure---nested, tree-based representations. Both are forms of what we'd now call ``serialized abstract syntax trees.'' Our work extends this: not only do Lisp and XML share structure, but this structure (nested operators acting on arguments) is mathematically equivalent to the tensor operations in neural networks when viewed through bra-ket notation.
+
+\textbf{Our contribution:} Show these use discrete bra-ket inner products---same structure as neural networks.
+
+\subsection{Neural Network Theory}
+
+\textbf{Universal approximation (Hornik et al., 1989):}
+\begin{itemize}
+\item Neural networks can approximate any continuous function
+\item Our work: Shows they also approximate discrete symbolic operations (Theorem~\ref{thm:equivalence})
+\end{itemize}
+
+\textbf{Attention mechanisms (Vaswani et al., 2017):}
+\begin{itemize}
+\item ``Attention is All You Need'' introduced transformer architecture
+\item Our work: Derives compact sandwich form $M_1 \ket{o}\bra{o} M_2 \ket{x}$ showing attention is literally bra-ket operator
+\end{itemize}
+
+\subsection{Hybrid Systems}
+
+\textbf{Neural-symbolic integration (Garcez et al., 2009):}
+\begin{itemize}
+\item Logic Tensor Networks: Embed logic in tensor operations
+\item Differentiable Forth: Compile symbolic programs to differentiable form
+\item Our work: Show underlying unity---not ``integration'' but same mathematical structure
+\end{itemize}
+
+\textbf{Program synthesis (Ellis et al., 2021):}
+\begin{itemize}
+\item DreamCoder: Learn program abstractions from examples
+\item Our work: Provides theoretical foundation---programs are discrete neural networks
+\end{itemize}
+
+\subsection{Quantum Computation}
+
+\textbf{Quantum algorithms (Nielsen \& Chuang, 2000):}
+\begin{itemize}
+\item Use bra-ket notation for quantum states
+\item Our work: Applies same notation to classical computing, revealing hidden structure
+\end{itemize}
+
+\textbf{NOT quantum computing:} We use bra-ket notation as mathematical language, not quantum superposition or entanglement.
+
+\subsection{LLM Critiques and System Intelligence}
+
+\textbf{LeCun's critique (2023):}
+\begin{itemize}
+\item LLMs lack grounded world models (no sensor feedback)
+\item Cannot do goal$\to$plan$\to$act (reactive, not deliberative)
+\end{itemize}
+
+\textbf{Our response:}
+\begin{itemize}
+\item \textbf{System-level intelligence:} Neural + symbolic + tools = complete architecture
+\item LLMs implement differentiable dispatch---can plan via tool composition
+\item Missing: Not planning capability, but grounded physical representation
+\item DIRAC demonstrates compositional intelligence without massive sensors
+\end{itemize}
+
+\textbf{Philosophical position:}
+\begin{itemize}
+\item Intelligence need not be monolithic (single model doing everything)
+\item Cognitive architectures compose specialized components
+\item Neural and symbolic are ``two faces of same coin''---both use bra-ket operations
+\end{itemize}
+
+\section{Discussion and Future Directions}
+
+\subsection{Theoretical Implications}
+
+\textbf{Unification of paradigms:}
+\begin{itemize}
+\item Symbolic and neural computation are not opposites---they're points on a continuum
+\item The spectrum: Discrete metric $\to$ Continuous metric
+\item The common structure: Bra-ket inner products
+\end{itemize}
+
+\textbf{Temperature as control parameter:}
+\begin{itemize}
+\item Zero temperature ($\epsilon \to 0$): Hard symbolic matching
+\item High temperature ($\epsilon$ large): Soft neural averaging
+\item Intermediate: Hybrid behavior (useful for robustness)
+\end{itemize}
+
+\textbf{Compositionality:}
+\begin{itemize}
+\item Both paradigms support operator composition
+\item Symbolic: Function nesting $g(f(x))$
+\item Neural: Layer stacking $L_2(L_1(x))$
+\item Unified: $\ket{g}\bra{g} \cdot \ket{f}\bra{f} \cdot \ket{x}$
+\end{itemize}
+
+\subsection{Practical Applications}
+
+\textbf{Improved AI architectures:}
+\begin{itemize}
+\item Design networks with explicit symbolic structure
+\item Use attention as learnable function dispatch
+\item Mix discrete and continuous operations as needed
+\end{itemize}
+
+\textbf{Interpretability:}
+\begin{itemize}
+\item View neural networks as ``soft programs''
+\item Attention weights = ``which function got called''
+\item Enables debugging: ``Why did model choose this action?''
+\end{itemize}
+
+\textbf{Efficiency:}
+\begin{itemize}
+\item Symbolic operations are deterministic (no sampling)
+\item Neural operations are robust (handle ambiguity)
+\item Hybrid systems get best of both
+\end{itemize}
+
+\subsection{Limitations and Open Questions}
+
+\textbf{Limitations:}
+
+\begin{enumerate}
+\item \textbf{Scalability:} DIRAC currently limited to small-scale programs (not production-ready)
+
+\item \textbf{Learning:} Symbolic parts require manual design (can't learn subroutine structure from data alone)
+
+\item \textbf{Theory gaps:} We've shown equivalence in single-layer case; multi-layer composition needs deeper analysis
+\end{enumerate}
+
+\textbf{Open questions:}
+
+\begin{enumerate}
+\item \textbf{Optimal temperature:} When to use discrete vs. continuous? Can this be learned?
+
+\item \textbf{Hierarchical structure:} Can we learn symbolic abstractions (subroutines) from neural training?
+
+\item \textbf{Verification:} Can we prove properties of hybrid systems (combining neural learning and symbolic guarantees)?
+
+\item \textbf{Hardware:} Should we design chips that natively support bra-ket operations?
+\end{enumerate}
+
+\subsection{Future Research Directions}
+
+\textbf{Short-term:}
+\begin{enumerate}
+\item Extend Theorem~\ref{thm:equivalence} to multi-layer case
+\item Prove sample complexity results (how much data needed to learn discrete structure?)
+\item Benchmark DIRAC against pure symbolic and pure neural systems
+\end{enumerate}
+
+\textbf{Medium-term:}
+\begin{enumerate}
+\item Auto-generate DIRAC subroutines from LLM interactions
+\item Learn temperature/threshold parameters from data
+\item Build large-scale knowledge bases using neural indexing
+\end{enumerate}
+
+\textbf{Long-term:}
+\begin{enumerate}
+\item Theory of compositional intelligence (how do hybrid systems scale?)
+\item Neurosymbolic AGI architectures (combining reasoning, learning, perception)
+\item Formal verification of learned programs
+\end{enumerate}
+
+\subsection{Broader Impact}
+
+\textbf{Education:}
+\begin{itemize}
+\item Bra-ket notation unifies curricula: One formalism for symbolic AI, neural networks, quantum computing
+\end{itemize}
+
+\textbf{AI Safety:}
+\begin{itemize}
+\item Interpretable AI: Neural networks as ``soft programs'' easier to understand
+\item Formal verification: Symbolic components can be provably correct
+\item Controllability: Explicit symbolic rules prevent unintended behavior
+\end{itemize}
+
+\textbf{Scientific Computing:}
+\begin{itemize}
+\item Many domains use both symbolic (equations) and neural (data-driven) methods
+\item Unified framework enables seamless integration
+\end{itemize}
+
+\section{Conclusion}
+
+We have demonstrated that symbolic and neural computation, historically viewed as opposing paradigms, are mathematically unified under bra-ket notation from quantum mechanics. The key insights:
+
+\begin{enumerate}
+\item \textbf{Structural identity:} Both paradigms perform inner product operations to select actions---symbolic systems use discrete metrics, neural systems use continuous metrics.
+
+\item \textbf{Formal equivalence:} Symbolic tag-checking equals a single-layer neural network in the zero-temperature limit (Theorem~\ref{thm:equivalence}).
+
+\item \textbf{Compact attention form:} Transformer attention has sandwich structure $M_1 \ket{o}\bra{o} M_2 \ket{x}$, explicitly showing self-projection over context tokens---attention is literally a bra-ket operator.
+
+\item \textbf{Practical demonstration:} DIRAC language seamlessly integrates symbolic and neural operations, proving the theoretical unification has concrete engineering value.
+
+\item \textbf{System-level intelligence:} Hybrid architectures (neural + symbolic + tools) achieve capabilities beyond pure neural or pure symbolic approaches, addressing critiques about LLM limitations.
+\end{enumerate}
+
+This unification provides a mathematical foundation for the next generation of AI systems: architectures that fluidly combine the robustness of neural learning with the precision of symbolic reasoning. The future of AI is not ``symbolic vs. neural'' but rather their elegant composition, guided by the timeless mathematics of inner products.
+
+\textbf{The lesson:} When you strip away implementation details---discrete vs. continuous, exact vs. approximate, hard vs. soft---you find the same mathematical skeleton: bra-ket operations determining computational actions. Symbolic and neural are two faces of the same coin, united by the language of linear algebra.
+
+\begin{thebibliography}{99}
+
+\bibitem{dirac1939}
+Dirac, P.A.M. (1939). ``A New Notation for Quantum Mechanics.'' \textit{Mathematical Proceedings of the Cambridge Philosophical Society}, 35(3), 416-418.
+
+\bibitem{mccarthy1960}
+McCarthy, J. (1960). ``Recursive Functions of Symbolic Expressions and Their Computation by Machine, Part I.'' \textit{Communications of the ACM}, 3(4), 184-195.
+
+\bibitem{vaswani2017}
+Vaswani, A., et al. (2017). ``Attention is All You Need.'' \textit{Advances in Neural Information Processing Systems}, 30.
+
+\bibitem{hornik1989}
+Hornik, K., Stinchcombe, M., \& White, H. (1989). ``Multilayer Feedforward Networks are Universal Approximators.'' \textit{Neural Networks}, 2(5), 359-366.
+
+\bibitem{garcez2009}
+Garcez, A., Broda, K., \& Gabbay, D. (2009). \textit{Neural-Symbolic Cognitive Reasoning}. Springer.
+
+\bibitem{nielsen2000}
+Nielsen, M.A. \& Chuang, I.L. (2000). \textit{Quantum Computation and Quantum Information}. Cambridge University Press.
+
+\bibitem{ellis2021}
+Ellis, K., et al. (2021). ``DreamCoder: Bootstrapping Inductive Program Synthesis with Wake-Sleep Library Learning.'' \textit{PLDI 2021}.
+
+\bibitem{colmerauer1972}
+Colmerauer, A., et al. (1972). ``Un système de communication homme-machine en français.'' \textit{Research Report, Université d'Aix-Marseille}.
+
+\bibitem{lecun2023}
+LeCun, Y. (2023). ``A Path Towards Autonomous Machine Intelligence.'' \textit{Technical Report}.
+
+\bibitem{goodfellow2016}
+Goodfellow, I., Bengio, Y., \& Courville, A. (2016). \textit{Deep Learning}. MIT Press.
+
+\end{thebibliography}
+
+\appendix
+
+\section{Mathematical Preliminaries on Bra-Ket Notation}
+
+This appendix provides formal definitions of bra-ket notation for readers unfamiliar with the formalism. Those comfortable with quantum mechanics notation or linear algebra can skip this section.
+
+\subsection{Bra-Ket Notation Basics}
+
+Bra-ket notation, introduced by Paul Dirac for quantum mechanics, provides a coordinate-free way to express linear algebra operations.
+
+\textbf{Kets} represent vectors (column vectors in matrix notation):
+\begin{equation}
+\ket{\psi} \in \mathcal{H}
+\end{equation}
+
+where $\mathcal{H}$ is a Hilbert space (inner product space).
+
+\textbf{Bras} represent dual vectors (row vectors):
+\begin{equation}
+\bra{\phi} \in \mathcal{H}^*
+\end{equation}
+
+where $\mathcal{H}^*$ is the dual space.
+
+\textbf{Inner product} (bra-ket contraction):
+\begin{equation}
+\braket{\phi|\psi} \in \mathbb{C} \quad \text{(or } \mathbb{R} \text{ for real vector spaces)}
+\end{equation}
+
+Properties:
+\begin{itemize}
+\item \textbf{Linearity:} $\braket{\phi|(a\ket{\psi_1} + b\ket{\psi_2})} = a\braket{\phi|\psi_1} + b\braket{\phi|\psi_2}$
+\item \textbf{Conjugate symmetry:} $\braket{\phi|\psi} = \overline{\braket{\psi|\phi}}$
+\item \textbf{Positive definite:} $\braket{\psi|\psi} \geq 0$, with equality iff $\ket{\psi} = 0$
+\end{itemize}
+
+\textbf{Outer product} creates an operator:
+\begin{equation}
+\ket{\psi}\bra{\phi} : \mathcal{H} \to \mathcal{H}
+\end{equation}
+
+Acting on a vector:
+\begin{equation}
+(\ket{\psi}\bra{\phi}) \ket{x} = \ket{\psi} (\braket{\phi|x}) = \braket{\phi|x} \ket{\psi}
+\end{equation}
+
+This operator projects $\ket{x}$ onto $\bra{\phi}$ (measuring similarity) and scales $\ket{\psi}$ by that projection.
+
+\subsection{Matrix Representation}
+
+Given an orthonormal basis $\{\ket{e_i}\}_{i=1}^n$:
+
+\textbf{Ket as column vector:}
+\begin{equation}
+\ket{\psi} = \sum_i \psi_i \ket{e_i} \leftrightarrow \begin{bmatrix} \psi_1 \\ \psi_2 \\ \vdots \\ \psi_n \end{bmatrix}
+\end{equation}
+
+\textbf{Bra as row vector:}
+\begin{equation}
+\bra{\phi} = \sum_i \phi_i^* \bra{e_i} \leftrightarrow \begin{bmatrix} \phi_1^* & \phi_2^* & \cdots & \phi_n^* \end{bmatrix}
+\end{equation}
+
+\textbf{Inner product as vector multiplication:}
+\begin{equation}
+\braket{\phi|\psi} = \sum_i \phi_i^* \psi_i = \vec{\phi}^\dagger \vec{\psi}
+\end{equation}
+
+\textbf{Outer product as matrix:}
+\begin{equation}
+\ket{\psi}\bra{\phi} = \sum_{i,j} \psi_i \phi_j^* \ket{e_i}\bra{e_j} \leftrightarrow \vec{\psi} \vec{\phi}^\dagger
+\end{equation}
+
+\subsection{Projection Operators}
+
+A projection operator $P$ satisfies $P^2 = P$ (idempotent):
+
+\begin{equation}
+P = \ket{\psi}\bra{\psi} \quad \text{(assuming } \braket{\psi|\psi} = 1\text{)}
+\end{equation}
+
+For multiple orthonormal vectors:
+\begin{equation}
+P = \sum_i \ket{\psi_i}\bra{\psi_i}
+\end{equation}
+
+This projects onto the subspace spanned by $\{\ket{\psi_i}\}$.
+
+\textbf{Key property (resolution of identity):} If $\{\ket{\psi_i}\}$ form a complete orthonormal basis:
+\begin{equation}
+\sum_i \ket{\psi_i}\bra{\psi_i} = I
+\end{equation}
+
+\subsection{Why Bra-Ket for Computing?}
+
+Advantages over standard matrix notation:
+
+\begin{enumerate}
+\item \textbf{Coordinate-free:} Emphasizes operations and their meaning, not specific numerical representations
+\item \textbf{Compositional:} $\bra{\phi}M\ket{\psi}$ clearly shows operator $M$ sandwiched between states
+\item \textbf{Intuitive semantics:} Bra ``asks a question,'' ket ``provides an answer,'' inner product ``measures match''
+\item \textbf{Operator algebra:} $\ket{\alpha}\bra{\beta}$ naturally represents transformations from $\beta$ to $\alpha$
+\item \textbf{Unifying notation:} Same formalism works for symbolic (discrete) and neural (continuous) computation
+\end{enumerate}
+
+\section{Mathematical Proofs}
+
+\subsection{Projection Operator Properties}
+
+\begin{lemma}
+For normalized $\ket{\psi}$ with $\braket{\psi|\psi} = 1$, the operator $P = \ket{\psi}\bra{\psi}$ satisfies $P^2 = P$ (idempotent).
+\end{lemma}
+
+\begin{proof}
+\begin{equation}
+P^2 = (\ket{\psi}\bra{\psi})(\ket{\psi}\bra{\psi}) = \ket{\psi}(\braket{\psi|\psi})\bra{\psi} = \ket{\psi} \cdot 1 \cdot \bra{\psi} = P
+\end{equation}
+\end{proof}
+
+\begin{lemma}
+For orthonormal basis $\{\ket{e_i}\}_{i=1}^n$, we have $\sum_i \ket{e_i}\bra{e_i} = I$ (identity).
+\end{lemma}
+
+\begin{proof}
+For any $\ket{x} = \sum_j x_j \ket{e_j}$:
+\begin{equation}
+\left(\sum_i \ket{e_i}\bra{e_i}\right)\ket{x} = \sum_i \ket{e_i} \bra{e_i} \sum_j x_j \ket{e_j} = \sum_i \sum_j x_j \ket{e_i} \delta_{ij} = \sum_i x_i \ket{e_i} = \ket{x}
+\end{equation}
+\end{proof}
+
+\subsection{Sigmoid Limit Behavior}
+
+\begin{lemma}
+For sigmoid $\sigma(z) = \frac{1}{1+e^{-z}}$:
+\begin{equation}
+\lim_{\epsilon \to 0^+} \sigma(z/\epsilon) = \begin{cases} 1 & \text{if } z > 0 \\ 1/2 & \text{if } z = 0 \\ 0 & \text{if } z < 0 \end{cases}
+\end{equation}
+\end{lemma}
+
+\begin{proof}
+For $z > 0$: $\lim_{\epsilon \to 0^+} \frac{1}{1+e^{-z/\epsilon}} = \frac{1}{1+0} = 1$ (since $e^{-\infty} = 0$)
+
+For $z < 0$: $\lim_{\epsilon \to 0^+} \frac{1}{1+e^{-z/\epsilon}} = \frac{1}{1+\infty} = 0$ (since $e^{+\infty} = \infty$)
+
+For $z = 0$: $\sigma(0/\epsilon) = \sigma(0) = \frac{1}{1+1} = 1/2$ for all $\epsilon$
+\end{proof}
+
+\end{document}

@@ -76,12 +76,24 @@ export function createSession(config: DiracConfig = {}): DiracSession {
     skipSubroutineRegistration: false,
     debug: config.debug || false,
     currentFile: config.filePath, // Set current file from config for proper relative import resolution
+    libraryPaths: config.libraryPaths || [],
   };
 }
 
 // Variable management (maps to var_info functions in MASK)
 
 export function setVariable(session: DiracSession, name: string, value: any, visible: boolean = false): void {
+  // Check if variable already exists in the CURRENT scope (same boundary) and update it
+  for (let i = session.variables.length - 1; i >= 0; i--) {
+    if (session.variables[i].name === name && session.variables[i].boundary === session.varBoundary) {
+      // Update existing variable in same scope
+      session.variables[i].value = value;
+      session.variables[i].visible = visible;
+      return;
+    }
+  }
+  
+  // Variable doesn't exist in current scope, create new one (may shadow outer scope)
   session.variables.push({
     name,
     value,
@@ -153,7 +165,8 @@ export function registerSubroutine(
   description?: string,
   parameters?: any[],
   meta?: Record<string, string>,
-  visible?: boolean
+  visible?: boolean,
+  sourcePath?: string
 ): void {
   session.subroutines.push({
     name,
@@ -162,7 +175,8 @@ export function registerSubroutine(
     visible,
     description,
     parameters,
-    meta
+    meta,
+    sourcePath
   });
 }
 
@@ -286,6 +300,7 @@ export function getAvailableSubroutines(session: DiracSession): Array<{
     description: sub.description,
     parameters: sub.parameters,
     meta: sub.meta,
+    boundary: sub.boundary,
   }));
 }
 
