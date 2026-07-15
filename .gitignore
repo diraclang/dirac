@@ -7,3 +7,4 @@ dist/
 .DS_Store
 config.yml
 config.yml.*
+package-lock.json
