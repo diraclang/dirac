@@ -514,31 +514,37 @@ export function applyCorrectedTags(ast: DiracElement, results: ValidationResult[
   
   function correctElement(element: DiracElement): DiracElement {
     // Skip text nodes, whitespace-only tags, and root wrapper tags (must match validateElement logic)
-    if (element.tag && element.tag !== 'dirac' && element.tag !== 'DIRAC-ROOT' && element.tag.trim() !== '') {
+    const shouldProcess = element.tag && element.tag !== 'dirac' && element.tag !== 'DIRAC-ROOT' && element.tag.trim() !== '';
+    
+    if (shouldProcess && resultIndex < results.length) {
       const result = results[resultIndex++];
-      if (result) {
-        // Correct tag name if needed
-        if (result.corrected && result.tagName !== element.tag) {
-          console.error(`[APPLY-CORRECTION] Tag: ${element.tag} → ${result.tagName}`);
-          element = { ...element, tag: result.tagName };
-        }
-        
-        // Correct attribute names if any
-        if (result.attributeCorrections && Object.keys(result.attributeCorrections).length > 0) {
-          console.error(`[APPLY-CORRECTION] Attributes on <${element.tag}>:`, result.attributeCorrections);
-          const newAttributes: { [key: string]: string } = {};
-          for (const [oldAttr, value] of Object.entries(element.attributes)) {
-            const newAttr = result.attributeCorrections[oldAttr] || oldAttr;
-            if (newAttr !== oldAttr) {
-              console.error(`[APPLY-CORRECTION]   ${oldAttr}="${value}" → ${newAttr}="${value}"`);
-            }
-            newAttributes[newAttr] = value;
-          }
-          element = { ...element, attributes: newAttributes };
-        }
+      
+      console.error(`[APPLY-CORRECTION] Processing <${element.tag}> with result #${resultIndex-1} for <${result.originalTag}>, corrected: ${result.corrected}`);
+      
+      // Correct tag name if needed
+      if (result.corrected && result.tagName !== element.tag) {
+        console.error(`[APPLY-CORRECTION] Tag: ${element.tag} → ${result.tagName}`);
+        element = { ...element, tag: result.tagName };
       }
+      
+      // Correct attribute names if any
+      if (result.attributeCorrections && Object.keys(result.attributeCorrections).length > 0) {
+        console.error(`[APPLY-CORRECTION] Attributes on <${element.tag}>:`, result.attributeCorrections);
+        const newAttributes: { [key: string]: string } = {};
+        for (const [oldAttr, value] of Object.entries(element.attributes)) {
+          const newAttr = result.attributeCorrections[oldAttr] || oldAttr;
+          if (newAttr !== oldAttr) {
+            console.error(`[APPLY-CORRECTION]   ${oldAttr}="${value}" → ${newAttr}="${value}"`);
+          }
+          newAttributes[newAttr] = value;
+        }
+        element = { ...element, attributes: newAttributes };
+      }
+    } else if (shouldProcess) {
+      console.error(`[APPLY-CORRECTION] WARNING: No result for <${element.tag}> at index ${resultIndex} (total results: ${results.length})`);
     }
     
+    // Always process children, preserving element structure
     return {
       ...element,
       children: element.children.map(child => correctElement(child))
