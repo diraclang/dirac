@@ -682,8 +682,8 @@ CRITICAL: When defining parameters:
           }
         }
         
-        // Capture output before execution (for feedback)
-        const outputBefore = feedbackMode ? session.output.slice() : [];
+        // Capture output before execution (for feedback and silent operation detection)
+        const outputBefore = session.output.length;
         
         try {
           // Parse the LLM's output as Dirac code
@@ -924,6 +924,12 @@ CRITICAL: When defining parameters:
             console.error(`[LLM] Iteration ${iteration}: Calling integrate()`);
             await integrate(session, dynamicAST);
             console.error(`[LLM] Iteration ${iteration}: integrate() completed successfully`);
+            
+            // Check if execution produced no output (e.g., only registered subroutines)
+            if (session.output.length === outputBefore) {
+              // Mark that LLM response should be displayed in shell
+              setVariable(session, '__llm_silent_execution__', result, false);
+            }
           } catch (execError) {
             executionError = execError instanceof Error ? execError.message : String(execError);
             console.error(`[LLM] Iteration ${iteration}: EXECUTION ERROR: ${executionError}`);
@@ -1025,7 +1031,7 @@ CRITICAL: When defining parameters:
           // If feedback mode, capture execution output and send back to LLM
           if (feedbackMode) {
             const outputAfter = session.output.slice();
-            const executionOutput = outputAfter.slice(outputBefore.length).join('');
+            const executionOutput = outputAfter.slice(outputBefore).join('');
             
             // Display execution output to user immediately
             if (executionOutput) {

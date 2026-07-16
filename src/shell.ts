@@ -661,6 +661,15 @@ export class DiracShell {
       if (this.session.output.length > 0) {
         console.log(this.session.output.join(''));
       }
+      
+      // Display raw LLM response if execution produced no visible output
+      const silentExecution = this.session.variables.find(v => v.name === '__llm_silent_execution__');
+      if (silentExecution?.value) {
+        console.error(`\n[LLM generated]\n${silentExecution.value}\n`);
+        // Clear the flag
+        const idx = this.session.variables.findIndex(v => v.name === '__llm_silent_execution__');
+        if (idx !== -1) this.session.variables.splice(idx, 1);
+      }
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
       if (this.config.debug && error instanceof Error && error.stack) {
