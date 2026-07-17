@@ -185,8 +185,10 @@ export async function validateTag(
 ): Promise<ValidationResult> {
   const { autocorrect = false, similarityCutoff = SIMILARITY_CUTOFF, deepValidation = false } = options;
   
-  // Always log validation (not just in debug mode)
-  console.error(`[VALIDATE] Tag: <${element.tag}>, autocorrect: ${autocorrect}, attributes:`, Object.keys(element.attributes));
+  // Log validation only in debug mode
+  if (session.debug) {
+    console.error(`[VALIDATE] Tag: <${element.tag}>, autocorrect: ${autocorrect}, attributes:`, Object.keys(element.attributes));
+  }
   
   // Get allowed subroutine names
   const { getAvailableSubroutines } = await import('../runtime/session.js');
@@ -209,13 +211,17 @@ export async function validateTag(
   
   // Check if tag exists
   if (allowed.has(tagName)) {
-    console.error(`[VALIDATE] Tag <${tagName}> is valid`);
+    if (session.debug) {
+      console.error(`[VALIDATE] Tag <${tagName}> is valid`);
+    }
     // Tag name is valid, now check required and unknown parameters
     const sub = subroutines.find(s => s.name === tagName);
     if (sub && Array.isArray(sub.parameters)) {
       const paramNames = sub.parameters.map(p => p.name);
       
-      console.error(`[VALIDATE] Tag <${tagName}> has ${paramNames.length} parameters:`, paramNames);
+      if (session.debug) {
+        console.error(`[VALIDATE] Tag <${tagName}> has ${paramNames.length} parameters:`, paramNames);
+      }
       
       // Check for missing required parameters
       for (const param of sub.parameters) {
@@ -228,12 +234,16 @@ export async function validateTag(
       for (const attr in element.attributes) {
         // Skip validation for param-* and meta-* on <subroutine> tag (these are wildcard patterns)
         if (tagName === 'subroutine' && (attr.startsWith('param-') || attr.startsWith('meta-'))) {
-          console.error(`[VALIDATE] Skipping validation for wildcard attribute '${attr}' on <subroutine>`);
+          if (session.debug) {
+            console.error(`[VALIDATE] Skipping validation for wildcard attribute '${attr}' on <subroutine>`);
+          }
           continue;
         }
         
         if (!paramNames.includes(attr)) {
-          console.error(`[VALIDATE] Unknown attribute '${attr}' on <${tagName}>`);
+          if (session.debug) {
+            console.error(`[VALIDATE] Unknown attribute '${attr}' on <${tagName}>`);
+          }
           if (autocorrect && paramNames.length > 0) {
             let correctedAttr: string | null = null;
             let similarityScore = 0;
@@ -245,22 +255,32 @@ export async function validateTag(
               result.attributeCorrections![attr] = correctedAttr;
               result.corrected = true;
               result.warnings.push(`Auto-corrected attribute: ${attr}="${element.attributes[attr]}" → ${correctedAttr}="${element.attributes[attr]}" (only parameter available)`);
-              console.error(`[VALIDATE] Auto-corrected (single param): ${attr} → ${correctedAttr}`);
+              if (session.debug) {
+                console.error(`[VALIDATE] Auto-corrected (single param): ${attr} → ${correctedAttr}`);
+              }
             } else {
               // Try to find best matching parameter name using similarity
-              console.error(`[VALIDATE] Checking similarity for '${attr}' against:`, paramNames);
+              if (session.debug) {
+                console.error(`[VALIDATE] Checking similarity for '${attr}' against:`, paramNames);
+              }
               const best = await getBestTagMatch(attr, paramNames);
-              console.error(`[VALIDATE] Best match: ${best.tag} with score ${best.score.toFixed(2)}, cutoff: ${similarityCutoff}`);
+              if (session.debug) {
+                console.error(`[VALIDATE] Best match: ${best.tag} with score ${best.score.toFixed(2)}, cutoff: ${similarityCutoff}`);
+              }
               if (best.score >= similarityCutoff) {
                 correctedAttr = best.tag;
                 similarityScore = best.score;
                 result.attributeCorrections![attr] = correctedAttr;
                 result.corrected = true;
                 result.warnings.push(`Auto-corrected attribute: ${attr}="${element.attributes[attr]}" → ${correctedAttr}="${element.attributes[attr]}" (similarity: ${similarityScore.toFixed(2)})`);
-                console.error(`[VALIDATE] Auto-corrected (similarity): ${attr} → ${correctedAttr}`);
+                if (session.debug) {
+                  console.error(`[VALIDATE] Auto-corrected (similarity): ${attr} → ${correctedAttr}`);
+                }
               } else {
                 result.warnings.push(`Unknown attribute: ${attr} (no similar match found, best: ${best.tag} with score ${best.score.toFixed(2)})`);
-                console.error(`[VALIDATE] No correction (score too low): ${attr}, best was ${best.tag} (${best.score.toFixed(2)})`);
+                if (session.debug) {
+                  console.error(`[VALIDATE] No correction (score too low): ${attr}, best was ${best.tag} (${best.score.toFixed(2)})`);
+                }
               }
             }
           } else {
@@ -295,7 +315,9 @@ export async function validateTag(
       
       // Deep validation: if this is a subroutine definition, validate all nested tags
       if (deepValidation && tagName === 'subroutine' && element.children && element.children.length > 0) {
-        console.error(`[VALIDATE] Deep validation of <subroutine name="${element.attributes.name}">`);
+        if (session.debug) {
+          console.error(`[VALIDATE] Deep validation of <subroutine name="${element.attributes.name}">`);
+        }
         result.nestedValidation = await validateNestedTags(session, element, options);
         
         // Collect errors from nested validation
@@ -309,14 +331,16 @@ export async function validateTag(
         const { validateSubroutineScope } = await import('./scope-validator.js');
         result.scopeValidation = validateSubroutineScope(element);
         
-        console.error(`[VALIDATE] Scope validation for <subroutine name="${element.attributes.name}">:`, {
-          errors: result.scopeValidation.errors.length,
-          warnings: result.scopeValidation.warnings.length,
-          undefinedParams: result.scopeValidation.undefinedParameters,
-          undefinedVars: result.scopeValidation.undefinedVariables,
-          unusedParams: result.scopeValidation.unusedParameters,
-          unusedVars: result.scopeValidation.unusedVariables,
-        });
+        if (session.debug) {
+          console.error(`[VALIDATE] Scope validation for <subroutine name="${element.attributes.name}">:`, {
+            errors: result.scopeValidation.errors.length,
+            warnings: result.scopeValidation.warnings.length,
+            undefinedParams: result.scopeValidation.undefinedParameters,
+            undefinedVars: result.scopeValidation.undefinedVariables,
+            unusedParams: result.scopeValidation.unusedParameters,
+            unusedVars: result.scopeValidation.unusedVariables,
+          });
+        }
         
         // Add scope warnings to main warnings
         if (result.scopeValidation.warnings.length > 0) {
@@ -426,7 +450,7 @@ export async function validateDiracCode(
   }
   extractLocalSubroutines(ast);
   
-  if (localSubroutineNames.size > 0) {
+  if (localSubroutineNames.size > 0 && session.debug) {
     console.error(`[VALIDATE] Found ${localSubroutineNames.size} local subroutine definitions:`, Array.from(localSubroutineNames));
   }
   
@@ -453,7 +477,9 @@ export async function validateDiracCode(
       }
     }
     
-    console.error(`[VALIDATE] Temp subroutine '${subName}' has ${parameters.length} parameters:`, parameters.map(p => p.name));
+    if (session.debug) {
+      console.error(`[VALIDATE] Temp subroutine '${subName}' has ${parameters.length} parameters:`, parameters.map(p => p.name));
+    }
     
     const tempSub = {
       name: subName,
@@ -509,36 +535,48 @@ export async function validateDiracCode(
 /**
  * Apply auto-corrections to a parsed Dirac AST
  */
-export function applyCorrectedTags(ast: DiracElement, results: ValidationResult[]): DiracElement {
+export function applyCorrectedTags(session: DiracSession, ast: DiracElement, results: ValidationResult[]): DiracElement {
   let resultIndex = 0;
   
   function correctElement(element: DiracElement): DiracElement {
     // Skip text nodes, whitespace-only tags, and root wrapper tags (must match validateElement logic)
-    if (element.tag && element.tag !== 'dirac' && element.tag !== 'DIRAC-ROOT' && element.tag.trim() !== '') {
+    const shouldProcess = element.tag && element.tag !== 'dirac' && element.tag !== 'DIRAC-ROOT' && element.tag.trim() !== '';
+    
+    if (shouldProcess && resultIndex < results.length) {
       const result = results[resultIndex++];
-      if (result) {
-        // Correct tag name if needed
-        if (result.corrected && result.tagName !== element.tag) {
-          console.error(`[APPLY-CORRECTION] Tag: ${element.tag} → ${result.tagName}`);
-          element = { ...element, tag: result.tagName };
-        }
-        
-        // Correct attribute names if any
-        if (result.attributeCorrections && Object.keys(result.attributeCorrections).length > 0) {
-          console.error(`[APPLY-CORRECTION] Attributes on <${element.tag}>:`, result.attributeCorrections);
-          const newAttributes: { [key: string]: string } = {};
-          for (const [oldAttr, value] of Object.entries(element.attributes)) {
-            const newAttr = result.attributeCorrections[oldAttr] || oldAttr;
-            if (newAttr !== oldAttr) {
-              console.error(`[APPLY-CORRECTION]   ${oldAttr}="${value}" → ${newAttr}="${value}"`);
-            }
-            newAttributes[newAttr] = value;
-          }
-          element = { ...element, attributes: newAttributes };
-        }
+      
+      if (session.debug) {
+        console.error(`[APPLY-CORRECTION] Processing <${element.tag}> with result #${resultIndex-1} for <${result.originalTag}>, corrected: ${result.corrected}`);
       }
+      
+      // Correct tag name if needed
+      if (result.corrected && result.tagName !== element.tag) {
+        if (session.debug) {
+          console.error(`[APPLY-CORRECTION] Tag: ${element.tag} → ${result.tagName}`);
+        }
+        element = { ...element, tag: result.tagName };
+      }
+      
+      // Correct attribute names if any
+      if (result.attributeCorrections && Object.keys(result.attributeCorrections).length > 0) {
+        if (session.debug) {
+          console.error(`[APPLY-CORRECTION] Attributes on <${element.tag}>:`, result.attributeCorrections);
+        }
+        const newAttributes: { [key: string]: string } = {};
+        for (const [oldAttr, value] of Object.entries(element.attributes)) {
+          const newAttr = result.attributeCorrections[oldAttr] || oldAttr;
+          if (newAttr !== oldAttr && session.debug) {
+            console.error(`[APPLY-CORRECTION]   ${oldAttr}="${value}" → ${newAttr}="${value}"`);
+          }
+          newAttributes[newAttr] = value;
+        }
+        element = { ...element, attributes: newAttributes };
+      }
+    } else if (shouldProcess && session.debug) {
+      console.error(`[APPLY-CORRECTION] WARNING: No result for <${element.tag}> at index ${resultIndex} (total results: ${results.length})`);
     }
     
+    // Always process children, preserving element structure
     return {
       ...element,
       children: element.children.map(child => correctElement(child))

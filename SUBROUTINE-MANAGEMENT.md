@@ -140,12 +140,40 @@ This enables:
 ### 5. Deletion
 
 **Remove from session**:
-- Currently no `delete-subroutine` tag (subroutines persist for session duration)
-- Workaround: Override with empty implementation
+- Use `:remove <subroutine-name>` in shell mode to remove from session stack
+- Example: `:remove greet` removes all instances of `greet` from current session
+- Note: This only removes from memory, not from disk
 
 **Remove from disk**:
 - Manually delete the `.di` file
 - Run `|index-subroutines>` to refresh registry
+
+### 6. Export as Training Data
+
+**Save subroutine as training example**:
+- Use `:save-subroutine-training <subroutine-name>` in shell mode
+- You'll be prompted to provide a description (user request)
+- Creates training data in JSONL format:
+  ```json
+  {"messages":[
+    {"role":"user","content":"create a greeting subroutine"},
+    {"role":"assistant","content":"<subroutine name=\"greet\">...</subroutine>"}
+  ]}
+  ```
+- Opens in editor for review before saving
+- Default save location: `~/.dirac/training/`
+
+**Example workflow**:
+1. Create/refine a subroutine in session
+2. `:save-subroutine-training greet`
+3. Enter description: "create a greeting subroutine that welcomes users by name"
+4. Review in editor (opens automatically)
+5. Save to file (e.g., `train.jsonl` or `/path/to/training/data.jsonl`)
+
+**Use cases**:
+- Building training datasets for fine-tuning LLMs
+- Documenting subroutine creation patterns
+- Creating examples for teaching Dirac syntax
 
 ## Configuration
 

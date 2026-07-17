@@ -98,9 +98,19 @@ async function executeTask(
   }
   
   setIsRunning(true);
+  console.log(`[schedule] Executing task: ${name}`);
+  
   try {
+    // Clear previous output
+    session.output = [];
+    
     // Execute the children in the current session context
     await integrateChildren(session, element);
+    
+    // Print any output generated
+    if (session.output.length > 0) {
+      console.log(session.output.join(''));
+    }
   } catch (error: any) {
     console.error(`[schedule] Task "${name}" failed:`, error.message);
   } finally {

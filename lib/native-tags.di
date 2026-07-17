@@ -219,7 +219,8 @@
   meta-hide-from-llm="true"
   description="Edit subroutine definition in external editor"
   param-name="string:required:Subroutine name to edit"
-  param-editor="string:optional:Editor command (default: $EDITOR or vi)">
+  param-editor="string:optional:Editor command (default: $EDITOR or vi)"
+  param-format="string:optional:format (braket or xml, default:braket)">
   <!-- Opens subroutine in temp file with editor (blocking) -->
   <!-- After save/exit, automatically re-imports into session -->
   <!-- Changes take effect immediately but are NOT saved to disk -->
