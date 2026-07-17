@@ -34,14 +34,21 @@ function serializeElement(el: any, lines: string[], indent: string): void {
   // Handle text nodes (tag is empty string)
   if (!el.tag || el.tag === '') {
     if (el.text) {
-      // Text node - output inline without newline
+      // Skip whitespace-only text nodes
+      const trimmedText = el.text.trim();
+      if (trimmedText === '') {
+        return;
+      }
+      
+      // Use trimmed text to avoid preserving unwanted whitespace
+      // Text node with content - output inline without newline
       let lastIdx = lines.length - 1;
       if (lastIdx >= 0 && !lines[lastIdx].endsWith('>')) {
         // Append to current line
-        lines[lastIdx] += el.text;
+        lines[lastIdx] += trimmedText;
       } else {
         // Start new line with text
-        lines.push(indent + el.text);
+        lines.push(indent + trimmedText);
       }
     }
     return;
@@ -90,10 +97,16 @@ function serializeElement(el: any, lines: string[], indent: string): void {
       
       // Check if this is a text node
       if (!child.tag || child.tag === '') {
-        // Text node - append inline
+        // Text node - skip if whitespace-only
         if (child.text) {
+          const trimmedText = child.text.trim();
+          if (trimmedText === '') {
+            continue; // Skip whitespace-only nodes
+          }
+          
+          // Append trimmed text inline
           lastIdx = lines.length - 1;
-          lines[lastIdx] += child.text;
+          lines[lastIdx] += trimmedText;
         }
       } else {
         // Element child - check if it's complex
@@ -155,7 +168,12 @@ function serializeElementToBraKet(el: any, lines: string[], indent: number): voi
   // Handle text nodes (tag is empty string)
   if (!el.tag || el.tag === '') {
     if (el.text) {
-      lines.push(indentStr + el.text);
+      // Skip whitespace-only text nodes
+      const trimmedText = el.text.trim();
+      if (trimmedText === '') {
+        return;
+      }
+      lines.push(indentStr + trimmedText);
     }
     return;
   }
@@ -215,8 +233,13 @@ function serializeElementToBraKet(el: any, lines: string[], indent: number): voi
       let inlineContent = '';
       for (const child of el.children) {
         if (!child.tag || child.tag === '') {
-          // Text node
-          inlineContent += child.text || '';
+          // Text node - skip whitespace-only
+          if (child.text) {
+            const trimmedText = child.text.trim();
+            if (trimmedText !== '') {
+              inlineContent += trimmedText;
+            }
+          }
         } else if (child.tag === 'variable') {
           // Inline variable
           const varName = child.attributes?.name || '';

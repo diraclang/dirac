@@ -195,13 +195,30 @@ function serializeChildren(children: any[], indent: number): string {
   let xml = '';
   const indentStr = ' '.repeat(indent);
   
-  for (const child of children) {
+  // Filter out whitespace-only text nodes
+  const filteredChildren = children.filter(child => {
+    if (!child.tag && child.text) {
+      return child.text.trim() !== '';
+    }
+    return true;
+  });
+  
+  for (let i = 0; i < filteredChildren.length; i++) {
+    const child = filteredChildren[i];
+    
     if (child.text && !child.tag) {
-      // Text node
-      xml += indentStr + escapeXml(child.text) + '\n';
+      // Text node with content - preserve text but trim whitespace
+      xml += child.text.trim();
     } else if (child.tag) {
+      // Check if this is the start of a line (need indent)
+      const needsIndent = i === 0 || xml.endsWith('\n');
+      
+      if (needsIndent) {
+        xml += indentStr;
+      }
+      
       // Element
-      xml += indentStr + `<${child.tag}`;
+      xml += `<${child.tag}`;
       
       // Attributes
       if (child.attributes) {
@@ -212,9 +229,41 @@ function serializeChildren(children: any[], indent: number): string {
       
       // Self-closing or with children
       if (child.children && child.children.length > 0) {
-        xml += '>\n';
-        xml += serializeChildren(child.children, indent + 2);
-        xml += indentStr + `</${child.tag}>\n`;
+        xml += '>';
+        // Check if all children are whitespace-only text
+        const hasOnlyWhitespaceText = child.children.every((c: any) => 
+          !c.tag && c.text && c.text.trim() === ''
+        );
+        
+        if (hasOnlyWhitespaceText) {
+          // Empty tag - convert to self-closing
+          xml = xml.slice(0, -1); // Remove the '>'
+          xml += ' />';
+        } else {
+          // Has content - check if it's mixed (text + elements) or just elements
+          const hasTextChildren = child.children.some((c: any) => !c.tag && c.text && c.text.trim() !== '');
+          const hasElementChildren = child.children.some((c: any) => c.tag);
+          
+          if (hasTextChildren && hasElementChildren) {
+            // Mixed content - keep all inline
+            xml += serializeChildren(child.children, 0);
+            xml += `</${child.tag}>`;
+          } else if (hasElementChildren) {
+            // Only elements - multiline with indentation
+            xml += '\n';
+            xml += serializeChildren(child.children, indent + 2);
+            xml += indentStr + `</${child.tag}>`;
+          } else {
+            // Only text - inline
+            xml += serializeChildren(child.children, 0);
+            xml += `</${child.tag}>`;
+          }
+        }
+        
+        // Add newline if this is the last child or next is an element
+        if (i === filteredChildren.length - 1 || filteredChildren[i + 1]?.tag) {
+          xml += '\n';
+        }
       } else if (child.text) {
         xml += `>${escapeXml(child.text)}</${child.tag}>\n`;
       } else {
@@ -235,7 +284,12 @@ function serializeChildrenBraKet(children: any[], indent: number): string {
   
   for (const child of children) {
     if (child.text && !child.tag) {
-      braket += indentStr + child.text + '\n';
+      // Text node - skip whitespace-only text nodes
+      const trimmedText = child.text.trim();
+      if (trimmedText === '') {
+        continue; // Skip whitespace-only nodes
+      }
+      braket += trimmedText; // Output inline
     } else if (child.tag) {
       braket += indentStr + `|${child.tag}`;
       
