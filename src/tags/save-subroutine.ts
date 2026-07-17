@@ -265,9 +265,19 @@ function serializeChildren(children: any[], indent: number): string {
           xml += '\n';
         }
       } else if (child.text) {
-        xml += `>${escapeXml(child.text)}</${child.tag}>\n`;
+        // Tag with inline text content
+        xml += `>${escapeXml(child.text)}</${child.tag}>`;
+        // Add newline if this is the last child or next is an element
+        if (i === filteredChildren.length - 1 || filteredChildren[i + 1]?.tag) {
+          xml += '\n';
+        }
       } else {
-        xml += ' />\n';
+        // Self-closing tag (no children, no text)
+        xml += ' />';
+        // Add newline if this is the last child or next is an element (not text)
+        if (i === filteredChildren.length - 1 || filteredChildren[i + 1]?.tag) {
+          xml += '\n';
+        }
       }
     }
   }
