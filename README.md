@@ -252,6 +252,21 @@ Dirac is more than a language—it's a **paradigm shift** in how we think about 
 npm install -g dirac-lang
 ```
 
+## Documentation
+
+For detailed guides on using Dirac:
+
+- **[Getting Started](GETTING-STARTED.md)** - Installation and first programs
+- **[Quick Start Library Guide](QUICKSTART-LIBRARY.md)** - Building reusable libraries
+- **[LLM Integration](LLM-DIALOG-CONTEXT.md)** - Working with LLMs in Dirac
+- **[Subroutine Management](SUBROUTINE-MANAGEMENT.md)** - Stack operations and subroutine control
+- **[Training Data Export](TRAINING-DATA-EXPORT.md)** - Creating fine-tuning datasets
+- **[Debugging](DEBUGGING.md)** - Debug mode and troubleshooting
+- **[Exception Handling](EXCEPTION-HANDLING.md)** - Error handling and recovery
+- **[Namespaces](NAMESPACES.md)** - Organizing code with namespaces
+- **[Libraries](LIBRARIES.md)** - Using and creating libraries
+- **[Conditional Tags](CONDITIONAL-TAGS.md)** - Control flow patterns
+
 ---
 
 *"In the quantum realm, a bra meets a ket to produce reality. In Dirac, a declaration meets an LLM to produce execution."*
