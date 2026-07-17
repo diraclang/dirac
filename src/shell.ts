@@ -700,6 +700,7 @@ Commands:
   :search <query> Search indexed subroutines
   :load <query>   Load context (search and import subroutines)
   :save <name> [file]  Save subroutine (default: ~/.dirac/lib/TIMESTAMP/name.di)
+  :edit <name>    Edit subroutine in external editor
   :stats          Show registry statistics
   :tasks          List all scheduled tasks
   :stop <name>    Stop a scheduled task
@@ -936,6 +937,28 @@ Examples:
             }
           } catch (error) {
             console.error('Error saving subroutine:', error instanceof Error ? error.message : String(error));
+          }
+        }
+        break;
+        
+      case 'edit':
+        if (args.length === 0) {
+          console.log('Usage: :edit <subroutine-name>');
+          console.log('  Opens the subroutine in your default editor ($EDITOR or vi)');
+          console.log('Examples:');
+          console.log('  :edit greet                    # edit greet subroutine in default editor');
+          console.log('  Use :save after editing to persist changes to disk');
+        } else {
+          const subName = args[0];
+          try {
+            const xml = `<edit-subroutine name="${subName}" />`;
+            const ast = this.xmlParser.parse(xml);
+            await integrate(this.session, ast);
+            if (this.session.output.length > 0) {
+              console.log(this.session.output.join(''));
+            }
+          } catch (error) {
+            console.error('Error editing subroutine:', error instanceof Error ? error.message : String(error));
           }
         }
         break;
