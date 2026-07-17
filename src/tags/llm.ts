@@ -627,6 +627,9 @@ CRITICAL: When defining parameters:
     if (outputVar) {
       setVariable(session, outputVar, result, false);
     } else if (executeMode) {
+      // Show original LLM response to stderr before execution (always, not just in debug)
+      console.error(`\n[LLM Original Response]\n${result}\n`);
+      
       // NEW: Execute mode - parse and interpret LLM response as Dirac code
       const validateTags = element.attributes['validate'] === 'true';
       const autocorrect = element.attributes['autocorrect'] === 'true';
@@ -805,6 +808,9 @@ CRITICAL: When defining parameters:
                 setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
               }
               
+              // Show original LLM response (always, not just in debug)
+              console.error(`\n[LLM Original Response - Retry ${retryCount}]\n${result}\n`);
+              
               if (session.debug) {
                 console.error(`[LLM] Retry ${retryCount} response:\n${result}\n`);
               }
@@ -897,6 +903,9 @@ CRITICAL: When defining parameters:
                   setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
                 }
                 
+                // Show original LLM response (always)
+                console.error(`\n[LLM Original Response - Confirmation]\n${result}\n`);
+                
                 console.error(`[LLM] LLM confirmation response:\n${result}\n`);
                 
                 // Continue to next iteration to process the LLM's corrected response
@@ -984,6 +993,9 @@ CRITICAL: When defining parameters:
               } else if (saveDialog) {
                 setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
               }
+              
+              // Show original LLM response after error feedback (always)
+              console.error(`\n[LLM Original Response - After Error]\n${result}\n`);
               
               // Continue to next iteration with new response
               continue;
@@ -1090,6 +1102,9 @@ CRITICAL: When defining parameters:
               setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
             }
             
+            // Show original LLM response from feedback loop (always)
+            console.error(`\n[LLM Original Response - Feedback Loop]\n${result}\n`);
+            
             if (session.debug) {
               console.error(`[LLM] Feedback response:\n${result}\n`);
             }
@@ -1169,6 +1184,9 @@ CRITICAL: When defining parameters:
             } else if (saveDialog) {
               setVariable(session, '__llm_dialog__', JSON.stringify(dialogHistory), true);
             }
+            
+            // Show original LLM response after parse error (always)
+            console.error(`\n[LLM Original Response - After Parse Error]\n${result}\n`);
             
             if (session.debug) {
               console.error(`[LLM] LLM correction response:\n${result}\n`);
