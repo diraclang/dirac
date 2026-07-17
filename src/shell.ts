@@ -663,12 +663,23 @@ export class DiracShell {
       }
       
       // Display raw LLM response if execution produced no visible output
-      const silentExecution = this.session.variables.find(v => v.name === '__llm_silent_execution__');
+      // Search from end to get the most recent value
+      let silentExecution: any = undefined;
+      for (let i = this.session.variables.length - 1; i >= 0; i--) {
+        if (this.session.variables[i].name === '__llm_silent_execution__') {
+          silentExecution = this.session.variables[i];
+          break;
+        }
+      }
       if (silentExecution?.value) {
         console.error(`\n[LLM generated]\n${silentExecution.value}\n`);
-        // Clear the flag
-        const idx = this.session.variables.findIndex(v => v.name === '__llm_silent_execution__');
-        if (idx !== -1) this.session.variables.splice(idx, 1);
+        // Clear the flag - remove from end
+        for (let i = this.session.variables.length - 1; i >= 0; i--) {
+          if (this.session.variables[i].name === '__llm_silent_execution__') {
+            this.session.variables.splice(i, 1);
+            break;
+          }
+        }
       }
     } catch (error) {
       console.error('Error:', error instanceof Error ? error.message : String(error));
@@ -1282,9 +1293,20 @@ Examples:
           
           console.error(`[DEBUG] Final saveMode: ${saveMode}`);
           
-          const dialogVar = this.client 
-            ? (await this.client.getState()).variables.find((v: any) => v.name === '__llm_dialog__')
-            : this.session.variables.find((v: any) => v.name === '__llm_dialog__');
+          
+          // Find the most recent __llm_dialog__ variable (search from end)
+          // Multiple <llm> calls can create multiple __llm_dialog__ variables in different scopes
+          const variables = this.client 
+            ? (await this.client.getState()).variables
+            : this.session.variables;
+          
+          let dialogVar: any = undefined;
+          for (let i = variables.length - 1; i >= 0; i--) {
+            if (variables[i].name === '__llm_dialog__') {
+              dialogVar = variables[i];
+              break;
+            }
+          }
           
           if (!dialogVar || !dialogVar.value) {
             console.log('No LLM dialog to save');
