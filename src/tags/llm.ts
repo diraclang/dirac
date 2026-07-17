@@ -627,15 +627,20 @@ CRITICAL: When defining parameters:
     if (outputVar) {
       setVariable(session, outputVar, result, false);
     } else if (executeMode) {
-      // Show original LLM response to stderr before execution (always, not just in debug)
-      console.error(`\n[LLM Original Response]\n${result}\n`);
-      
       // NEW: Execute mode - parse and interpret LLM response as Dirac code
       const validateTags = element.attributes['validate'] === 'true';
       const autocorrect = element.attributes['autocorrect'] === 'true';
       const maxRetries = parseInt(element.attributes['max-retries'] || '0', 10);
       const feedbackMode = element.attributes['feedback'] === 'true';
       const confirmCorrections = element.attributes['confirm-corrections'] === 'true';
+      
+      // Show original LLM response to stderr before execution (always, not just in debug)
+      // Place after reading attributes but before any execution
+      console.error(`\n${'='.repeat(60)}`);
+      console.error(`[LLM Original Response]`);
+      console.error(`${'='.repeat(60)}`);
+      console.error(result);
+      console.error(`${'='.repeat(60)}\n`);
       
       // Always log validation settings (not just in debug mode)
       console.error(`[LLM] Execute mode - validate: ${validateTags}, autocorrect: ${autocorrect}, feedback: ${feedbackMode}, confirm-corrections: ${confirmCorrections}, debug: ${session.debug}`);
@@ -744,7 +749,7 @@ CRITICAL: When defining parameters:
               }
               
               // Apply the corrections to the AST
-              dynamicAST = applyCorrectedTags(dynamicAST, validation.results);
+              dynamicAST = applyCorrectedTags(session, dynamicAST, validation.results);
               console.error('[LLM] Applied initial auto-corrections to AST');
               
               // Re-validate the corrected AST to check if corrections fixed all issues
@@ -809,7 +814,11 @@ CRITICAL: When defining parameters:
               }
               
               // Show original LLM response (always, not just in debug)
-              console.error(`\n[LLM Original Response - Retry ${retryCount}]\n${result}\n`);
+              console.error(`\n${'='.repeat(60)}`);
+              console.error(`[LLM Original Response - Retry ${retryCount}]`);
+              console.error(`${'='.repeat(60)}`);
+              console.error(result);
+              console.error(`${'='.repeat(60)}\n`);
               
               if (session.debug) {
                 console.error(`[LLM] Retry ${retryCount} response:\n${result}\n`);
@@ -904,7 +913,11 @@ CRITICAL: When defining parameters:
                 }
                 
                 // Show original LLM response (always)
-                console.error(`\n[LLM Original Response - Confirmation]\n${result}\n`);
+                console.error(`\n${'='.repeat(60)}`);
+                console.error(`[LLM Original Response - Confirmation]`);
+                console.error(`${'='.repeat(60)}`);
+                console.error(result);
+                console.error(`${'='.repeat(60)}\n`);
                 
                 console.error(`[LLM] LLM confirmation response:\n${result}\n`);
                 
@@ -995,7 +1008,11 @@ CRITICAL: When defining parameters:
               }
               
               // Show original LLM response after error feedback (always)
-              console.error(`\n[LLM Original Response - After Error]\n${result}\n`);
+              console.error(`\n${'='.repeat(60)}`);
+              console.error(`[LLM Original Response - After Error]`);
+              console.error(`${'='.repeat(60)}`);
+              console.error(result);
+              console.error(`${'='.repeat(60)}\n`);
               
               // Continue to next iteration with new response
               continue;
@@ -1103,7 +1120,11 @@ CRITICAL: When defining parameters:
             }
             
             // Show original LLM response from feedback loop (always)
-            console.error(`\n[LLM Original Response - Feedback Loop]\n${result}\n`);
+            console.error(`\n${'='.repeat(60)}`);
+            console.error(`[LLM Original Response - Feedback Loop]`);
+            console.error(`${'='.repeat(60)}`);
+            console.error(result);
+            console.error(`${'='.repeat(60)}\n`);
             
             if (session.debug) {
               console.error(`[LLM] Feedback response:\n${result}\n`);
@@ -1186,7 +1207,11 @@ CRITICAL: When defining parameters:
             }
             
             // Show original LLM response after parse error (always)
-            console.error(`\n[LLM Original Response - After Parse Error]\n${result}\n`);
+            console.error(`\n${'='.repeat(60)}`);
+            console.error(`[LLM Original Response - After Parse Error]`);
+            console.error(`${'='.repeat(60)}`);
+            console.error(result);
+            console.error(`${'='.repeat(60)}\n`);
             
             if (session.debug) {
               console.error(`[LLM] LLM correction response:\n${result}\n`);
