@@ -701,6 +701,7 @@ Commands:
   :load <query>   Load context (search and import subroutines)
   :save <name> [file]  Save subroutine (default: ~/.dirac/lib/TIMESTAMP/name.di)
   :edit <name>    Edit subroutine in external editor
+  :remove <name>  Remove subroutine from session stack (not from disk)
   :stats          Show registry statistics
   :tasks          List all scheduled tasks
   :stop <name>    Stop a scheduled task
@@ -712,6 +713,7 @@ Commands:
   :cancel <name>  Cancel a scheduled run
   :cancelall      Cancel all scheduled runs
   :save-training [mode=full|pruned|both]  Save LLM dialog as training data (opens in editor)
+  :save-subroutine-training <name>  Save subroutine as training data with description
   :exit           Exit shell
 
 Syntax:
@@ -963,6 +965,29 @@ Examples:
         }
         break;
         
+      case 'remove':
+        if (args.length === 0) {
+          console.log('Usage: :remove <subroutine-name>');
+          console.log('  Removes all instances of the subroutine from the session stack');
+          console.log('  Note: This does NOT delete the subroutine from disk');
+          console.log('Examples:');
+          console.log('  :remove greet                  # remove greet subroutine from session');
+        } else {
+          const subName = args[0];
+          try {
+            const { removeSubroutine } = await import('./runtime/session.js');
+            const removed = removeSubroutine(this.session, subName);
+            if (removed) {
+              console.log(`Removed subroutine '${subName}' from session stack`);
+            } else {
+              console.log(`Subroutine '${subName}' not found in session`);
+            }
+          } catch (error) {
+            console.error('Error removing subroutine:', error instanceof Error ? error.message : String(error));
+          }
+        }
+        break;
+        
       case 'stats':
         try {
           const xml = '<registry-stats />';
@@ -1116,6 +1141,125 @@ Examples:
         }
         break;
 
+      case 'save-subroutine-training':
+        if (args.length === 0) {
+          console.log('Usage: :save-subroutine-training <subroutine-name>');
+          console.log('  Saves a subroutine as training data (opens in editor)');
+          console.log('  You will be prompted to provide a description for the training example');
+          console.log('Examples:');
+          console.log('  :save-subroutine-training greet');
+        } else {
+          const subName = args[0];
+          try {
+            // Find the subroutine in the session
+            let subroutine: any = undefined;
+            const subroutines = this.client 
+              ? (await this.client.getState()).subroutines || []
+              : this.session.subroutines;
+            
+            for (let i = subroutines.length - 1; i >= 0; i--) {
+              if (subroutines[i].name === subName) {
+                subroutine = subroutines[i];
+                break;
+              }
+            }
+            
+            if (!subroutine) {
+              console.log(`Subroutine '${subName}' not found in session`);
+              break;
+            }
+            
+            // Prompt for description
+            const description = await new Promise<string>((resolve) => {
+              this.rl.question(`Enter description (user's request that would generate this subroutine): `, resolve);
+            });
+            
+            if (!description.trim()) {
+              console.log('Cancelled (no description provided)');
+              break;
+            }
+            
+            // Serialize the subroutine to XML
+            const { serializeSubroutineForTraining } = await import('./utils/subroutine-serializer.js');
+            const subroutineContent = serializeSubroutineForTraining(subroutine);
+            
+            // Create training example
+            const trainingExample = {
+              messages: [
+                { role: 'user', content: description.trim() },
+                { role: 'assistant', content: subroutineContent }
+              ]
+            };
+            
+            // Create temp file for editing
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').split('T')[0] + '-' + Date.now();
+            const tempFile = path.join(os.tmpdir(), `dirac-subroutine-training-${timestamp}.jsonl`);
+            const tempContent = JSON.stringify(trainingExample, null, 2);
+            
+            fs.writeFileSync(tempFile, tempContent, 'utf-8');
+            
+            console.log('Opening in editor...');
+            
+            // Open in editor
+            const editor = process.env.EDITOR || process.env.VISUAL || 'vi';
+            const { spawnSync } = await import('child_process');
+            const result = spawnSync(editor, [tempFile], {
+              stdio: 'inherit',
+              shell: true,
+            });
+            
+            if (result.error) {
+              fs.unlinkSync(tempFile);
+              console.error(`Failed to open editor: ${result.error.message}`);
+              break;
+            }
+            
+            if (result.status !== 0) {
+              fs.unlinkSync(tempFile);
+              console.error(`Editor exited with code ${result.status}`);
+              break;
+            }
+            
+            // Ask where to save
+            const answer = await new Promise<string>((resolve) => {
+              this.rl.question('Save to file (or press Enter to cancel): ', resolve);
+            });
+            
+            if (!answer.trim()) {
+              fs.unlinkSync(tempFile);
+              console.log('Cancelled');
+              break;
+            }
+            
+            // Determine save path
+            let savePath: string;
+            if (answer.startsWith('/') || answer.startsWith('~')) {
+              // Absolute path
+              savePath = answer.replace(/^~/, os.homedir());
+            } else if (answer.includes('/')) {
+              // Relative path
+              savePath = path.resolve(answer);
+            } else {
+              // Just filename - save to ~/.dirac/training/
+              const trainingDir = path.join(os.homedir(), '.dirac', 'training');
+              fs.mkdirSync(trainingDir, { recursive: true });
+              savePath = path.join(trainingDir, answer.endsWith('.jsonl') ? answer : `${answer}.jsonl`);
+            }
+            
+            // Read edited content and save
+            const editedContent = fs.readFileSync(tempFile, 'utf-8');
+            const editedData = JSON.parse(editedContent);
+            fs.appendFileSync(savePath, JSON.stringify(editedData) + '\n');
+            console.log(`✓ Saved training example for '${subName}' to ${savePath}`);
+            
+            // Clean up
+            fs.unlinkSync(tempFile);
+          } catch (error) {
+            console.error('Error saving subroutine training data:', error instanceof Error ? error.message : String(error));
+          }
+        }
+        break;
+        
       case 'save-training':
         try {
           // Use the full cmd string to preserve arguments

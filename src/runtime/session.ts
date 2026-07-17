@@ -243,6 +243,13 @@ export function cleanSubroutinesToBoundary(session: DiracSession, callerSubrouti
   }
 }
 
+export function removeSubroutine(session: DiracSession, name: string): boolean {
+  // Find and remove all instances of the subroutine with the given name from the stack
+  const initialLength = session.subroutines.length;
+  session.subroutines = session.subroutines.filter(s => s.name !== name);
+  return session.subroutines.length < initialLength;
+}
+
 // Variable substitution (maps to var_replace functions in MASK)
 
 export function substituteVariables(session: DiracSession, text: string): string {
