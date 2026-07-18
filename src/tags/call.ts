@@ -30,8 +30,9 @@ export async function executeCall(session: DiracSession, element: DiracElement):
   let name: string;
   
   if (element.tag === 'call') {
-    // Explicit <call> tag - use name or subroutine attribute
-    name = element.attributes.name || element.attributes.subroutine || '';
+    // Explicit <call> tag - use subroutine or name attribute
+    // Prioritize 'subroutine' to avoid conflict with function parameters named 'name'
+    name = element.attributes.subroutine || element.attributes.name || '';
   } else {
     // Direct tag syntax - use tag name itself, ignore name attribute
     name = element.tag;
@@ -171,6 +172,19 @@ async function executeCallInternal(
     for (const [attrName, attrValue] of Object.entries(subroutine.attributes)) {
       if (attrName.startsWith('param-')) {
         const paramName = attrName.substring(6);
+        
+        // Skip 'name' parameter when element.tag is 'call' AND 'subroutine' attribute is NOT present
+        // (because in that case 'name' is used to specify the function, not as a parameter)
+        if (callElement.tag === 'call' && paramName === 'name' && !callElement.attributes.subroutine) {
+          continue;
+        }
+        
+        // Skip 'subroutine' parameter when element.tag is 'call' AND 'subroutine' attribute IS present
+        // (because in that case 'subroutine' is used to specify the function, not as a parameter)
+        if (callElement.tag === 'call' && paramName === 'subroutine' && callElement.attributes.subroutine) {
+          continue;
+        }
+        
         // Check if variable exists in current boundary
         const alreadySet = session.variables.slice(session.varBoundary).some(v => v.name === paramName);
         if (!alreadySet) {
