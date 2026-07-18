@@ -693,6 +693,15 @@ CRITICAL: When defining parameters:
         // Capture output before execution (for feedback and silent operation detection)
         const outputBefore = session.output.length;
         
+        // Check if LLM says we're done BEFORE parsing (look for <DONE /> tag)
+        const trimmedCode = diracCode.trim();
+        if (trimmedCode === '<DONE />' || trimmedCode === '<DONE/>') {
+          if (session.debug) {
+            console.error(`[LLM] Feedback loop terminating - LLM indicated completion with <DONE /> (before parsing)\n`);
+          }
+          break; // Exit feedback loop immediately without parsing
+        }
+        
         try {
           // Parse the LLM's output as Dirac code
           console.error(`[LLM] Iteration ${iteration}: Parsing LLM response`);
