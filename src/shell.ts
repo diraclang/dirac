@@ -831,7 +831,11 @@ Examples:
         this.session.subroutines = [];
         this.session.varBoundary = 0;
         this.session.subBoundary = 0;
-        console.log('Session cleared');
+        // Clear import tracking so files can be re-imported
+        if (this.session.importedFiles) {
+          this.session.importedFiles.clear();
+        }
+        console.log('Session cleared (including import history)');
         break;
 
       case 'debug':
