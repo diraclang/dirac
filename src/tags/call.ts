@@ -223,7 +223,7 @@ async function executeCallInternal(
 
     // Clean up scope (keep visible variables and subroutines) BEFORE restoring boundary
     cleanToBoundary(session);
-    cleanSubroutinesToBoundary(session, subroutine);
+    cleanSubroutinesToBoundary(session, subroutine, callElement);
     
     session.varBoundary = oldBoundary;
     session.subBoundary = oldSubBoundary;

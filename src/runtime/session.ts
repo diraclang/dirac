@@ -228,10 +228,20 @@ export function popSubroutinesToBoundary(session: DiracSession): void {
   session.subroutines = session.subroutines.slice(0, session.subBoundary);
 }
 
-export function cleanSubroutinesToBoundary(session: DiracSession, callerSubroutine?: DiracElement): void {
-  // Check if caller has visible="subroutine" or visible="both"
-  const keepNested = callerSubroutine?.attributes.visible === 'subroutine' || 
-                     callerSubroutine?.attributes.visible === 'both';
+export function cleanSubroutinesToBoundary(session: DiracSession, callerSubroutine?: DiracElement, callElement?: DiracElement): void {
+  // Merge visible attributes from both definition-time (subroutine) and call-time (callElement)
+  // Call-time can override definition-time (like MASK ml_element_merge_visible_tag)
+  let visibleValue = callerSubroutine?.attributes.visible || 'false';
+  
+  // Call-time visible attribute takes precedence if present
+  if (callElement?.attributes.visible) {
+    visibleValue = callElement.attributes.visible;
+  }
+  
+  // Check if we should keep nested subroutines
+  const keepNested = visibleValue === 'subroutine' || 
+                     visibleValue === 'both' ||
+                     visibleValue === 'true';
   
   if (keepNested) {
     // Keep all subroutines registered during this call (they persist)
