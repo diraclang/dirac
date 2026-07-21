@@ -279,6 +279,21 @@
   <!-- Background mode returns immediately without waiting -->
 </subroutine>
 
+<subroutine name="python"
+  meta-hide-from-llm="true"
+  description="Execute Python code with access to session variables"
+  param-result="string:optional:Variable name to store Python result">
+  <!-- Python code provided as text content -->
+  <!-- All DIRAC variables available as Python variables -->
+  <!-- Use print() to capture output -->
+  <!-- Set result variable to capture return value via JSON -->
+  <!-- Example: -->
+  <!--   <python result="sum"> -->
+  <!--     sum = v1 + v2 -->
+  <!--     print(f"Result: {sum}") -->
+  <!--   </python> -->
+</subroutine>
+
 <!-- ============================================================
      FILE & MODULE MANAGEMENT
      ============================================================ -->
