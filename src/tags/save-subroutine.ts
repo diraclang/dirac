@@ -159,13 +159,8 @@ function generateXMLNotation(subroutine: any): string {
 function generateBraKetNotation(subroutine: any): string {
   let braket = '';
   
-  // Opening bra
-  braket += `<${subroutine.name}|`;
-  
-  // Add description
-  if (subroutine.description) {
-    braket += ` description="${escapeXml(subroutine.description)}"`;
-  }
+  // Opening bra with subroutine name as tag and attributes BEFORE the |
+  braket += `<${subroutine.name}`;
   
   // Add parameters as regular attributes (not param-*)
   if (subroutine.parameters && subroutine.parameters.length > 0) {
@@ -174,7 +169,12 @@ function generateBraKetNotation(subroutine: any): string {
     }
   }
   
-  braket += '\n';
+  // Add description
+  if (subroutine.description) {
+    braket += ` description="${escapeXml(subroutine.description)}"`;
+  }
+  
+  braket += '|\n';
   
   // Add body
   if (subroutine.element && subroutine.element.children) {
@@ -294,35 +294,69 @@ function serializeChildrenBraKet(children: any[], indent: number): string {
   
   for (const child of children) {
     if (child.text && !child.tag) {
-      // Text node - skip whitespace-only text nodes
+      // Text node - preserve as indented text
       const trimmedText = child.text.trim();
       if (trimmedText === '') {
         continue; // Skip whitespace-only nodes
       }
-      braket += trimmedText; // Output inline
+      braket += indentStr + trimmedText + '\n';
     } else if (child.tag) {
       braket += indentStr + `|${child.tag}`;
       
-      // Attributes
+      // Attributes (no quotes for braket notation)
       if (child.attributes) {
         for (const [key, value] of Object.entries(child.attributes)) {
-          braket += ` ${key}="${escapeXml(String(value))}"`;
+          braket += ` ${key}=${String(value)}`;
         }
       }
       
       // Content
-      if (child.text) {
-        braket += `>${child.text}\n`;
-      } else if (child.children && child.children.length > 0) {
-        braket += '>\n';
-        braket += serializeChildrenBraKet(child.children, indent + 2);
+      if (child.children && child.children.length > 0) {
+        // Check if has inline text
+        const hasInlineText = child.children.some((c: any) => !c.tag && c.text);
+        const hasInlineKets = child.children.some((c: any) => c.tag && !hasBlockChildren(c));
+        
+        if (hasInlineText && child.children.length === 1 && !child.children[0].tag) {
+          // Single text child - inline
+          braket += '>' + child.children[0].text;
+        } else if (hasInlineText || hasInlineKets) {
+          // Mixed inline content
+          braket += '>';
+          for (const c of child.children) {
+            if (c.tag) {
+              braket += `|${c.tag}`;
+              if (c.attributes) {
+                for (const [k, v] of Object.entries(c.attributes)) {
+                  braket += ` ${k}=${String(v)}`;
+                }
+              }
+              braket += '>';
+            } else if (c.text) {
+              braket += c.text;
+            }
+          }
+        } else {
+          // Block children
+          braket += '>\n';
+          braket += serializeChildrenBraKet(child.children, indent + 2);
+        }
       } else {
-        braket += '>\n';
+        braket += '>';
       }
+      
+      braket += '\n';
     }
   }
   
   return braket;
+}
+
+/**
+ * Check if element has block-level children
+ */
+function hasBlockChildren(element: any): boolean {
+  if (!element.children || element.children.length === 0) return false;
+  return element.children.some((c: any) => c.tag || (c.text && c.text.includes('\n')));
 }
 
 /**

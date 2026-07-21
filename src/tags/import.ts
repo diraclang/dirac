@@ -7,6 +7,7 @@ import type { DiracSession, DiracElement } from '../types/index.js';
 import { readFileSync, existsSync } from 'fs';
 import { resolve, dirname, join } from 'path';
 import { DiracParser } from '../runtime/parser.js';
+import { BraKetParser } from '../runtime/braket-parser.js';
 import { integrate } from '../runtime/interpreter.js';
 import { substituteAttribute } from '../runtime/session.js';
 import { homedir } from 'os';
@@ -199,9 +200,44 @@ export async function executeImport(session: DiracSession, element: DiracElement
   
   try {
     // Read and parse the imported file
-    const source = readFileSync(importPath, 'utf-8');
+    let source = readFileSync(importPath, 'utf-8');
+    
+    // Check if it's braket notation and convert to XML
+    // Look for lines that start with | (ket) or end with | (bra)
+    const lines = source.split('\n');
+    let isBraket = false;
+    for (const line of lines) {
+      const trimmed = line.trim();
+      // Skip comments and empty lines
+      if (trimmed.startsWith('<!--') || trimmed === '') continue;
+      // Check for ket tag (line starts with |)
+      if (/^\s*\|[a-z0-9_-]+/i.test(line)) {
+        isBraket = true;
+        break;
+      }
+      // Check for bra tag (< followed by tag name and ending with |)
+      if (/^\s*<[a-z0-9_-]+[^>]*\|\s*$/i.test(line)) {
+        isBraket = true;
+        break;
+      }
+    }
+    
+    if (isBraket) {
+      const braketParser = new BraKetParser();
+      source = braketParser.parse(source);
+      
+      if (session.debug) {
+        console.error('[IMPORT] Converted from braket notation to XML');
+      }
+    }
+    
     const parser = new DiracParser();
     const ast = parser.parse(source);
+    
+    // Debug: Show the parsed structure
+    if (session.debug) {
+      console.error('[IMPORT] Parsed AST:', JSON.stringify(ast, null, 2));
+    }
     
     // Save current file context and set new one
     const previousFile = session.currentFile;
