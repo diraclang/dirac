@@ -29,7 +29,7 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
   const name = element.attributes.name;
   const file = element.attributes.file;
   const pathAttr = element.attributes.path;
-  const format = element.attributes.format || 'xml'; // 'xml' or 'braket'
+  const format = element.attributes.format || 'braket'; // 'xml' or 'braket'
   
   if (!name) {
     throw new Error('<save-subroutine> requires name attribute');

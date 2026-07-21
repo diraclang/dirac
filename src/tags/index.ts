@@ -7,6 +7,7 @@ import * as assign from './assign';
 import * as parameters from './parameters';
 import * as loop from './loop';
 import * as evalTag from './eval';
+import * as pythonTag from './python';
 import * as call from './call';
 import * as defvar from './defvar';
 import * as output from './output';
@@ -28,6 +29,7 @@ export default {
   ...parameters,
   ...loop,
   ...evalTag,
+  ...pythonTag,
   ...call,
   ...defvar,
   ...output,

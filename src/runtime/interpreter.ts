@@ -14,6 +14,7 @@ import { executeLoop } from '../tags/loop.js';
 import { executeIf } from '../tags/if.js';
 import { executeLLM } from '../tags/llm.js';
 import { executeEval } from '../tags/eval.js';
+import { executePython } from '../tags/python.js';
 import { executeExecute } from '../tags/execute.js';
 import { executeImport } from '../tags/import.js';
 import { executeParameters } from '../tags/parameters.js';
@@ -106,6 +107,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'eval':
         await executeEval(session, element);
+        break;
+        
+      case 'python':
+        await executePython(session, element);
         break;
         
       case 'execute':
