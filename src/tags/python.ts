@@ -150,6 +150,14 @@ except NameError:
       const lines = trimmedOutput.split('\n');
       const jsonLine = lines[lines.length - 1];
 
+      // Emit all output except the last JSON line
+      if (lines.length > 1) {
+        const userOutput = lines.slice(0, -1).join('\n');
+        if (userOutput.trim()) {
+          session.output.push(userOutput + '\n');
+        }
+      }
+
       try {
         const result = JSON.parse(jsonLine);
         
@@ -171,8 +179,11 @@ except NameError:
       } catch (parseError) {
         throw new Error(`Failed to parse Python result: ${parseError instanceof Error ? parseError.message : String(parseError)}\nOutput: ${trimmedOutput}`);
       }
-    } else if (session.debug) {
-      console.error(`[PYTHON] Output:\n${output}`);
+    } else {
+      // No result variable - emit all output
+      if (output.trim()) {
+        session.output.push(output);
+      }
     }
 
   } catch (error) {
