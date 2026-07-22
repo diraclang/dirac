@@ -325,6 +325,7 @@
   description="Invoke Large Language Model with validation"
   param-provider="string:optional:LLM provider for this call|anthropic|openai|ollama|custom"
   param-model="string:optional:Model name or use DEFAULT_MODEL env var"
+  param-router="string:optional:Custom system prompt router subroutine name"
   param-output="string:optional:Variable to store result"
   param-context="string:optional:Context variable for RAG"
   param-save-dialog="string:optional:Enable dialog persistence|true|false"
@@ -342,6 +343,7 @@
   <!-- Generate DIRAC code via LLM -->
   <!-- Supports Anthropic, OpenAI, Ollama, Custom providers -->
   <!-- provider attribute allows per-call provider switching -->
+  <!-- router attribute uses custom system prompt builder from session -->
   <!-- save-dialog=true enables conversation persistence with 85% token savings -->
   <!-- execute=true runs generated code immediately -->
   <!-- validate/autocorrect for syntax checking and repair -->
@@ -349,6 +351,14 @@
   <!-- on-iteration: callback for monitoring LLM feedback loops -->
   <!-- Callback has access to __llm_iteration__, __llm_max_iterations__, __llm_dialog__ -->
   <!-- Set __llm_stop_requested__="true" in callback to stop iteration early -->
+  <!-- Router pattern: -->
+  <!--   <subroutine name="router-factory" visible="subroutine"> -->
+  <!--     <subroutine name="my-router" visible="subroutine"> -->
+  <!--       <output>Custom system prompt</output> -->
+  <!--     </subroutine> -->
+  <!--   </subroutine> -->
+  <!--   <router-factory/> -->
+  <!--   <llm router="my-router">User prompt</llm> -->
 </subroutine>
 
 <subroutine name="load-context"

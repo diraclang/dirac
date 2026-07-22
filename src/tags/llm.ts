@@ -391,10 +391,62 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
   }
 
   const noExtra = element.attributes.noextra === 'true';
+  const routerName = element.attributes.router;
   let systemPrompt = '';
   let currentUserPrompt = userPrompt;
+  let routerUsed = false;
   
-  if (!noExtra) {
+  // Check if router attribute is specified and router subroutine exists
+  if (routerName) {
+    const { getSubroutine } = await import('../runtime/session.js');
+    const routerSubroutine = getSubroutine(session, routerName);
+    
+    if (routerSubroutine) {
+      if (session.debug) {
+        console.error(`[LLM] Using router: ${routerName}`);
+      }
+      
+      // Call router to generate system prompt
+      const beforeOutput = session.output.length;
+      const { executeCall } = await import('./call.js');
+      
+      // Create a call element for the router
+      const routerCallElement: DiracElement = {
+        tag: routerName,
+        attributes: {},
+        children: []
+      };
+      
+      await executeCall(session, routerCallElement);
+      
+      // Capture router output as system prompt
+      const routerOutput = session.output.slice(beforeOutput);
+      systemPrompt = routerOutput.join('').trim();
+      
+      // Remove router output from session output
+      session.output = session.output.slice(0, beforeOutput);
+      
+      routerUsed = true;
+      
+      if (session.debug) {
+        console.error(`[LLM] Router generated system prompt (${systemPrompt.length} chars)`);
+      }
+      
+      // Add router-generated system prompt to dialog history
+      if (hasExistingDialog && (contextVar || saveDialog)) {
+        // Continuing conversation - add as system message before user message
+        dialogHistory.push({ role: 'system', content: systemPrompt });
+      } else {
+        // First call - add as system message
+        dialogHistory.push({ role: 'system', content: systemPrompt });
+      }
+      
+    } else if (session.debug) {
+      console.error(`[LLM] Warning: Router '${routerName}' not found, using default system prompt`);
+    }
+  }
+  
+  if (!noExtra && !routerUsed) {
     // Reflect subroutines for system prompt
     const { getAvailableSubroutines } = await import('../runtime/session.js');
     const allSubroutines = getAvailableSubroutines(session);
