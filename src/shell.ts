@@ -964,14 +964,14 @@ Examples:
             if (fileName) {
               // Check if it's a directory path or file path
               if (fileName.includes('/') || fileName.includes('.di')) {
-                xml = `<save-subroutine name="${subName}" file="${fileName}" format="braket" />`;
+                xml = `<save-subroutine name="${subName}" file="${fileName}" />`;
               } else {
                 // Treat as directory name under ~/.dirac/lib/
-                xml = `<save-subroutine name="${subName}" path="${fileName}" format="braket" />`;
+                xml = `<save-subroutine name="${subName}" path="${fileName}" />`;
               }
             } else {
               // No file specified, use default timestamped directory
-              xml = `<save-subroutine name="${subName}" format="braket" />`;
+              xml = `<save-subroutine name="${subName}" />`;
             }
             const ast = this.xmlParser.parse(xml);
             await integrate(this.session, ast);

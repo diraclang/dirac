@@ -23,4 +23,7 @@ export async function executeThrow(session: DiracSession, element: DiracElement)
   
   // Throw the exception (add to exception stack)
   throwException(session, exceptionName, exceptionDom);
+  
+  // Set thrown flag to halt execution
+  session.isThrown = true;
 }

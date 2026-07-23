@@ -58,8 +58,8 @@ export async function integrate(session: DiracSession, element: DiracElement): P
       return;
     }
     
-    // Check control flow
-    if (session.isReturn || session.isBreak) {
+    // Check control flow - stop execution if return, break, or thrown
+    if (session.isReturn || session.isBreak || session.isThrown) {
       return;
     }
     
@@ -230,7 +230,7 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         // Container tags - just execute children
         for (const child of element.children) {
           await integrate(session, child);
-          if (session.isReturn || session.isBreak) break;
+          if (session.isReturn || session.isBreak || session.isThrown) break;
         }
         break;
         
@@ -244,7 +244,7 @@ export async function integrate(session: DiracSession, element: DiracElement): P
           // Really unknown - just process children
           for (const child of element.children) {
             await integrate(session, child);
-            if (session.isReturn || session.isBreak) break;
+            if (session.isReturn || session.isBreak || session.isThrown) break;
           }
         }
     }
@@ -256,6 +256,6 @@ export async function integrate(session: DiracSession, element: DiracElement): P
 export async function integrateChildren(session: DiracSession, element: DiracElement): Promise<void> {
   for (const child of element.children) {
     await integrate(session, child);
-    if (session.isReturn || session.isBreak) break;
+    if (session.isReturn || session.isBreak || session.isThrown) break;
   }
 }

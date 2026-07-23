@@ -106,6 +106,7 @@ export interface DiracSession {
   // Control flow
   isReturn: boolean;
   isBreak: boolean;
+  isThrown: boolean;
   
   // Extend mechanism
   skipSubroutineRegistration: boolean;
