@@ -33,13 +33,12 @@ export async function executeParameters(session: DiracSession, element: DiracEle
       console.error(`[PARAMETERS] Selecting all children (${caller.children.length} elements)`);
     }
     // Save current output buffer
-    const prevOutput = session.output;
-    session.output = [];
+    const oldBoundary = setOutputBoundary(session);
     for (const child of caller.children) {
       await integrate(session, child);
     }
-    const captured = session.output.join('');
-    session.output = prevOutput;
+    const captured = popAndCaptureOutput(session);
+    session.outputBoundary = oldBoundary;
     return captured;
   } else if (select.startsWith('@')) {
     // Select attribute(s)

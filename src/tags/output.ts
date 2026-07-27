@@ -4,7 +4,7 @@
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { emit, substituteVariables, substituteAttribute } from '../runtime/session.js';
+import { emit, substituteVariables, substituteAttribute, setOutputBoundary, popAndCaptureOutput } from '../runtime/session.js';
 import { integrateChildren } from '../runtime/interpreter.js';
 import * as fs from 'fs';
 import * as path from 'path';
@@ -20,11 +20,10 @@ export async function executeOutput(session: DiracSession, element: DiracElement
     
     if (element.children && element.children.length > 0) {
       // Capture output from children
-      const prevOutput = session.output;
-      session.output = [];
+      const oldBoundary = setOutputBoundary(session);
       await integrateChildren(session, element);
-      content = session.output.join('');
-      session.output = prevOutput;
+      content = popAndCaptureOutput(session);
+      session.outputBoundary = oldBoundary;
     } else if (element.text) {
       content = substituteVariables(session, element.text);
     }

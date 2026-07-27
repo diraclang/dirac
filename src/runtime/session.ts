@@ -57,6 +57,7 @@ export function createSession(config: DiracConfig = {}): DiracSession {
     subroutines: [],
     varBoundary: 0,
     subBoundary: 0,
+    outputBoundary: 0,
     parameterStack: [],
     exceptions: [],
     currentException: {
@@ -284,6 +285,42 @@ export function emit(session: DiracSession, content: string): void {
 
 export function getOutput(session: DiracSession): string {
   return session.output.join('');
+}
+
+// Output boundary management (for scoped output capture)
+
+/**
+ * Set boundary marker for output capture
+ * Returns the previous boundary so it can be restored
+ */
+export function setOutputBoundary(session: DiracSession): number {
+  const oldBoundary = session.outputBoundary;
+  session.outputBoundary = session.output.length;
+  return oldBoundary;
+}
+
+/**
+ * Capture output from current boundary without removing it
+ */
+export function captureOutputFromBoundary(session: DiracSession): string {
+  return session.output.slice(session.outputBoundary).join('');
+}
+
+/**
+ * Pop output back to boundary (discard child output)
+ */
+export function popOutputToBoundary(session: DiracSession): void {
+  session.output = session.output.slice(0, session.outputBoundary);
+}
+
+/**
+ * Capture output from boundary and remove it from parent's view
+ * This is the common pattern for defvar/assign
+ */
+export function popAndCaptureOutput(session: DiracSession): string {
+  const captured = captureOutputFromBoundary(session);
+  popOutputToBoundary(session);
+  return captured;
 }
 
 // Parameter stack (for subroutine calls)

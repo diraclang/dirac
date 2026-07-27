@@ -81,6 +81,7 @@ export interface DiracSession {
   // Scope boundaries (for cleanup)
   varBoundary: number;
   subBoundary: number;
+  outputBoundary: number;
   
   // Parameter stack (for subroutine calls)
   parameterStack: DiracElement[][];

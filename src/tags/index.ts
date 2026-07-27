@@ -18,6 +18,7 @@ import * as mongodb from './mongodb';
 import * as requireModule from './require_module';
 import * as environment from './environment';
 import * as input from './input';
+import * as sessionLog from './session-log';
 
 export default {
   ...system,
@@ -40,4 +41,5 @@ export default {
   ...requireModule,
   ...environment,
   ...input,
+  ...sessionLog,
 };
