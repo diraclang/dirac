@@ -30,7 +30,7 @@ import { BraKetParser } from '../runtime/braket-parser.js';
 export async function executeEditSubroutine(session: DiracSession, element: DiracElement): Promise<void> {
   const name = element.attributes.name;
   const editor = element.attributes.editor || process.env.EDITOR || process.env.VISUAL || 'vi';
-  const format = element.attributes.format || 'braket'; // Default to braket format
+  const format = element.attributes.format || 'xml'; // Default to braket format
   
   if (!name) {
     throw new Error('<edit-subroutine> requires name attribute');
