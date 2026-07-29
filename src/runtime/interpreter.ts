@@ -14,6 +14,7 @@ import { executeLoop } from '../tags/loop.js';
 import { executeIf } from '../tags/if.js';
 import { executeLLM } from '../tags/llm.js';
 import { executeEval } from '../tags/eval.js';
+import { executePython } from '../tags/python.js';
 import { executeExecute } from '../tags/execute.js';
 import { executeImport } from '../tags/import.js';
 import { executeParameters } from '../tags/parameters.js';
@@ -37,6 +38,7 @@ import { executeBreak } from '../tags/break.js';
 import { executeAttr } from '../tags/attr.js';
 import { executeEnvironment } from '../tags/environment.js';
 import { executeInput } from '../tags/input.js';
+import { executeSessionLog } from '../tags/session-log.js';
 import { executeSchedule } from '../tags/schedule.js';
 import { executeCron } from '../tags/cron.js';
 import { executeRunAt } from '../tags/run-at.js';
@@ -57,8 +59,8 @@ export async function integrate(session: DiracSession, element: DiracElement): P
       return;
     }
     
-    // Check control flow
-    if (session.isReturn || session.isBreak) {
+    // Check control flow - stop execution if return, break, or thrown
+    if (session.isReturn || session.isBreak || session.isThrown) {
       return;
     }
     
@@ -106,6 +108,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'eval':
         await executeEval(session, element);
+        break;
+        
+      case 'python':
+        await executePython(session, element);
         break;
         
       case 'execute':
@@ -204,6 +210,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         await executeInput(session, element);
         break;
         
+      case 'session-log':
+        await executeSessionLog(session, element);
+        break;
+        
       case 'schedule':
         await executeSchedule(session, element);
         break;
@@ -225,7 +235,7 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         // Container tags - just execute children
         for (const child of element.children) {
           await integrate(session, child);
-          if (session.isReturn || session.isBreak) break;
+          if (session.isReturn || session.isBreak || session.isThrown) break;
         }
         break;
         
@@ -239,7 +249,7 @@ export async function integrate(session: DiracSession, element: DiracElement): P
           // Really unknown - just process children
           for (const child of element.children) {
             await integrate(session, child);
-            if (session.isReturn || session.isBreak) break;
+            if (session.isReturn || session.isBreak || session.isThrown) break;
           }
         }
     }
@@ -251,6 +261,6 @@ export async function integrate(session: DiracSession, element: DiracElement): P
 export async function integrateChildren(session: DiracSession, element: DiracElement): Promise<void> {
   for (const child of element.children) {
     await integrate(session, child);
-    if (session.isReturn || session.isBreak) break;
+    if (session.isReturn || session.isBreak || session.isThrown) break;
   }
 }

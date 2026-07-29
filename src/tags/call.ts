@@ -23,6 +23,37 @@ import {
 } from '../runtime/session.js';
 import { integrateChildren } from '../runtime/interpreter.js';
 
+/**
+ * Convert a string value to the specified type
+ */
+function convertType(value: string, type: string): any {
+  if (value === '') {
+    return value; // Keep empty strings as-is
+  }
+  
+  switch (type) {
+    case 'number':
+      const num = Number(value);
+      if (isNaN(num)) {
+        throw new Error(`Cannot convert '${value}' to number`);
+      }
+      return num;
+    case 'boolean':
+      if (value === 'true' || value === '1') return true;
+      if (value === 'false' || value === '0') return false;
+      throw new Error(`Cannot convert '${value}' to boolean`);
+    case 'json':
+      try {
+        return JSON.parse(value);
+      } catch (e) {
+        throw new Error(`Cannot parse '${value}' as JSON`);
+      }
+    case 'string':
+    default:
+      return value;
+  }
+}
+
 export async function executeCall(session: DiracSession, element: DiracElement): Promise<void> {
   // Support both <call name="FOO" /> and direct <FOO /> syntax
   // For <call> tag, use name/subroutine attribute
@@ -189,7 +220,7 @@ async function executeCallInternal(
         const alreadySet = session.variables.slice(session.varBoundary).some(v => v.name === paramName);
         if (!alreadySet) {
           // Priority: call attribute > param-* default > empty string
-          let value = '';
+          let value: any = '';
           // Use substitutedElement (which has resolved positional args) instead of callElement
           if (substitutedElement.attributes && substitutedElement.attributes[paramName] !== undefined) {
             value = substitutedElement.attributes[paramName]; // Already substituted above
@@ -200,6 +231,18 @@ async function executeCallInternal(
               value = parts[parts.length - 1];
             }
           }
+          
+          // Convert value to the specified type (only if not empty string)
+          if (value !== '') {
+            const parts = attrValue.split(':');
+            const paramType = parts[0] || 'string';
+            try {
+              value = convertType(value, paramType);
+            } catch (e) {
+              throw new Error(`Parameter '${paramName}': ${e instanceof Error ? e.message : String(e)}`);
+            }
+          }
+          
           setVariable(session, paramName, value, false);
         }
       }
@@ -223,7 +266,7 @@ async function executeCallInternal(
 
     // Clean up scope (keep visible variables and subroutines) BEFORE restoring boundary
     cleanToBoundary(session);
-    cleanSubroutinesToBoundary(session, subroutine);
+    cleanSubroutinesToBoundary(session, subroutine, callElement);
     
     session.varBoundary = oldBoundary;
     session.subBoundary = oldSubBoundary;

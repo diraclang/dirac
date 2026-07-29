@@ -57,6 +57,7 @@ export function createSession(config: DiracConfig = {}): DiracSession {
     subroutines: [],
     varBoundary: 0,
     subBoundary: 0,
+    outputBoundary: 0,
     parameterStack: [],
     exceptions: [],
     currentException: {
@@ -73,6 +74,7 @@ export function createSession(config: DiracConfig = {}): DiracSession {
     },
     isReturn: false,
     isBreak: false,
+    isThrown: false,
     skipSubroutineRegistration: false,
     debug: config.debug || false,
     currentFile: config.filePath, // Set current file from config for proper relative import resolution
@@ -228,10 +230,20 @@ export function popSubroutinesToBoundary(session: DiracSession): void {
   session.subroutines = session.subroutines.slice(0, session.subBoundary);
 }
 
-export function cleanSubroutinesToBoundary(session: DiracSession, callerSubroutine?: DiracElement): void {
-  // Check if caller has visible="subroutine" or visible="both"
-  const keepNested = callerSubroutine?.attributes.visible === 'subroutine' || 
-                     callerSubroutine?.attributes.visible === 'both';
+export function cleanSubroutinesToBoundary(session: DiracSession, callerSubroutine?: DiracElement, callElement?: DiracElement): void {
+  // Merge visible attributes from both definition-time (subroutine) and call-time (callElement)
+  // Call-time can override definition-time (like MASK ml_element_merge_visible_tag)
+  let visibleValue = callerSubroutine?.attributes.visible || 'false';
+  
+  // Call-time visible attribute takes precedence if present
+  if (callElement?.attributes.visible) {
+    visibleValue = callElement.attributes.visible;
+  }
+  
+  // Check if we should keep nested subroutines
+  const keepNested = visibleValue === 'subroutine' || 
+                     visibleValue === 'both' ||
+                     visibleValue === 'true';
   
   if (keepNested) {
     // Keep all subroutines registered during this call (they persist)
@@ -273,6 +285,42 @@ export function emit(session: DiracSession, content: string): void {
 
 export function getOutput(session: DiracSession): string {
   return session.output.join('');
+}
+
+// Output boundary management (for scoped output capture)
+
+/**
+ * Set boundary marker for output capture
+ * Returns the previous boundary so it can be restored
+ */
+export function setOutputBoundary(session: DiracSession): number {
+  const oldBoundary = session.outputBoundary;
+  session.outputBoundary = session.output.length;
+  return oldBoundary;
+}
+
+/**
+ * Capture output from current boundary without removing it
+ */
+export function captureOutputFromBoundary(session: DiracSession): string {
+  return session.output.slice(session.outputBoundary).join('');
+}
+
+/**
+ * Pop output back to boundary (discard child output)
+ */
+export function popOutputToBoundary(session: DiracSession): void {
+  session.output = session.output.slice(0, session.outputBoundary);
+}
+
+/**
+ * Capture output from boundary and remove it from parent's view
+ * This is the common pattern for defvar/assign
+ */
+export function popAndCaptureOutput(session: DiracSession): string {
+  const captured = captureOutputFromBoundary(session);
+  popOutputToBoundary(session);
+  return captured;
 }
 
 // Parameter stack (for subroutine calls)

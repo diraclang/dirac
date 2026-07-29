@@ -15,7 +15,7 @@
  *   - name: subroutine name (required)
  *   - file: explicit file path (optional, uses default if omitted)
  *   - path: directory name under ~/.dirac/lib/ (optional)
- *   - format: 'xml' or 'braket' (default: 'xml')
+ *   - format: 'xml' or 'braket' (default: 'xml' for indexing compatibility)
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
@@ -29,7 +29,7 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
   const name = element.attributes.name;
   const file = element.attributes.file;
   const pathAttr = element.attributes.path;
-  const format = element.attributes.format || 'xml'; // 'xml' or 'braket'
+  const format = element.attributes.format || 'xml'; // Default to 'xml' for indexing compatibility
   
   if (!name) {
     throw new Error('<save-subroutine> requires name attribute');
@@ -120,8 +120,19 @@ function generateXMLNotation(subroutine: any): string {
   
   xml += `<subroutine name="${subroutine.name}"`;
   
-  // Add description if present
-  if (subroutine.description) {
+  // Add all original attributes from the subroutine element (except name and param-*)
+  if (subroutine.element && subroutine.element.attributes) {
+    for (const [attrName, attrValue] of Object.entries(subroutine.element.attributes)) {
+      // Skip name (already added) and param-* (handled separately below)
+      if (attrName === 'name' || attrName.startsWith('param-') || attrName.startsWith('meta-')) {
+        continue;
+      }
+      xml += `\n            ${attrName}="${escapeXml(String(attrValue))}"`;
+    }
+  }
+  
+  // Add description if present (may already be in attributes above, but ensure it's there)
+  if (subroutine.description && !subroutine.element?.attributes?.description) {
     xml += `\n            description="${escapeXml(subroutine.description)}"`;
   }
   
@@ -157,35 +168,110 @@ function generateXMLNotation(subroutine: any): string {
  * Generate bra-ket notation for a subroutine
  */
 function generateBraKetNotation(subroutine: any): string {
-  let braket = '';
+  const lines: string[] = [];
   
-  // Opening bra
-  braket += `<${subroutine.name}|`;
+  // Serialize the element in bra-ket notation (reusing edit-subroutine's logic)
+  serializeElementToBraKet(subroutine.element, lines, 0);
   
-  // Add description
-  if (subroutine.description) {
-    braket += ` description="${escapeXml(subroutine.description)}"`;
+  return lines.join('\n');
+}
+
+/**
+ * Serialize element to bra-ket notation (copied from edit-subroutine for consistency)
+ */
+function serializeElementToBraKet(el: any, lines: string[], indent: number): void {
+  const indentStr = '  '.repeat(indent);
+  
+  // Handle text nodes
+  if (!el.tag || el.tag === '') {
+    if (el.text) {
+      // Don't add text nodes as separate lines - they'll be handled inline
+      // Just return and let parent handle them
+    }
+    return;
   }
   
-  // Add parameters as regular attributes (not param-*)
-  if (subroutine.parameters && subroutine.parameters.length > 0) {
-    for (const param of subroutine.parameters) {
-      braket += ` ${param.name}=${param.type || 'any'}`;
+  // Special handling for subroutine (use bra notation)
+  if (el.tag === 'subroutine') {
+    const name = el.attributes?.name || 'unnamed';
+    let braLine = `${indentStr}<${name}`;
+    
+    // Add ALL attributes (except name and meta-*) BEFORE the |
+    // Parameters go BEFORE the | in bra notation
+    if (el.attributes) {
+      for (const [key, value] of Object.entries(el.attributes)) {
+        if (key !== 'name' && !key.startsWith('meta-') && typeof value === 'string') {
+          // Remove 'param-' prefix if present
+          const attrName = key.startsWith('param-') ? key.substring(6) : key;
+          braLine += ` ${attrName}=${value}`;
+        }
+      }
+    }
+    
+    braLine += '|';
+    lines.push(braLine);
+    
+    // Process children
+    if (el.children && el.children.length > 0) {
+      for (const child of el.children) {
+        serializeElementToBraKet(child, lines, indent + 1);
+      }
+    }
+    
+    return;
+  }
+  
+  // Ket notation for all other tags
+  let ketLine = `${indentStr}|${el.tag}`;
+  
+  // Add attributes
+  if (el.attributes) {
+    for (const [key, value] of Object.entries(el.attributes)) {
+      if (typeof value === 'string') {
+        // Quote value if it contains spaces
+        const needsQuotes = value.includes(' ') || value.includes('=');
+        ketLine += ` ${key}=${needsQuotes ? '"' + value + '"' : value}`;
+      }
     }
   }
   
-  braket += '\n';
+  ketLine += '>';
   
-  // Add body
-  if (subroutine.element && subroutine.element.children) {
-    braket += serializeChildrenBraKet(subroutine.element.children, 2);
-  } else if (subroutine.body) {
-    braket += `  ${subroutine.body}\n`;
+  // Check if tag has children - need to detect mixed content (text + elements)
+  if (el.children && el.children.length > 0) {
+    // Check if content is inline (all text or simple inline elements)
+    const hasComplexChildren = el.children.some((c: any) => 
+      c.tag && c.tag !== 'variable' && (c.children?.length > 0 || c.tag === 'subroutine')
+    );
+    
+    if (!hasComplexChildren) {
+      // Inline content - build it as a single line
+      let inlineContent = '';
+      for (const child of el.children) {
+        if (!child.tag || child.tag === '') {
+          // Text node
+          inlineContent += child.text || '';
+        } else if (child.tag === 'variable') {
+          // Inline variable
+          const varName = child.attributes?.name || '';
+          inlineContent += `|variable name=${varName}>`;
+        } else {
+          // Other simple inline tag
+          inlineContent += `|${child.tag}>`;
+        }
+      }
+      lines.push(ketLine + inlineContent);
+    } else {
+      // Has complex children - multiline
+      lines.push(ketLine);
+      for (const child of el.children) {
+        serializeElementToBraKet(child, lines, indent + 1);
+      }
+    }
   } else {
-    braket += '  # Subroutine body not available\n';
+    // Self-closing (no children)
+    lines.push(ketLine);
   }
-  
-  return braket;
 }
 
 /**
@@ -283,46 +369,6 @@ function serializeChildren(children: any[], indent: number): string {
   }
   
   return xml;
-}
-
-/**
- * Serialize children to bra-ket notation
- */
-function serializeChildrenBraKet(children: any[], indent: number): string {
-  let braket = '';
-  const indentStr = ' '.repeat(indent);
-  
-  for (const child of children) {
-    if (child.text && !child.tag) {
-      // Text node - skip whitespace-only text nodes
-      const trimmedText = child.text.trim();
-      if (trimmedText === '') {
-        continue; // Skip whitespace-only nodes
-      }
-      braket += trimmedText; // Output inline
-    } else if (child.tag) {
-      braket += indentStr + `|${child.tag}`;
-      
-      // Attributes
-      if (child.attributes) {
-        for (const [key, value] of Object.entries(child.attributes)) {
-          braket += ` ${key}="${escapeXml(String(value))}"`;
-        }
-      }
-      
-      // Content
-      if (child.text) {
-        braket += `>${child.text}\n`;
-      } else if (child.children && child.children.length > 0) {
-        braket += '>\n';
-        braket += serializeChildrenBraKet(child.children, indent + 2);
-      } else {
-        braket += '>\n';
-      }
-    }
-  }
-  
-  return braket;
 }
 
 /**

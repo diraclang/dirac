@@ -57,11 +57,12 @@ export function executeSubroutine(session: DiracSession, element: DiracElement):
     }
   }
   
-  // Store subroutine exactly as before (preserves nesting and extends)
+  // Store subroutine with deep-cloned children to prevent mutation
+  // This ensures nested subroutines don't get their children consumed during execution
   const subroutine: DiracElement = {
     tag: 'subroutine',
     attributes: { ...element.attributes },
-    children: element.children,
+    children: deepCloneChildren(element.children),
   };
   
   // Pass meta as a field in the subroutine registry, not on the element
@@ -76,4 +77,23 @@ export function executeSubroutine(session: DiracSession, element: DiracElement):
     visible,
     session.currentFile
   );
+}
+
+/**
+ * Deep clone children array to prevent mutation
+ */
+function deepCloneChildren(children: any[]): any[] {
+  if (!children) return children;
+  return children.map(child => {
+    if (!child.tag) {
+      // Text node
+      return { ...child };
+    }
+    // Element node
+    return {
+      ...child,
+      attributes: child.attributes ? { ...child.attributes } : undefined,
+      children: child.children ? deepCloneChildren(child.children) : undefined,
+    };
+  });
 }

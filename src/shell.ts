@@ -398,7 +398,7 @@ export class DiracShell {
           console.log('\nSaving all unsaved subroutines...\n');
           for (const name of unsaved) {
             try {
-              const xml = `<save-subroutine name="${name}" format="xml" />`;
+              const xml = `<save-subroutine name="${name}" format="braket" />`;
               const ast = this.xmlParser.parse(xml);
               await integrate(this.session, ast);
               if (this.session.output.length > 0) {
@@ -556,16 +556,42 @@ export class DiracShell {
       
       // Prepend the current indentation to the input if it doesn't already have it
       let processedInput = input;
-      if (this.currentIndent > 0 && indent < this.currentIndent) {
-        // User didn't add the expected indentation, add it for them
-        processedInput = ' '.repeat(this.currentIndent) + input;
+      const trimmed = input.trim();
+      
+      // Check if this line is a tag (ket or bra)
+      const isKet = trimmed.match(/^\|[a-zA-Z_][a-zA-Z0-9_-]*\s*[^>]*?>/);
+      const isBra = trimmed.match(/^<[a-zA-Z_][a-zA-Z0-9_-]*.*\|$/);
+      const isTag = isKet || isBra;
+      
+      // Auto-indent logic:
+      // - If user typed NO indentation (indent === 0), apply auto-indentation
+      //   - For ket tags after text content: dedent by 2 to close the block
+      //   - Otherwise: use currentIndent
+      // - If user typed SOME indentation (indent > 0), respect it (allows dedenting)
+      // - Only exception: plain text always gets normalized to at least currentIndent
+      if (indent === 0 && this.currentIndent > 0) {
+        // User typed at column 0 - apply auto-indentation
+        const trimmedInput = input.trimStart();
+        let targetIndent = this.currentIndent;
+        
+        // Special case: if this is a ket tag and currentIndent > 2, 
+        // user probably wants to close a block, so dedent by 2
+        if (isKet && this.currentIndent > 2) {
+          targetIndent = this.currentIndent - 2;
+        }
+        
+        processedInput = ' '.repeat(targetIndent) + trimmedInput;
+      } else if (!isTag && indent > 0 && indent < this.currentIndent) {
+        // Plain text with some but insufficient indentation - normalize it
+        const trimmedInput = input.trimStart();
+        processedInput = ' '.repeat(this.currentIndent) + trimmedInput;
       }
+      // else: user provided explicit indentation, respect it
       
       // Continue accumulating
       this.inputBuffer.push(processedInput);
       
-      // Calculate next indent level based on what user typed
-      const trimmed = input.trim();
+      // Calculate next indent level based on processed input
       const currentLineIndent = this.getIndent(processedInput);
       
       // Check if this line opens a new block
@@ -831,7 +857,11 @@ Examples:
         this.session.subroutines = [];
         this.session.varBoundary = 0;
         this.session.subBoundary = 0;
-        console.log('Session cleared');
+        // Clear import tracking so files can be re-imported
+        if (this.session.importedFiles) {
+          this.session.importedFiles.clear();
+        }
+        console.log('Session cleared (including import history)');
         break;
 
       case 'debug':
@@ -934,14 +964,14 @@ Examples:
             if (fileName) {
               // Check if it's a directory path or file path
               if (fileName.includes('/') || fileName.includes('.di')) {
-                xml = `<save-subroutine name="${subName}" file="${fileName}" format="xml" />`;
+                xml = `<save-subroutine name="${subName}" file="${fileName}" />`;
               } else {
                 // Treat as directory name under ~/.dirac/lib/
-                xml = `<save-subroutine name="${subName}" path="${fileName}" format="xml" />`;
+                xml = `<save-subroutine name="${subName}" path="${fileName}" />`;
               }
             } else {
               // No file specified, use default timestamped directory
-              xml = `<save-subroutine name="${subName}" format="xml" />`;
+              xml = `<save-subroutine name="${subName}" />`;
             }
             const ast = this.xmlParser.parse(xml);
             await integrate(this.session, ast);

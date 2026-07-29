@@ -5,7 +5,7 @@
 
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { setVariable, substituteVariables } from '../runtime/session.js';
+import { setVariable, substituteVariables, setOutputBoundary, popAndCaptureOutput } from '../runtime/session.js';
 import { integrate } from '../runtime/interpreter.js';
 import { executeParameters } from './parameters.js';
 
@@ -42,13 +42,12 @@ export async function executeDefvar(session: DiracSession, element: DiracElement
       value = await executeParameters(session, element.children[0]);
     } else {
       // Otherwise, execute all children and capture output
-      const prevOutput = session.output;
-      session.output = [];
+      const oldBoundary = setOutputBoundary(session);
       for (const child of element.children) {
         await integrate(session, child);
       }
-      value = session.output.join('');
-      session.output = prevOutput;
+      value = popAndCaptureOutput(session);
+      session.outputBoundary = oldBoundary;
     }
   } else if (element.text) {
     value = substituteVariables(session, element.text);

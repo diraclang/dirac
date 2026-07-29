@@ -7,6 +7,7 @@ import * as assign from './assign';
 import * as parameters from './parameters';
 import * as loop from './loop';
 import * as evalTag from './eval';
+import * as pythonTag from './python';
 import * as call from './call';
 import * as defvar from './defvar';
 import * as output from './output';
@@ -17,6 +18,7 @@ import * as mongodb from './mongodb';
 import * as requireModule from './require_module';
 import * as environment from './environment';
 import * as input from './input';
+import * as sessionLog from './session-log';
 
 export default {
   ...system,
@@ -28,6 +30,7 @@ export default {
   ...parameters,
   ...loop,
   ...evalTag,
+  ...pythonTag,
   ...call,
   ...defvar,
   ...output,
@@ -38,4 +41,5 @@ export default {
   ...requireModule,
   ...environment,
   ...input,
+  ...sessionLog,
 };

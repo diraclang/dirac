@@ -81,6 +81,7 @@ export interface DiracSession {
   // Scope boundaries (for cleanup)
   varBoundary: number;
   subBoundary: number;
+  outputBoundary: number;
   
   // Parameter stack (for subroutine calls)
   parameterStack: DiracElement[][];
@@ -106,6 +107,7 @@ export interface DiracSession {
   // Control flow
   isReturn: boolean;
   isBreak: boolean;
+  isThrown: boolean;
   
   // Extend mechanism
   skipSubroutineRegistration: boolean;
