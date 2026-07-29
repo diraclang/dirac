@@ -41,7 +41,7 @@ Example of an agentic workflow:
 
 ## Neural-Symbolic AI: Bridging Symbolic Reasoning and Neural Networks
 
-Dirac is not just agentic—it’s also a natural fit for **neural-symbolic AI**. Its bra/ket-inspired knowledge representation allows you to express and connect symbolic logic and neural computation in a unified language.
+Dirac is not just agentic—it's also a natural fit for **neural-symbolic AI**. Its bra/ket-inspired knowledge representation allows you to express and connect symbolic logic and neural computation in a unified language. See **[bra-ket-duality-paper.md](docs/bra-ket-duality-paper.md)** for a deep dive into the mathematical foundations.
 
 **Example: Aristotle’s Syllogism**
 
