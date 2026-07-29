@@ -4,7 +4,7 @@
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { getCurrentParameters, emit, setVariable } from '../runtime/session.js';
+import { getCurrentParameters, emit, setVariable, setOutputBoundary, popAndCaptureOutput } from '../runtime/session.js';
 import { integrate } from '../runtime/interpreter.js';
 
 export async function executeParameters(session: DiracSession, element: DiracElement): Promise<string | void> {
