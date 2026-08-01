@@ -2633,6 +2633,204 @@ This suggests that **routing through multiplicative interaction** is a fundament
 
 ---
 
+## Geometric Encoding of Is-A Relationships
+
+**April 2026 Update**: Understanding how transformers encode **is-a** relationships geometrically
+
+### The Core Insight
+
+Transformers don't store facts as matrices like |b⟩⟨a|.  
+They store **directions** and **relations** in a high-dimensional space.
+
+**Attention** is essentially:
+> A differentiable lookup table over relational geometry.
+
+**Feedforward** is:
+> A fixed linear operator encoding stable associations.
+
+This is why transformers can generalize:
+- "Zhi is Asian" → "Zhi has black hair"
+- "X is a mammal" → "X has warm blood"  
+- "Y is a prime number" → "Y has no divisors"
+
+They combine:
+- **Static knowledge** (feedforward)
+- **Dynamic reasoning** (attention)
+
+### 1. Feedforward Layers: Static Operators (|b⟩⟨a|)
+
+A feedforward layer is basically:
+
+```
+x ↦ Wx
+```
+
+If the model has learned:
+> a is b
+
+then one part of W behaves like:
+
+```
+W ⊃ |b⟩⟨a|
+```
+
+So when the input contains the embedding |a⟩:
+
+```
+W|a⟩ = |b⟩
+```
+
+This is exactly the bra-ket operator we described.
+
+**What this means:**
+- The relationship is **stored in the weights**
+- It is **static**
+- It is **context-independent**
+- It is **compressed** into the model's long-term memory
+
+This is how LLMs store stable facts like "Paris is in France."
+
+### 2. Attention Layers: Dynamic Relational Geometry (|b⟩ − |a⟩)
+
+Attention computes:
+
+```
+Attn(x) = softmax(QK^T)V
+```
+
+This is **not** a fixed operator.  
+It is **constructed on the fly** from the prompt.
+
+When the prompt says:
+> Zhi is Asian
+
+the model builds relational vectors:
+- |zhi⟩
+- |asian⟩
+- |zhi_is_asian⟩
+
+Empirically, relational vectors behave like:
+
+```
+|zhi_is_asian⟩ ≈ |asian⟩ − |zhi⟩
+```
+
+Then when the model later sees |zhi⟩, attention retrieves:
+
+```
+|zhi_is_asian⟩ + |zhi⟩ ≈ |asian⟩
+```
+
+This is **vector arithmetic**, not matrix multiplication.
+
+**Why this happens:**
+
+Attention is a **content-addressable memory system**:
+- It looks at the prompt
+- Finds relationships
+- Encodes them as geometric offsets
+- Uses similarity to retrieve related concepts
+
+This is why attention can answer:
+> Zhi is Asian → Asians typically have black hair → Zhi has black hair
+
+The relationship is **constructed from context**, not stored permanently.
+
+### 3. Why Attention Uses |b⟩ − |a⟩
+
+Because transformers encode relations as **directions**.
+
+Empirically, in embedding space:
+- "king − man + woman ≈ queen"
+- "Paris − France + Japan ≈ Tokyo"
+- "Einstein − physicist + mathematician ≈ Gödel"
+
+This is not a coincidence — it is how the geometry organizes meaning.
+
+So for an *is-a* relation:
+> a is a b
+
+the relational vector is:
+
+```
+r_{a→b} ≈ |b⟩ − |a⟩
+```
+
+This is exactly the pattern observed in practice.
+
+### 4. Why Feedforward Uses |b⟩⟨a|
+
+Because feedforward layers encode **long-term associations**.
+
+If the model sees "Zhi" thousands of times paired with "Asian," the weights compress this into a linear operator:
+
+```
+W|zhi⟩ = |asian⟩
+```
+
+This is:
+- Stable
+- Permanent
+- Context-independent
+
+It is the model's **"semantic memory"**.
+
+Attention is the model's **"working memory"**.
+
+### 5. The Deeper Insight: Dual Encoding
+
+Transformers encode *is-a* relationships in **two different ways**:
+
+#### 1. Static, weight-level operator
+```
+|b⟩⟨a|
+```
+- **Feedforward layers**
+- Long-term knowledge
+- Context-independent facts
+
+#### 2. Dynamic, context-dependent vector relation
+```
+|b⟩ − |a⟩
+```
+- **Attention layers**
+- Short-term reasoning
+- Context-dependent inference
+
+Both are necessary:
+- Feedforward gives **facts**
+- Attention gives **inference**
+
+This dual system is why LLMs can both *remember* and *reason*.
+
+### 6. Implications for Symbolic-Neural Integration
+
+This geometric understanding suggests future architectures might:
+
+**Explicit symbolic operators instead of implicit geometry:**
+- Replace vector arithmetic with explicit bra-ket operators
+- Make relationships first-class computational objects
+- Enable formal reasoning alongside learned associations
+
+**Hybrid architectures combining:**
+- Static knowledge (feedforward / database)
+- Dynamic reasoning (attention / symbolic rules)
+- Explicit composition (bra-ket notation / function calls)
+
+The Dirac language explores this by:
+1. Using explicit XML/bra-ket notation for structure
+2. Integrating with LLMs for learned knowledge
+3. Supporting both symbolic rules and neural inference
+
+**Future directions to explore:**
+- How "is-a" relations cluster in embedding manifolds
+- How attention heads specialize for taxonomy, coreference, or logic
+- How multi-head attention decomposes different relational types
+- How explicit symbolic operators could replace implicit vector geometry
+- How to bridge between geometric (|b⟩ − |a⟩) and operator (|b⟩⟨a|) representations
+
+---
+
 **End of document**
 
-*These are working notes exploring the connection between attention mechanisms and symbolic parameter binding. Our understanding continues to evolve through investigation. The current view (April 27, 2026) is that attention performs unified bind-route-compute through bilinear operations, with feed-forward providing representation refinement. An alternative biological perspective suggests layer-based tensor products might achieve the same function through different neural mechanisms.*
+*These are working notes exploring the connection between attention mechanisms and symbolic parameter binding. Our understanding continues to evolve through investigation. The current view (April 27, 2026) is that attention performs unified bind-route-compute through bilinear operations, with feed-forward providing representation refinement. An alternative biological perspective suggests layer-based tensor products might achieve the same function through different neural mechanisms. The geometric encoding section (April 2026) adds understanding of how is-a relationships are stored as both static operators (|b⟩⟨a|) in feedforward and dynamic directional relations (|b⟩ − |a⟩) in attention.*

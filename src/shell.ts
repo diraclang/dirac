@@ -478,7 +478,7 @@ export class DiracShell {
             completer: this.completer.bind(this),
           });
           this.setupHandlers();
-          this.rl.prompt();
+          this.promptWithHint();
         }
       } else {
         this.finalizeExit();
@@ -494,7 +494,7 @@ export class DiracShell {
         this.currentIndent = 0;
         console.log('\n(Input cancelled)');
         this.rl.setPrompt('> ');
-        this.rl.prompt();
+        this.promptWithHint();
       } else {
         this.rl.close();
       }
@@ -505,7 +505,7 @@ export class DiracShell {
     // Special commands
     if (!this.inputBuffer.length && input.trim().startsWith(':')) {
       await this.handleCommand(input.trim());
-      this.rl.prompt();
+      this.promptWithHint();
       return;
     }
 
@@ -522,7 +522,7 @@ export class DiracShell {
     if (this.inputBuffer.length === 0 && !this.isDiracSyntax(input)) {
       // Pass to Unix shell
       await this.executeShellCommand(input);
-      this.rl.prompt();
+      this.promptWithHint();
       return;
     }
 
@@ -550,7 +550,7 @@ export class DiracShell {
         await this.executeBuffer();
         this.currentIndent = 0;
         this.rl.setPrompt('> ');
-        this.rl.prompt();
+        this.promptWithHint();
         return;
       }
       
@@ -611,7 +611,7 @@ export class DiracShell {
 
     // Execute single-line input
     await this.executeBuffer();
-    this.rl.prompt();
+    this.promptWithHint();
   }
 
   private getIndent(line: string): number {
@@ -1677,9 +1677,20 @@ Examples:
     });
   }
 
+  /**
+   * Show prompt with inline grey hint text
+   */
+  private promptWithHint(): void {
+    const hint = 'Type :help for help';
+    // Show prompt, then write grey hint, then move cursor back
+    this.rl.prompt();
+    process.stdout.write(`\x1b[90m${hint}\x1b[0m`);
+    // Move cursor back to start (left by hint length)
+    process.stdout.write(`\x1b[${hint.length}D`);
+  }
+
   async start(): Promise<void> {
-    console.log('Dirac Shell v0.1.0');
-    console.log('Type :help for commands, :exit to quit\n');
+    console.log('Dirac Shell v0.1.0\n');
     
     if (this.config.llmProvider) {
       console.log(`LLM: ${this.config.llmProvider} (${this.config.llmModel || 'default'})\n`);
@@ -1701,7 +1712,7 @@ Examples:
       await this.runInitScript(this.config.initScript);
     }
     
-    this.rl.prompt();
+    this.promptWithHint();
   }
 
   /**
