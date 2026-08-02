@@ -300,13 +300,25 @@
   param-port="string:optional:Port number for HTTP server (default: auto)"
   param-title="string:optional:Page title (default: DIRAC Browser)"
   param-keep-open="string:optional:Keep server running (true/false)"
-  param-auto-close="string:optional:Close server after opening (true/false)">
+  param-auto-close="string:optional:Close server after opening (true/false)"
+  param-mode="string:optional:Mode|literal|capture">
   <!-- Opens HTML content in the default browser via temporary HTTP server -->
-  <!-- HTML content provided as text or child elements -->
-  <!-- Example: -->
+  <!-- Two modes: -->
+  <!--   1. literal (default): HTML content treated as literal (no DIRAC processing) -->
+  <!--   2. capture: Executes DIRAC children, unknown tags output as HTML -->
+  <!-- Example (literal mode): -->
   <!--   <browser title="Test Page"> -->
   <!--     <html> -->
   <!--       <body><h1>Hello World</h1></body> -->
+  <!--     </html> -->
+  <!--   </browser> -->
+  <!-- Example (capture mode with dynamic content): -->
+  <!--   <browser mode="capture"> -->
+  <!--     <html> -->
+  <!--       <body> -->
+  <!--         <h1>Dashboard for <variable name="user" /></h1> -->
+  <!--         <call name="generate-table" /> -->
+  <!--       </body> -->
   <!--     </html> -->
   <!--   </browser> -->
 </subroutine>

@@ -10,8 +10,13 @@ The `<browser>` tag allows you to render HTML content in a browser window direct
 - ✅ Multiple server modes (auto-close, keep-open)
 - ✅ Custom port or auto-select
 - ✅ Cross-platform (macOS, Linux, Windows)
+- ✅ **NEW: Capture mode for dynamic HTML generation**
 
-## Basic Usage
+## Two Rendering Modes
+
+### Literal Mode (Default)
+
+In literal mode, HTML content is treated as static and not processed by DIRAC:
 
 ```xml
 <browser>
@@ -23,10 +28,40 @@ The `<browser>` tag allows you to render HTML content in a browser window direct
 </browser>
 ```
 
+### Capture Mode
+
+In capture mode, DIRAC executes children and generates HTML dynamically:
+
+```xml
+<defvar name="userName" value="Alice" />
+
+<subroutine name="generate-greeting">
+  <div class="greeting">
+    <h2>Welcome, <variable name="userName" />!</h2>
+    <p>Today is a great day.</p>
+  </div>
+</subroutine>
+
+<browser mode="capture">
+  <html>
+    <body>
+      <call name="generate-greeting" />
+    </body>
+  </html>
+</browser>
+```
+
+**What happens in capture mode:**
+- DIRAC tags like `<variable>` and `<call>` are executed
+- Unknown HTML tags are output as literal HTML
+- Subroutines can generate HTML fragments
+- Perfect for dynamic content generation
+
 ## Attributes
 
 | Attribute | Type | Default | Description |
 |-----------|------|---------|-------------|
+| `mode` | string | "literal" | Rendering mode: "literal" or "capture" |
 | `title` | string | "DIRAC Browser" | Page title |
 | `port` | number | auto | HTTP server port |
 | `auto-close` | boolean | false | Close server after opening |
@@ -35,7 +70,7 @@ The `<browser>` tag allows you to render HTML content in a browser window direct
 
 ## Examples
 
-### Simple HTML
+### Simple HTML (Literal Mode)
 
 ```xml
 <browser title="My Page">
@@ -45,7 +80,7 @@ The `<browser>` tag allows you to render HTML content in a browser window direct
 </browser>
 ```
 
-### With Inline Styles
+### Dynamic Content (Capture Mode)
 
 ```xml
 <browser>

@@ -250,6 +250,9 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         if (subroutine) {
           // Treat unknown tag as subroutine call
           await executeCall(session, element);
+        } else if (session.literalHTML) {
+          // In HTML generation mode - output unknown tags as HTML
+          await renderAsHTML(session, element);
         } else {
           // Really unknown - just process children
           for (const child of element.children) {
@@ -267,5 +270,51 @@ export async function integrateChildren(session: DiracSession, element: DiracEle
   for (const child of element.children) {
     await integrate(session, child);
     if (session.isReturn || session.isBreak || session.isThrown) break;
+  }
+}
+
+/**
+ * Render an element as HTML literal output
+ * Used when session.literalHTML is true (e.g., in browser capture mode)
+ */
+async function renderAsHTML(session: DiracSession, element: DiracElement): Promise<void> {
+  const tag = element.tag;
+  
+  // Build opening tag with attributes
+  let html = `<${tag}`;
+  if (element.attributes && Object.keys(element.attributes).length > 0) {
+    for (const [key, value] of Object.entries(element.attributes)) {
+      // Escape attribute values
+      const escapedValue = String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      html += ` ${key}="${escapedValue}"`;
+    }
+  }
+  html += '>';
+  
+  emit(session, html);
+  
+  // Process text content if exists
+  if (element.text) {
+    emit(session, element.text);
+  }
+  
+  // Process children
+  if (element.children && element.children.length > 0) {
+    for (const child of element.children) {
+      await integrate(session, child);
+      if (session.isReturn || session.isBreak || session.isThrown) break;
+    }
+  }
+  
+  // Closing tag (handle self-closing tags)
+  const selfClosing = ['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 
+                       'link', 'meta', 'param', 'source', 'track', 'wbr'];
+  if (!selfClosing.includes(tag.toLowerCase())) {
+    emit(session, `</${tag}>`);
   }
 }

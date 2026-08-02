@@ -116,6 +116,9 @@ export interface DiracSession {
   // Debugging
   debug: boolean;
   
+  // HTML generation mode (for browser tag capture mode)
+  literalHTML?: boolean;
+  
   // Import tracking
   currentFile?: string;
   importedFiles?: Set<string>;

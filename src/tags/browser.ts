@@ -12,7 +12,8 @@
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { emit } from '../runtime/session.js';
+import { emit, setOutputBoundary, popAndCaptureOutput } from '../runtime/session.js';
+import { integrate } from '../runtime/interpreter.js';
 import * as http from 'http';
 import { exec } from 'child_process';
 import { promisify } from 'util';
@@ -27,18 +28,55 @@ export async function executeBrowser(session: DiracSession, element: DiracElemen
   const titleAttr = element.attributes.title || 'DIRAC Browser';
   const autoCloseAttr = element.attributes['auto-close']; // Close server after opening
   const keepOpenAttr = element.attributes['keep-open']; // Keep server running
+  const modeAttr = element.attributes.mode; // 'capture' or default (literal)
   
-  // Extract HTML content - look for <html> child or use text content
+  // Extract HTML content
   let htmlContent = '';
   
-  if (element.children && element.children.length > 0) {
-    // Look for <html> child element
-    const htmlChild = element.children.find(child => child.tag === 'html');
-    if (htmlChild) {
-      htmlContent = renderElementToHTML(htmlChild);
-    } else {
-      // Use all children as body content
+  if (modeAttr === 'capture') {
+    // CAPTURE MODE: Execute children and capture HTML output
+    // Set literalHTML flag to make interpreter output unknown tags as HTML
+    const prevLiteralHTML = session.literalHTML;
+    session.literalHTML = true;
+    
+    // Capture output
+    const oldBoundary = setOutputBoundary(session);
+    
+    if (element.children && element.children.length > 0) {
+      for (const child of element.children) {
+        await integrate(session, child);
+      }
+    }
+    
+    htmlContent = popAndCaptureOutput(session);
+    session.outputBoundary = oldBoundary;
+    session.literalHTML = prevLiteralHTML;
+    
+    // If captured content doesn't have <html> tag, wrap it
+    if (!htmlContent.trim().toLowerCase().startsWith('<!doctype') && 
+        !htmlContent.trim().toLowerCase().startsWith('<html')) {
       htmlContent = `<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="UTF-8">
+  <title>${titleAttr}</title>
+</head>
+<body>
+${htmlContent}
+</body>
+</html>`;
+    }
+    
+  } else {
+    // LITERAL MODE (default): Treat children as literal HTML
+    if (element.children && element.children.length > 0) {
+      // Look for <html> child element
+      const htmlChild = element.children.find(child => child.tag === 'html');
+      if (htmlChild) {
+        htmlContent = renderElementToHTML(htmlChild);
+      } else {
+        // Use all children as body content
+        htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -56,14 +94,14 @@ export async function executeBrowser(session: DiracSession, element: DiracElemen
 ${element.children.map(child => renderElementToHTML(child)).join('\n')}
 </body>
 </html>`;
-    }
-  } else if (element.text) {
-    // Use text content as HTML
-    htmlContent = element.text.trim();
-    
-    // Wrap in full HTML if not already a complete document
-    if (!htmlContent.toLowerCase().includes('<html')) {
-      htmlContent = `<!DOCTYPE html>
+      }
+    } else if (element.text) {
+      // Use text content as HTML
+      htmlContent = element.text.trim();
+      
+      // Wrap in full HTML if not already a complete document
+      if (!htmlContent.toLowerCase().includes('<html')) {
+        htmlContent = `<!DOCTYPE html>
 <html>
 <head>
   <meta charset="UTF-8">
@@ -73,9 +111,10 @@ ${element.children.map(child => renderElementToHTML(child)).join('\n')}
 ${htmlContent}
 </body>
 </html>`;
+      }
+    } else {
+      throw new Error('<browser> requires HTML content');
     }
-  } else {
-    throw new Error('<browser> requires HTML content');
   }
   
   // Choose port
