@@ -298,12 +298,7 @@ async function renderAsHTML(session: DiracSession, element: DiracElement): Promi
   
   emit(session, html);
   
-  // Process text content if exists
-  if (element.text) {
-    emit(session, element.text);
-  }
-  
-  // Process children
+  // Process children (text content is included as text nodes in children)
   if (element.children && element.children.length > 0) {
     for (const child of element.children) {
       await integrate(session, child);
