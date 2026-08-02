@@ -1701,8 +1701,8 @@ Examples:
     }
     
     // Auto-index stdlib on first run
-    const { registry } = await import('./tags/subroutine-index.js');
-    const wasIndexed = await registry.autoIndexStdlib();
+    // const { registry } = await import('./tags/subroutine-index.js');
+    // const wasIndexed = await registry.autoIndexStdlib();
     
     // Load essential stdlib subroutines if available
     await this.loadEssentialSubroutines();

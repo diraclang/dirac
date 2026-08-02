@@ -100,12 +100,30 @@ export async function executePython(session: DiracSession, element: DiracElement
       console.error(`[PYTHON] Variables: ${JSON.stringify(varsForPython)}`);
     }
 
+    // Check if code contains return statement - if so, wrap in function
+    const hasReturn = /^\s*return\s+/m.test(dedentedCode);
+    
     // Build Python script that:
     // 1. Loads variables into globals
-    // 2. Executes user code
+    // 2. Executes user code (wrapped in function if it has return)
     // 3. Returns result as JSON (if result attribute specified)
     // Properly escape the JSON string for Python: backslashes first, then single quotes
     const jsonStr = JSON.stringify(varsForPython).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+    
+    let executionCode: string;
+    if (hasReturn && resultVar) {
+      // Wrap code in function and call it, capturing return value
+      const indentedCode = dedentedCode.split('\n').map(line => '    ' + line).join('\n');
+      executionCode = `
+def __dirac_function():
+${indentedCode}
+
+${resultVar} = __dirac_function()`;
+    } else {
+      // Execute code directly
+      executionCode = dedentedCode;
+    }
+    
     const pythonScript = `
 import json
 import sys
@@ -115,7 +133,7 @@ __dirac_vars = json.loads('''${jsonStr}''')
 globals().update(__dirac_vars)
 
 # Execute user code
-${dedentedCode}
+${executionCode}
 
 # Return result if specified
 ${resultVar ? `
