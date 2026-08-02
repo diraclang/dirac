@@ -294,6 +294,23 @@
   <!--   </python> -->
 </subroutine>
 
+<subroutine name="browser"
+  meta-hide-from-llm="true"
+  description="Display HTML content in a browser window"
+  param-port="string:optional:Port number for HTTP server (default: auto)"
+  param-title="string:optional:Page title (default: DIRAC Browser)"
+  param-keep-open="string:optional:Keep server running (true/false)"
+  param-auto-close="string:optional:Close server after opening (true/false)">
+  <!-- Opens HTML content in the default browser via temporary HTTP server -->
+  <!-- HTML content provided as text or child elements -->
+  <!-- Example: -->
+  <!--   <browser title="Test Page"> -->
+  <!--     <html> -->
+  <!--       <body><h1>Hello World</h1></body> -->
+  <!--     </html> -->
+  <!--   </browser> -->
+</subroutine>
+
 <!-- ============================================================
      FILE & MODULE MANAGEMENT
      ============================================================ -->
