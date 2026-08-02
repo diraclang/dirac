@@ -4,7 +4,7 @@
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { getVariable, setVariable, substituteVariables, setOutputBoundary, popAndCaptureOutput } from '../runtime/session.js';
+import { getVariable, setVariable, substituteVariables, substituteAttribute, setOutputBoundary, popAndCaptureOutput } from '../runtime/session.js';
 import { integrate } from '../runtime/interpreter.js';
 
 export async function executeAssign(session: DiracSession, element: DiracElement): Promise<void> {
@@ -20,7 +20,7 @@ export async function executeAssign(session: DiracSession, element: DiracElement
   // Get value
   let value: any;
   if (valueAttr !== undefined) {
-    value = substituteVariables(session, valueAttr);
+    value = substituteAttribute(session, valueAttr);
   } else if (element.children && element.children.length > 0) {
     // Execute children and capture output (like defvar does)
     const oldBoundary = setOutputBoundary(session);
@@ -30,7 +30,7 @@ export async function executeAssign(session: DiracSession, element: DiracElement
     value = popAndCaptureOutput(session);
     session.outputBoundary = oldBoundary;
   } else if (element.text) {
-    value = substituteVariables(session, element.text);
+    value = substituteAttribute(session, element.text);
   } else {
     value = '';
   }
