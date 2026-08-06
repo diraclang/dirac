@@ -21,5 +21,10 @@ export function executeVariable(session: DiracSession, element: DiracElement): v
     return;
   }
   // Output the variable value
-  emit(session, String(value));
+  // For objects/arrays, use JSON.stringify; for primitives, use String()
+  if (typeof value === 'object' && value !== null) {
+    emit(session, JSON.stringify(value));
+  } else {
+    emit(session, String(value));
+  }
 }

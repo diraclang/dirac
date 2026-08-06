@@ -31,7 +31,26 @@ export async function executeEval(session: DiracSession, element: DiracElement):
     // Build context object with all variables
     const context: Record<string, any> = {};
     for (const v of session.variables) {
-      context[v.name] = v.value;
+      let value = v.value;
+      
+      // Auto-parse JSON strings to objects/arrays
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+            (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+          try {
+            value = JSON.parse(value);
+          } catch (e) {
+            // Not valid JSON, keep as string
+          }
+        }
+      }
+      
+      context[v.name] = value;
+    }
+    
+    if (session.debug) {
+      console.error('[EVAL] Context variables:', Object.keys(context).filter(k => !['fs', 'path', '__dirname', 'getParams', 'getVariable', 'setVariable', 'session'].includes(k)));
     }
     
     // Add Node.js modules to context
@@ -69,6 +88,30 @@ export async function executeEval(session: DiracSession, element: DiracElement):
     if (name) {
       setVariable(session, name, result, false);
     }
+    
+    // Write back modified objects to session variables
+    // This allows mutations like self.x = 10 to persist
+    for (const [varName, varValue] of Object.entries(context)) {
+      // Skip special context variables
+      if (['fs', 'path', '__dirname', 'getParams', 'getVariable', 'setVariable', 'session'].includes(varName)) {
+        continue;
+      }
+      
+      // Check if the value was modified (objects are mutable)
+      const sessionVar = session.variables.find(v => v.name === varName);
+      if (sessionVar && typeof varValue === 'object' && varValue !== null) {
+        sessionVar.value = varValue;
+        
+        // If this was passed from another variable (Object-type parameter), write back to source
+        if (sessionVar.refName) {
+          const sourceVar = session.variables.find(v => v.name === sessionVar.refName);
+          if (sourceVar) {
+            sourceVar.value = varValue;
+          }
+        }
+      }
+    }
+
     
   } catch (error) {
     throw new Error(`Eval error: ${error instanceof Error ? error.message : String(error)}`);

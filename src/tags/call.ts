@@ -26,7 +26,7 @@ import { integrateChildren } from '../runtime/interpreter.js';
 /**
  * Convert a string value to the specified type
  */
-function convertType(value: string, type: string): any {
+function convertType(value: string, type: string, session?: DiracSession): any {
   if (value === '') {
     return value; // Keep empty strings as-is
   }
@@ -48,6 +48,23 @@ function convertType(value: string, type: string): any {
       } catch (e) {
         throw new Error(`Cannot parse '${value}' as JSON`);
       }
+    case 'Object':
+      // For Object type, look up the variable by name
+      if (session && !value.startsWith('{')) {
+        const varValue = getVariable(session, value);
+        if (varValue !== undefined) {
+          return varValue;
+        }
+      }
+      // If it looks like JSON, parse it
+      if (value.startsWith('{') || value.startsWith('[')) {
+        try {
+          return JSON.parse(value);
+        } catch (e) {
+          // Fall through to return as-is
+        }
+      }
+      return value;
     case 'string':
     default:
       return value;
@@ -67,6 +84,10 @@ export async function executeCall(session: DiracSession, element: DiracElement):
   } else {
     // Direct tag syntax - use tag name itself, ignore name attribute
     name = element.tag;
+  }
+  
+  if (session.debug) {
+    console.error(`[CALL] Calling subroutine: ${name}`);
   }
   
   if (!name) {
@@ -237,13 +258,23 @@ async function executeCallInternal(
             const parts = attrValue.split(':');
             const paramType = parts[0] || 'string';
             try {
-              value = convertType(value, paramType);
+              value = convertType(value, paramType, session);
             } catch (e) {
               throw new Error(`Parameter '${paramName}': ${e instanceof Error ? e.message : String(e)}`);
             }
           }
           
           setVariable(session, paramName, value, false);
+          
+          // Track source variable for Object-type parameters (for writeback)
+          const parts = attrValue.split(':');
+          const paramType = parts[0] || 'string';
+          const originalAttr = substitutedElement.attributes[paramName];
+          if (paramType === 'Object' && originalAttr && !originalAttr.startsWith('{')) {
+            // Store the source variable name for writeback
+            const sourceVar = originalAttr.startsWith('$') ? originalAttr.substring(1) : originalAttr;
+            session.variables[session.variables.length - 1].refName = sourceVar;
+          }
         }
       }
     }
