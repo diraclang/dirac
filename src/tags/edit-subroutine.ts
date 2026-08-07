@@ -36,17 +36,64 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
     throw new Error('<edit-subroutine> requires name attribute');
   }
   
-  // Find the subroutine in the session
-  let subroutine: any = undefined;
-  for (let i = session.subroutines.length - 1; i >= 0; i--) {
+  // Find ALL subroutines with the given name (not just the top one)
+  const matchingSubroutines: { sub: any, index: number }[] = [];
+  for (let i = 0; i < session.subroutines.length; i++) {
     if (session.subroutines[i].name === name) {
-      subroutine = session.subroutines[i];
-      break;
+      matchingSubroutines.push({ sub: session.subroutines[i], index: i });
     }
   }
   
-  if (!subroutine) {
+  if (matchingSubroutines.length === 0) {
     throw new Error(`Subroutine '${name}' not found in session`);
+  }
+  
+  // If multiple versions exist, let user choose which one to edit
+  let selectedIndex = 0;
+  let subroutine: any;
+  let subroutineArrayIndex: number;
+  
+  if (matchingSubroutines.length > 1) {
+    console.error(`\nMultiple versions of '${name}' found:`);
+    matchingSubroutines.forEach((item, idx) => {
+      const extendsAttr = item.sub.element?.attributes?.extends || 
+                          item.sub.element?.attributes?.extend;
+      const label = extendsAttr 
+        ? `extends="${extendsAttr}"` 
+        : '(base)';
+      console.error(`  [${idx + 1}] ${name} ${label}`);
+    });
+    
+    // Prompt for selection using synchronous readline
+    const readline = await import('readline');
+    const rl = readline.createInterface({
+      input: process.stdin,
+      output: process.stdout
+    });
+    
+    const answer = await new Promise<string>((resolve) => {
+      rl.question(`\nSelect which to edit (1-${matchingSubroutines.length}): `, (ans) => {
+        rl.close();
+        resolve(ans);
+      });
+    });
+    
+    const selection = parseInt(answer.trim());
+    if (isNaN(selection) || selection < 1 || selection > matchingSubroutines.length) {
+      throw new Error(`Invalid selection: ${answer}`);
+    }
+    
+    selectedIndex = selection - 1;
+    subroutine = matchingSubroutines[selectedIndex].sub;
+    subroutineArrayIndex = matchingSubroutines[selectedIndex].index;
+    
+    console.error(`Editing version ${selection}: ${name} ${
+      subroutine.element?.attributes?.extends ? 'extends="' + subroutine.element.attributes.extends + '"' : '(base)'
+    }\n`);
+  } else {
+    // Only one version - edit it directly
+    subroutine = matchingSubroutines[0].sub;
+    subroutineArrayIndex = matchingSubroutines[0].index;
   }
   
   // Try to load original source if available
@@ -140,12 +187,13 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
   
   // Preserve original sourcePath before re-importing
   const originalSourcePath = subroutine.sourcePath;
+  const originalBoundary = subroutine.boundary;
   
-  // Remove old subroutine entry to avoid duplicates
-  const oldIndex = session.subroutines.findIndex(s => s.name === name);
-  if (oldIndex !== -1) {
-    session.subroutines.splice(oldIndex, 1);
+  // Remove the specific subroutine we edited (at its exact position)
+  if (session.debug) {
+    console.error(`[edit-subroutine] Removing subroutine at index ${subroutineArrayIndex}`);
   }
+  session.subroutines.splice(subroutineArrayIndex, 1);
   
   // Parse and execute the edited subroutine to re-register it
   // If format was braket, convert back to XML first
@@ -161,11 +209,26 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
   const ast = parser.parse(xmlContent);
   await integrate(session, ast);
   
-  // Mark the subroutine as modified and restore original sourcePath
-  const editedSub = session.subroutines.find(s => s.name === name);
-  if (editedSub) {
-    editedSub.modified = true;
-    editedSub.sourcePath = originalSourcePath; // Restore original path for saving
+  // The newly registered subroutine is now at the end of the array
+  // Move it back to its original position
+  const lastIndex = session.subroutines.length - 1;
+  const lastSub = session.subroutines[lastIndex];
+  
+  if (lastSub && lastSub.name === name) {
+    // Remove from end
+    session.subroutines.splice(lastIndex, 1);
+    
+    // Insert at original position
+    session.subroutines.splice(subroutineArrayIndex, 0, lastSub);
+    
+    // Mark as modified and restore original metadata
+    lastSub.modified = true;
+    lastSub.sourcePath = originalSourcePath;
+    lastSub.boundary = originalBoundary;
+    
+    if (session.debug) {
+      console.error(`[edit-subroutine] Moved subroutine back to index ${subroutineArrayIndex}`);
+    }
   }
   
   emit(session, `Subroutine '${name}' updated in session (use save-subroutine to persist)\n`);
