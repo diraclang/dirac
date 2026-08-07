@@ -195,6 +195,9 @@ async function executeCallInternal(
   const oldSubroutineName = session.currentSubroutineName;
   session.currentSubroutineName = callElement.tag;
   
+  // Save childrenConsumed flag (nested calls will reset it)
+  const oldChildrenConsumed = session.childrenConsumed;
+  
   // For extend execution, skip subroutine registration during body execution
   const oldSkipFlag = session.skipSubroutineRegistration;
   if (isExtendExecution) {
@@ -288,7 +291,47 @@ async function executeCallInternal(
     // 3. Execute subroutine body
     // Reset flag to track if children are consumed by <parameters select="*"/>
     session.childrenConsumed = false;
-    await integrateChildren(session, subroutine);
+    
+    // Check if subroutine has lang=js attribute - if so, treat text content as JavaScript
+    const lang = subroutine.attributes.lang;
+    let langJsExecuted = false;
+    if (lang === 'js') {
+      if (session.debug) {
+        console.error(`[CALL] lang=js detected, subroutine.text=${subroutine.text}, children.length=${subroutine.children.length}`);
+      }
+      
+      // Collect text content from element.text or from text nodes in children
+      let textContent = subroutine.text || '';
+      if (!textContent) {
+        // Try to collect text from children (text nodes or elements with text property)
+        for (const child of subroutine.children) {
+          if (child.text) {
+            textContent += child.text;
+          }
+        }
+      }
+      
+      if (textContent.trim()) {
+        if (session.debug) {
+          console.error(`[CALL] Executing lang=js content: ${textContent.substring(0, 50)}...`);
+        }
+        // Execute text content as JavaScript (like <eval>)
+        const { executeEval } = await import('./eval.js');
+        const evalElement: DiracElement = {
+          tag: 'eval',
+          attributes: {},
+          children: [],
+          text: textContent
+        };
+        await executeEval(session, evalElement);
+        langJsExecuted = true;
+      }
+    }
+    
+    // Execute children normally (unless lang=js was executed)
+    if (!langJsExecuted) {
+      await integrateChildren(session, subroutine);
+    }
     
     // 4. Auto-execute children if they weren't consumed by <parameters select="*"/>
     if (!session.childrenConsumed && callElement.children.length > 0) {
@@ -314,6 +357,8 @@ async function executeCallInternal(
     session.varBoundary = oldBoundary;
     session.subBoundary = oldSubBoundary;
     session.isReturn = wasReturn;
+    session.currentSubroutineName = oldSubroutineName;
+    session.childrenConsumed = oldChildrenConsumed;
   }
 }
 
