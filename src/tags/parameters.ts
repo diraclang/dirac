@@ -32,6 +32,8 @@ export async function executeParameters(session: DiracSession, element: DiracEle
     if (session.debug) {
       console.error(`[PARAMETERS] Selecting all children (${caller.children.length} elements)`);
     }
+    // Mark that children were consumed
+    session.childrenConsumed = true;
     // Save current output buffer
     const oldBoundary = setOutputBoundary(session);
     for (const child of caller.children) {

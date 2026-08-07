@@ -109,6 +109,9 @@ export interface DiracSession {
   isBreak: boolean;
   isThrown: boolean;
   
+  // Track if children were consumed by <parameters select="*"/>
+  childrenConsumed: boolean;
+  
   // Extend mechanism
   skipSubroutineRegistration: boolean;
   currentSubroutineName?: string;  // Track currently executing subroutine for available-subroutines

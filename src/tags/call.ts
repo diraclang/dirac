@@ -21,7 +21,7 @@ import {
   setVariable,
   getVariable,
 } from '../runtime/session.js';
-import { integrateChildren } from '../runtime/interpreter.js';
+import { integrateChildren, integrate } from '../runtime/interpreter.js';
 
 /**
  * Convert a string value to the specified type
@@ -286,7 +286,19 @@ async function executeCallInternal(
     }
 
     // 3. Execute subroutine body
+    // Reset flag to track if children are consumed by <parameters select="*"/>
+    session.childrenConsumed = false;
     await integrateChildren(session, subroutine);
+    
+    // 4. Auto-execute children if they weren't consumed by <parameters select="*"/>
+    if (!session.childrenConsumed && callElement.children.length > 0) {
+      if (session.debug) {
+        console.error(`[CALL] Auto-executing ${callElement.children.length} unconsumed children`);
+      }
+      for (const child of callElement.children) {
+        await integrate(session, child);
+      }
+    }
 
   } finally {
     // Restore skip flag
