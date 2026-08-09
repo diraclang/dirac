@@ -99,6 +99,10 @@ export async function executeCall(session: DiracSession, element: DiracElement):
     throw new Error(`Subroutine '${name}' not found`);
   }
   
+  if (session.debug) {
+    console.error(`[CALL] Found subroutine with attributes:`, Object.keys(subroutine.attributes));
+  }
+  
   // Handle extension (parent subroutine) using recursive descent
   const extendAttr = subroutine.attributes.extend;
   const extendsAttr = subroutine.attributes.extends;

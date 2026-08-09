@@ -3,7 +3,7 @@
  */
 
 import type { DiracElement, DiracSession } from '../types/index.js';
-import { substituteVariables, emit, getSubroutine } from './session.js';
+import { substituteVariables, substituteAttribute, emit, getSubroutine } from './session.js';
 import { executeDefvar } from '../tags/defvar.js';
 import { executeVariable } from '../tags/variable.js';
 import { executeAssign } from '../tags/assign.js';
@@ -55,7 +55,7 @@ export async function integrate(session: DiracSession, element: DiracElement): P
   try {
     // Handle text nodes
     if (element.text && !element.tag) {
-      const substituted = substituteVariables(session, element.text);
+      const substituted = substituteAttribute(session, element.text);
       emit(session, substituted);
       return;
     }

@@ -101,7 +101,7 @@ export function setVariable(session: DiracSession, name: string, value: any, vis
     name,
     value,
     visible,
-    boundary: session.varBoundary,
+    boundary: visible ? 1 : 0,  // Boundary is a counter: 1 for visible (can be promoted once), 0 for non-visible
     passby: 'value',
   });
 }
@@ -151,12 +151,17 @@ export function cleanToBoundary(session: DiracSession, keepVisible: boolean = fa
   }
   
   // For variables at or beyond current boundary:
-  // - If keepVisible is true and variable is marked visible: decrement boundary level (promote up one level) and keep
+  // - If keepVisible is true: promote ALL variables (set boundary=1 so they survive one more level)
+  // - If keepVisible is false but variable has boundary > 0: promote it
   // - Otherwise: discard
   for (let i = session.varBoundary; i < session.variables.length; i++) {
     const v = session.variables[i];
-    if (keepVisible && v.visible && v.boundary > 0) {
-      // Promote variable up one boundary level
+    if (keepVisible) {
+      // Promote all variables in this scope by setting boundary=1
+      v.boundary = 1;
+      kept.push(v);
+    } else if (v.boundary > 0) {
+      // Decrement and keep visible variables
       v.boundary = v.boundary - 1;
       kept.push(v);
     }
@@ -182,7 +187,7 @@ export function registerSubroutine(
   session.subroutines.push({
     name,
     element,
-    boundary: session.subBoundary,
+    boundary: visible ? 1 : 0,  // Boundary is a counter: 1 for visible (can be promoted once), 0 for non-visible
     visible,
     description,
     parameters,
