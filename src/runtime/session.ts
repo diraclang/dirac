@@ -142,21 +142,29 @@ export function popToBoundary(session: DiracSession): void {
  * Clean private variables but keep visible ones
  * Maps to var_info_clean_to_boundary in MASK
  */
-export function cleanToBoundary(session: DiracSession): void {
+export function cleanToBoundary(session: DiracSession, keepVisible: boolean = false): void {
+  // Keep all variables before current boundary
   const kept: Variable[] = [];
   
   for (let i = 0; i < session.varBoundary; i++) {
     kept.push(session.variables[i]);
   }
   
+  // For variables at or beyond current boundary:
+  // - If keepVisible is true and variable is marked visible: decrement boundary level (promote up one level) and keep
+  // - Otherwise: discard
   for (let i = session.varBoundary; i < session.variables.length; i++) {
-    if (session.variables[i].visible) {
-      kept.push(session.variables[i]);
+    const v = session.variables[i];
+    if (keepVisible && v.visible && v.boundary > 0) {
+      // Promote variable up one boundary level
+      v.boundary = v.boundary - 1;
+      kept.push(v);
     }
+    // Non-visible or non-kept variables are discarded (not added to kept)
   }
   
   session.variables = kept;
-  session.varBoundary = kept.length;
+  // Don't change varBoundary - it stays at current level
 }
 
 // Subroutine management (maps to subroutine functions in MASK)
@@ -247,9 +255,26 @@ export function cleanSubroutinesToBoundary(session: DiracSession, callerSubrouti
                      visibleValue === 'true';
   
   if (keepNested) {
-    // Keep all subroutines registered during this call (they persist)
-    // Just update the boundary to include them
-    session.subBoundary = session.subroutines.length;
+    // Promote nested subroutines up one boundary level
+    // Keep subroutines before current boundary
+    const kept: Subroutine[] = [];
+    
+    for (let i = 0; i < session.subBoundary; i++) {
+      kept.push(session.subroutines[i]);
+    }
+    
+    // For subroutines at or beyond current boundary: decrement boundary level
+    for (let i = session.subBoundary; i < session.subroutines.length; i++) {
+      const sub = session.subroutines[i];
+      if (sub.boundary > 0) {
+        // Promote subroutine up one boundary level
+        sub.boundary = sub.boundary - 1;
+      }
+      kept.push(sub);
+    }
+    
+    session.subroutines = kept;
+    // Don't change subBoundary - it stays at current level
   } else {
     // Pop subroutines back to boundary (default behavior)
     session.subroutines = session.subroutines.slice(0, session.subBoundary);

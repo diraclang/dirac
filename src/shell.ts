@@ -790,7 +790,8 @@ Examples:
           } else {
             console.log('Variables:');
             for (const v of variables) {
-              if (v.visible) {
+              // Show all variables with names (MASK C implementation sets name to NULL when blocking)
+              if (v.name) {
                 // Pretty-print JSON values for better readability
                 let formattedValue;
                 if (typeof v.value === 'object' && v.value !== null) {

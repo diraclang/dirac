@@ -354,16 +354,16 @@ async function executeCallInternal(
     // Pop parameter stack
     popParameters(session);
 
-    // Clean up scope (keep visible variables and subroutines) BEFORE restoring boundary
-    cleanToBoundary(session);
-    
-    // Determine if we should keep nested subroutines
+    // Determine visibility setting for cleanup
     let visibleValue = subroutine.attributes.visible || 'false';
     if (callElement.attributes.visible) {
       visibleValue = callElement.attributes.visible;
     }
+    const keepVariables = visibleValue === 'variable' || visibleValue === 'both' || visibleValue === 'true';
     const keepNested = visibleValue === 'subroutine' || visibleValue === 'both' || visibleValue === 'true';
     
+    // Clean up scope (keep visible variables and subroutines) BEFORE restoring boundary
+    cleanToBoundary(session, keepVariables);
     cleanSubroutinesToBoundary(session, subroutine, callElement);
     
     session.varBoundary = oldBoundary;
