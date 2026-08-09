@@ -222,6 +222,10 @@ async function executeCallInternal(
   // Push caller element onto parameter stack for <parameters select="*|@*|@attr"/> access
   pushParameters(session, [substitutedElement]);
   
+  // Check if call site wants parameters to be visible
+  const visibleAttr = callElement.attributes.visible;
+  const parametersVisible = visibleAttr === 'true' || visibleAttr === 'variable' || visibleAttr === 'both';
+  
   try {
     // 1. Set variables from <param-*> attributes if not already set in this boundary
     for (const [attrName, attrValue] of Object.entries(subroutine.attributes)) {
@@ -267,7 +271,7 @@ async function executeCallInternal(
             }
           }
           
-          setVariable(session, paramName, value, false);
+          setVariable(session, paramName, value, parametersVisible);
           
           // Track source variable for Object-type parameters (for writeback)
           const parts = attrValue.split(':');
@@ -352,10 +356,22 @@ async function executeCallInternal(
 
     // Clean up scope (keep visible variables and subroutines) BEFORE restoring boundary
     cleanToBoundary(session);
+    
+    // Determine if we should keep nested subroutines
+    let visibleValue = subroutine.attributes.visible || 'false';
+    if (callElement.attributes.visible) {
+      visibleValue = callElement.attributes.visible;
+    }
+    const keepNested = visibleValue === 'subroutine' || visibleValue === 'both' || visibleValue === 'true';
+    
     cleanSubroutinesToBoundary(session, subroutine, callElement);
     
     session.varBoundary = oldBoundary;
-    session.subBoundary = oldSubBoundary;
+    // Only restore subBoundary if we're NOT keeping nested subroutines
+    // (cleanSubroutinesToBoundary already updated it if keepNested is true)
+    if (!keepNested) {
+      session.subBoundary = oldSubBoundary;
+    }
     session.isReturn = wasReturn;
     session.currentSubroutineName = oldSubroutineName;
     session.childrenConsumed = oldChildrenConsumed;
