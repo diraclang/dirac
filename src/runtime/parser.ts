@@ -77,17 +77,41 @@ export class DiracParser {
       for (const child of children) {
         if (child['#text']) {
           // Text node - add as child AND to element.text for backward compat
+          const textContent = String(child['#text']);
           element.children.push({
             tag: '',
-            text: child['#text'],
+            text: textContent,
             attributes: {},
             children: []
           });
           // Also set element.text if not set (for simple text-only elements)
           if (!element.text) {
-            element.text = child['#text'];
+            element.text = textContent;
           } else {
-            element.text += child['#text'];
+            element.text += textContent;
+          }
+        } else if (child['#cdata']) {
+          // CDATA node - extract text from the CDATA structure
+          // CDATA is an array like [{ '#text': '...' }]
+          let cdataContent = '';
+          if (Array.isArray(child['#cdata'])) {
+            for (const cdataChild of child['#cdata']) {
+              if (cdataChild['#text']) {
+                cdataContent += String(cdataChild['#text']);
+              }
+            }
+          }
+          element.children.push({
+            tag: '',
+            text: cdataContent,
+            attributes: {},
+            children: []
+          });
+          // Also set element.text if not set
+          if (!element.text) {
+            element.text = cdataContent;
+          } else {
+            element.text += cdataContent;
           }
         } else if (child['#comment']) {
           // Skip comments

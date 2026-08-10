@@ -5,7 +5,7 @@
 
 import type { DiracSession, DiracElement } from '../types/index.js';
 import { setVariable } from '../runtime/session.js';
-import { execSync } from 'child_process';
+import { execSync, spawn } from 'child_process';
 
 /**
  * Remove common leading whitespace from all lines (dedent)
@@ -64,6 +64,8 @@ function dedent(text: string): string {
 
 export async function executePython(session: DiracSession, element: DiracElement): Promise<void> {
   const resultVar = element.attributes.result;
+  const backgroundAttr = element.attributes.background;
+  const isBackground = backgroundAttr === 'true';
   const pythonCode = element.text;
 
   if (!pythonCode || pythonCode.trim() === '') {
@@ -74,7 +76,39 @@ export async function executePython(session: DiracSession, element: DiracElement
   const dedentedCode = dedent(pythonCode);
 
   if (session.debug) {
-    console.error(`[PYTHON] Executing:\n${dedentedCode}\n`);
+    console.error(`[PYTHON] Executing${isBackground ? ' (background)' : ''}:\n${dedentedCode}\n`);
+  }
+  
+  // Background mode - spawn and don't wait (for long-running servers/daemons)
+  if (isBackground) {
+    // For background mode, we can't access session variables or return results
+    // Write Python code to stdin of spawned process
+    const stdio: ['pipe', any, any] = [
+      'pipe', // stdin - we write code to this
+      session.debug ? 'inherit' : 'ignore', // stdout - show if debugging
+      session.debug ? 'inherit' : 'ignore', // stderr - show if debugging
+    ];
+    
+    const child = spawn('python3', [], {
+      detached: true,
+      stdio,
+      shell: false,
+    });
+    
+    // Write the Python code to stdin
+    if (child.stdin) {
+      child.stdin.write(dedentedCode);
+      child.stdin.end();
+    }
+    
+    // Unref so parent can exit without waiting
+    child.unref();
+    
+    if (session.debug) {
+      console.error(`[PYTHON] Background process started with PID: ${child.pid}`);
+    }
+    
+    return;
   }
 
   try {
