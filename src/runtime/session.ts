@@ -86,17 +86,31 @@ export function createSession(config: DiracConfig = {}): DiracSession {
 // Variable management (maps to var_info functions in MASK)
 
 export function setVariable(session: DiracSession, name: string, value: any, visible: boolean = false): void {
-  // Check if variable already exists in the CURRENT scope (same boundary) and update it
-  for (let i = session.variables.length - 1; i >= 0; i--) {
-    if (session.variables[i].name === name && session.variables[i].boundary === session.varBoundary) {
-      // Update existing variable in same scope
-      session.variables[i].value = value;
-      session.variables[i].visible = visible;
+  // First, check if variable exists in current scope (from varBoundary onwards) and update it
+  // Search from end to find most recent instance
+  for (let i = session.variables.length - 1; i >= session.varBoundary; i--) {
+    if (session.variables[i].name === name) {
+      // Update existing variable in current scope, preserving refName and passby
+      const existingVar = session.variables[i];
+      existingVar.value = value;
+      existingVar.visible = visible;
+      // Note: preserve refName and passby from existing variable
       return;
     }
   }
   
-  // Variable doesn't exist in current scope, create new one (may shadow outer scope)
+  // Not in current scope - check if it exists in parent scopes (might be a parameter)
+  for (let i = session.varBoundary - 1; i >= 0; i--) {
+    if (session.variables[i].name === name) {
+      // Update existing variable from parent scope, preserving refName and passby
+      const existingVar = session.variables[i];
+      existingVar.value = value;
+      existingVar.visible = visible;
+      return;
+    }
+  }
+  
+  // Variable doesn't exist anywhere, create new one in current scope
   session.variables.push({
     name,
     value,

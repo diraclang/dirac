@@ -83,10 +83,25 @@ export async function executePython(session: DiracSession, element: DiracElement
     for (const v of session.variables) {
       // Only pass JSON-serializable values
       try {
-        JSON.stringify(v.value);
-        varsForPython[v.name] = v.value;
+        let value = v.value;
+        
+        // Auto-parse JSON strings to JavaScript objects (like eval.ts does)
+        if (typeof value === 'string') {
+          const trimmed = value.trim();
+          if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+              (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+            try {
+              value = JSON.parse(trimmed);
+            } catch (e) {
+              // If parsing fails, keep as string
+            }
+          }
+        }
+        
+        JSON.stringify(value);
+        varsForPython[v.name] = value;
         if (session.debug) {
-          console.error(`[PYTHON] Adding variable '${v.name}' = ${JSON.stringify(v.value)}`);
+          console.error(`[PYTHON] Adding variable '${v.name}' = ${JSON.stringify(value)}`);
         }
       } catch (e) {
         if (session.debug) {
@@ -192,7 +207,22 @@ except NameError:
         
         if (session.debug) {
           console.error(`[PYTHON] Stored variable '${resultVar}' = ${JSON.stringify(result.__dirac_result__)}`);
-          console.error(`[PYTHON] Variable count: ${session.variables.length}`);
+        }
+        
+        // Writeback mechanism: if the result variable has a refName, propagate back to source
+        // Search from end to find the most recent variable with this name
+        let resultVariable = null;
+        for (let i = session.variables.length - 1; i >= 0; i--) {
+          if (session.variables[i].name === resultVar) {
+            resultVariable = session.variables[i];
+            break;
+          }
+        }
+        if (resultVariable && resultVariable.refName && typeof resultVariable.value === 'object') {
+          if (session.debug) {
+            console.error(`[PYTHON] Writing back modified object to source variable: ${resultVariable.refName}`);
+          }
+          setVariable(session, resultVariable.refName, resultVariable.value, false);
         }
       } catch (parseError) {
         throw new Error(`Failed to parse Python result: ${parseError instanceof Error ? parseError.message : String(parseError)}\nOutput: ${trimmedOutput}`);
