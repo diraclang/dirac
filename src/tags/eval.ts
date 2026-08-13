@@ -77,8 +77,25 @@ export async function executeEval(session: DiracSession, element: DiracElement):
     
     let result: any;
     // Execute as async function to support top-level await
-    const func = new AsyncFunction(...Object.keys(context), expr);
-    result = await func(...Object.values(context));
+    // Filter variables to only include valid JavaScript identifiers as parameters
+    const validIdentifierPattern = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+    const validParams: Record<string, any> = {};
+    const allVars: Record<string, any> = {};
+    
+    for (const [key, value] of Object.entries(context)) {
+      allVars[key] = value;
+      // Only include as direct parameter if it's a valid JS identifier and not a special variable
+      if (validIdentifierPattern.test(key) && 
+          !['fs', 'path', '__dirname', 'getParams', 'getVariable', 'setVariable', 'session', 'vars'].includes(key)) {
+        validParams[key] = value;
+      }
+    }
+    
+    // Add 'vars' object containing ALL variables (including invalid identifier names like "an-apple")
+    validParams.vars = allVars;
+    
+    const func = new AsyncFunction(...Object.keys(validParams), expr);
+    result = await func(...Object.values(validParams));
     
     if (session.debug) {
       console.error(`[EVAL] Result: ${JSON.stringify(result)}`);
@@ -91,9 +108,11 @@ export async function executeEval(session: DiracSession, element: DiracElement):
     
     // Write back modified objects to session variables
     // This allows mutations like self.x = 10 to persist
-    for (const [varName, varValue] of Object.entries(context)) {
+    // Check both direct context and vars object for modifications
+    const allContextVars = { ...context, ...allVars };
+    for (const [varName, varValue] of Object.entries(allContextVars)) {
       // Skip special context variables
-      if (['fs', 'path', '__dirname', 'getParams', 'getVariable', 'setVariable', 'session'].includes(varName)) {
+      if (['fs', 'path', '__dirname', 'getParams', 'getVariable', 'setVariable', 'session', 'vars'].includes(varName)) {
         continue;
       }
       
