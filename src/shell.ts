@@ -82,6 +82,81 @@ export class DiracShell {
     // Use cached subroutines if in agent mode, otherwise use session subroutines
     const subroutines = this.client ? this.cachedSubroutines : this.session.subroutines;
     
+    // Commands that expect file/directory arguments
+    const fileCommands = ['vi', 'vim', 'nano', 'emacs', 'cat', 'less', 'more', 'head', 'tail', 
+                          'grep', 'find', 'rm', 'cp', 'mv', 'ln', 'chmod', 'chown', 'touch',
+                          'open', 'code', 'subl', 'atom', 'edit', 'view', 'bat'];
+    const dirCommands = ['cd', 'mkdir', 'rmdir', 'ls', 'pushd', 'popd'];
+    const allPathCommands = [...fileCommands, ...dirCommands];
+    
+    // Check if user is typing after a command that takes file/directory arguments
+    // Match: command_name followed by space(s) and optional partial path (no ./ ~/ / prefix)
+    const cmdMatch = line.match(new RegExp(`^(${allPathCommands.join('|')})\\s+([^\\s]*)$`));
+    
+    if (cmdMatch) {
+      const command = cmdMatch[1];
+      const partial = cmdMatch[2];
+      const dirsOnly = dirCommands.includes(command);
+      
+      try {
+        // Get directory to search in
+        let searchDir = process.cwd();
+        let filePrefix = partial;
+        
+        // If partial contains /, split into directory and prefix
+        if (partial.includes('/')) {
+          const lastSlash = partial.lastIndexOf('/');
+          const dirPart = partial.substring(0, lastSlash);
+          filePrefix = partial.substring(lastSlash + 1);
+          
+          // Expand ~ to home directory
+          if (dirPart.startsWith('~')) {
+            searchDir = path.join(os.homedir(), dirPart.slice(1));
+          } else if (path.isAbsolute(dirPart)) {
+            searchDir = dirPart;
+          } else {
+            searchDir = path.join(process.cwd(), dirPart);
+          }
+        }
+        
+        // Read directory contents
+        if (fs.existsSync(searchDir) && fs.statSync(searchDir).isDirectory()) {
+          const entries = fs.readdirSync(searchDir, { withFileTypes: true });
+          
+          // Filter by prefix and type
+          const matches = entries
+            .filter(entry => {
+              // Check if name matches prefix
+              if (!entry.name.startsWith(filePrefix)) return false;
+              
+              // For directory-only commands, filter to directories only
+              if (dirsOnly && !entry.isDirectory()) return false;
+              
+              return true;
+            })
+            .map(entry => {
+              // Build the completion path
+              let completionPath = entry.name;
+              
+              // If partial had a directory prefix, include it
+              if (partial.includes('/')) {
+                const dirPart = partial.substring(0, partial.lastIndexOf('/') + 1);
+                completionPath = dirPart + entry.name;
+              }
+              
+              // Add trailing slash for directories
+              return entry.isDirectory() ? completionPath + '/' : completionPath;
+            });
+          
+          if (matches.length > 0) {
+            return [matches, partial];
+          }
+        }
+      } catch (error) {
+        // Silently fail on file system errors
+      }
+    }
+    
     // Check if user is typing a variable: $varname
     const varMatch = line.match(/\$([a-zA-Z0-9_-]*)$/);
     
