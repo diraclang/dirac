@@ -29,6 +29,25 @@
 - **Long-term fix**: Introduce `<eval-safe>` tag with namespace object in v1.0.0
 - **Status**: Documented, fixing conflicts incrementally in libraries
 
+### `extends` Leaves Child Subroutines on Stack After Call
+- **Issue**: When a parent subroutine uses `extends`, child subroutines remain registered on the session stack after the call completes instead of being cleaned up
+- **Observed behavior**: The child subroutine can stay visible across later calls, causing stale state or accidental reuse between executions
+- **Likely root cause**: Stack cleanup logic is not being applied consistently when `extends` imports or chains child subroutines; cleanup appears to skip the nested child registration path
+- **Reproduction**:
+  1. Create a base object subroutine, for example `Object`, with a child method subroutine such as `push`
+  2. Create a second subroutine `Object` that `extends` the first one, and add a different child method such as `pull`
+  3. Instantiate the extended object and call it as `|Object instance=b>|push>`
+  4. Observe the runtime/subroutine stack after the call: both `push` and `pull` remain registered on the stack instead of being cleaned up after the subroutine exits
+  5. The stale child subroutines then interfere with later calls or object method lookup
+- **Symptoms**:
+  - later calls unexpectedly see inherited child subroutines still present
+  - execution order and boundary cleanup become unstable after an `extends`-based call
+  - related to `session.subBoundary`, `cleanSubroutinesToBoundary()`, and subroutine visibility tracking
+- **Impact**: Affects subroutine inheritance, stack hygiene, and repeatable execution across multiple calls
+- **Likely files**: `src/tags/extend.ts`, `src/tags/call.ts`, `src/runtime/session.ts`
+- **Status**: Needs investigation; suspected scope/cleanup bug in the `extends` path
+- **Related**: boundary cleanup, nested subroutine registration, `visible="subroutine"` workaround
+
 ## 🔴 High Priority
 
 ### Pending

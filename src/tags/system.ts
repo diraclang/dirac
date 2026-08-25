@@ -4,7 +4,7 @@
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { substituteVariables, emit } from '../runtime/session.js';
+import { substituteAttribute, emit } from '../runtime/session.js';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { integrate } from '../runtime/interpreter.js';
@@ -34,7 +34,7 @@ export async function executeSystem(session: DiracSession, element: DiracElement
     session.output = session.output.slice(0, beforeOutput);
   } else if (element.text) {
     // Simple text command with variable substitution
-    command = substituteVariables(session, element.text);
+    command = substituteAttribute(session, element.text);
   } else {
     throw new Error('<system> requires command content');
   }
@@ -75,7 +75,7 @@ export async function executeSystem(session: DiracSession, element: DiracElement
       encoding: 'utf-8',
       maxBuffer: 10 * 1024 * 1024, // 10MB buffer
     });
-    
+
     // Emit stdout
     if (stdout) {
       emit(session, stdout);

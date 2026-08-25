@@ -285,6 +285,9 @@
   param-result="string:optional:Variable name to store Python result">
   <!-- Python code provided as text content -->
   <!-- All DIRAC variables available as Python variables -->
+  <!-- __dirac_subroutines contains subroutine stack metadata -->
+  <!-- __dirac_session contains scope boundaries and runtime snapshot -->
+  <!-- Set __dirac_updates = {"varName": value} to write variables back -->
   <!-- Use print() to capture output -->
   <!-- Set result variable to capture return value via JSON -->
   <!-- Example: -->

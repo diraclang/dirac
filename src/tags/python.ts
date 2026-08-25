@@ -7,6 +7,10 @@ import type { DiracSession, DiracElement } from '../types/index.js';
 import { setVariable } from '../runtime/session.js';
 import { execSync, spawn } from 'child_process';
 
+function toEmbeddedJson(value: unknown): string {
+  return JSON.stringify(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+}
+
 /**
  * Remove common leading whitespace from all lines (dedent)
  * Handles the common XML pattern where first line is inline with opening tag
@@ -149,15 +153,40 @@ export async function executePython(session: DiracSession, element: DiracElement
       console.error(`[PYTHON] Variables: ${JSON.stringify(varsForPython)}`);
     }
 
+    const subroutinesForPython = session.subroutines.map((sub, index) => ({
+      index,
+      name: sub.name,
+      description: sub.description ?? '',
+      parameters: sub.parameters ?? [],
+      meta: sub.meta ?? {},
+      boundary: sub.boundary,
+      visible: Boolean(sub.visible),
+      sourcePath: sub.sourcePath ?? '',
+    }));
+
+    const sessionForPython = {
+      varBoundary: session.varBoundary,
+      subBoundary: session.subBoundary,
+      outputBoundary: session.outputBoundary,
+      parameterStackDepth: session.parameterStack.length,
+      currentSubroutineName: session.currentSubroutineName ?? null,
+      limits: session.limits,
+      debug: Boolean(session.debug),
+      subroutines: subroutinesForPython,
+    };
+
+    const varsJsonStr = toEmbeddedJson(varsForPython);
+    const subroutinesJsonStr = toEmbeddedJson(subroutinesForPython);
+    const sessionJsonStr = toEmbeddedJson(sessionForPython);
+
     // Check if code contains return statement - if so, wrap in function
     const hasReturn = /^\s*return\s+/m.test(dedentedCode);
     
     // Build Python script that:
     // 1. Loads variables into globals
+    // 2. Exposes subroutine stack/session snapshot
     // 2. Executes user code (wrapped in function if it has return)
     // 3. Returns result as JSON (if result attribute specified)
-    // Properly escape the JSON string for Python: backslashes first, then single quotes
-    const jsonStr = JSON.stringify(varsForPython).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
     
     let executionCode: string;
     if (hasReturn && resultVar) {
@@ -178,7 +207,9 @@ import json
 import sys
 
 # Load session variables into global namespace
-__dirac_vars = json.loads('''${jsonStr}''')
+__dirac_vars = json.loads('''${varsJsonStr}''')
+__dirac_subroutines = json.loads('''${subroutinesJsonStr}''')
+__dirac_session = json.loads('''${sessionJsonStr}''')
 globals().update(__dirac_vars)
 
 # Execute user code
@@ -188,7 +219,10 @@ ${executionCode}
 ${resultVar ? `
 try:
     __result = ${resultVar}
-    print(json.dumps({"__dirac_result__": __result}))
+    __payload = {"__dirac_result__": __result}
+    if '__dirac_updates' in globals():
+        __payload["__dirac_updates__"] = __dirac_updates
+    print(json.dumps(__payload))
 except NameError:
     print(json.dumps({"__dirac_error__": "Variable '${resultVar}' not defined in Python code"}), file=sys.stderr)
     sys.exit(1)
@@ -238,6 +272,17 @@ except NameError:
 
         // Store result in session
         setVariable(session, resultVar, result.__dirac_result__, false);
+
+        const updates = result.__dirac_updates__;
+        if (updates && typeof updates === 'object' && !Array.isArray(updates)) {
+          const updateEntries = Object.entries(updates as Record<string, unknown>);
+          for (const [name, value] of updateEntries) {
+            setVariable(session, name, value, false);
+          }
+          if (session.debug && updateEntries.length > 0) {
+            console.error(`[PYTHON] Applied ${updateEntries.length} variable update(s) from __dirac_updates`);
+          }
+        }
         
         if (session.debug) {
           console.error(`[PYTHON] Stored variable '${resultVar}' = ${JSON.stringify(result.__dirac_result__)}`);
