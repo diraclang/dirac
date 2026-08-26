@@ -13,7 +13,6 @@ import {
   setBoundary, 
   popToBoundary,
   cleanToBoundary,
-  setSubroutineBoundary,
   cleanSubroutinesToBoundary,
   pushParameters,
   popParameters,
@@ -109,9 +108,10 @@ export async function executeCall(session: DiracSession, element: DiracElement):
   
   if (extendAttr !== undefined || extendsAttr !== undefined) {
     // This subroutine extends another - use recursive descent to build stack
+    const cleanupBoundary = session.subroutines.length;
     const baseSubroutine = await registerExtendChain(session, subroutine, name);
     // Execute the ultimate base subroutine with extend flag set
-    await executeCallInternal(session, baseSubroutine, element, true);
+    await executeCallInternal(session, baseSubroutine, element, true, cleanupBoundary);
   } else {
     // No extension - normal subroutine call
     await executeCallInternal(session, subroutine, element, false);
@@ -187,11 +187,14 @@ async function executeCallInternal(
   session: DiracSession, 
   subroutine: DiracElement,
   callElement: DiracElement,
-  isExtendExecution: boolean = false
+  isExtendExecution: boolean = false,
+  cleanupSubBoundary?: number
 ): Promise<void> {
   // Set boundary for local scope (variables AND subroutines)
   const oldBoundary = setBoundary(session);
-  const oldSubBoundary = setSubroutineBoundary(session);
+  const oldSubBoundary = session.subBoundary;
+  const currentSubBoundary = session.subroutines.length;
+  session.subBoundary = currentSubBoundary;
   const wasReturn = session.isReturn;
   session.isReturn = false;
   
@@ -368,6 +371,8 @@ async function executeCallInternal(
     
     // Clean up scope (keep visible variables and subroutines) BEFORE restoring boundary
     cleanToBoundary(session, keepVariables);
+    const boundaryToClean = cleanupSubBoundary ?? currentSubBoundary;
+    session.subBoundary = boundaryToClean;
     cleanSubroutinesToBoundary(session, subroutine, callElement);
     
     session.varBoundary = oldBoundary;
