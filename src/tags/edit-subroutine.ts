@@ -109,14 +109,13 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
     // Read from original source file to preserve formatting
     try {
       const sourceContent = readFileSync(subroutine.sourcePath, 'utf-8');
-      
-      // Try to extract just this subroutine from the file
-      const match = sourceContent.match(
-        new RegExp(`<subroutine\\s+name="${name}"[\\s\\S]*?<\\/subroutine>`, 'i')
-      );
-      
-      if (match) {
-        xml = match[0];
+
+      // Extract selected version via AST traversal rather than regex.
+      // Regex breaks when nested <subroutine> tags are present.
+      const extracted = extractSubroutineFromSource(sourceContent, name, selectedIndex);
+
+      if (extracted) {
+        xml = extracted;
         if (session.debug) {
           console.error(`[edit-subroutine] Loaded from source: ${subroutine.sourcePath}`);
         }
@@ -458,5 +457,42 @@ function serializeElement(el: any, lines: string[], indent: string): void {
     } else {
       lines.push(`${indent}</${el.tag}>`);
     }
+  }
+}
+
+function extractSubroutineFromSource(sourceContent: string, name: string, selectedIndex: number): string | undefined {
+  try {
+    const parser = new DiracParser();
+    const ast = parser.parse(sourceContent);
+    const matches: DiracElement[] = [];
+    collectNamedSubroutines(ast, name, matches);
+
+    if (matches.length === 0) {
+      return undefined;
+    }
+
+    const targetIndex = Math.min(selectedIndex, matches.length - 1);
+    const selected = matches[targetIndex];
+
+    return serializeSubroutineToXML({
+      name,
+      element: selected,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+function collectNamedSubroutines(node: DiracElement, name: string, out: DiracElement[]): void {
+  if (node.tag === 'subroutine' && node.attributes?.name === name) {
+    out.push(node);
+  }
+
+  if (!node.children) {
+    return;
+  }
+
+  for (const child of node.children) {
+    collectNamedSubroutines(child, name, out);
   }
 }

@@ -413,6 +413,7 @@ export class DiracShell {
   private getUnsavedSubroutines(): string[] {
     // Check subroutines created in session OR modified but not saved
     const unsaved: string[] = [];
+    const seen = new Set<string>();
     const excludePaths = [
       path.join(os.homedir(), '.dirac', 'lib'),  // System library
       '/tmp/',  // Temp files
@@ -426,13 +427,19 @@ export class DiracShell {
       
       // Check if modified but not saved
       if (sub.modified) {
-        unsaved.push(sub.name);
+        if (!seen.has(sub.name)) {
+          unsaved.push(sub.name);
+          seen.add(sub.name);
+        }
         continue;
       }
       
       if (!sub.sourcePath) {
         // No source file - created in session
-        unsaved.push(sub.name);
+        if (!seen.has(sub.name)) {
+          unsaved.push(sub.name);
+          seen.add(sub.name);
+        }
       } else {
         // Check if it's from a system/excluded path
         const isExcluded = excludePaths.some(excludePath => 
