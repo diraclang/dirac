@@ -63,24 +63,30 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
         : '(base)';
       console.error(`  [${idx + 1}] ${name} ${label}`);
     });
-    
-    // Prompt for selection using synchronous readline
-    const readline = await import('readline');
-    const rl = readline.createInterface({
-      input: process.stdin,
-      output: process.stdout
-    });
-    
-    const answer = await new Promise<string>((resolve) => {
-      rl.question(`\nSelect which to edit (1-${matchingSubroutines.length}): `, (ans) => {
-        rl.close();
-        resolve(ans);
+
+    const selectionAttr = element.attributes.selection;
+    let selection = selectionAttr ? parseInt(selectionAttr.trim(), 10) : NaN;
+
+    // If the caller did not preselect a version, prompt here as a fallback.
+    if (isNaN(selection)) {
+      const readline = await import('readline');
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
       });
-    });
-    
-    const selection = parseInt(answer.trim());
+
+      const answer = await new Promise<string>((resolve) => {
+        rl.question(`\nSelect which to edit [1-${matchingSubroutines.length}]: `, (ans) => {
+          rl.close();
+          resolve(ans);
+        });
+      });
+
+      selection = parseInt(answer.trim(), 10);
+    }
+
     if (isNaN(selection) || selection < 1 || selection > matchingSubroutines.length) {
-      throw new Error(`Invalid selection: ${answer}`);
+      throw new Error(`Invalid selection: ${selectionAttr ?? ''}`);
     }
     
     selectedIndex = selection - 1;

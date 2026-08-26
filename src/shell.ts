@@ -1070,7 +1070,35 @@ Examples:
         } else {
           const subName = args[0];
           try {
-            const xml = `<edit-subroutine name="${subName}" />`;
+            let selectionAttr = '';
+            const subroutines = this.client
+              ? (await this.client.getState()).subroutines || []
+              : this.session.subroutines;
+
+            const matching = subroutines.filter((sub: any) => sub.name === subName);
+
+            if (matching.length > 1) {
+              console.error(`\nMultiple versions of '${subName}' found:`);
+              matching.forEach((item: any, idx: number) => {
+                const extendsAttr = item.element?.attributes?.extends || item.element?.attributes?.extend;
+                const label = extendsAttr ? `extends="${extendsAttr}"` : '(base)';
+                console.error(`  [${idx + 1}] ${subName} ${label}`);
+              });
+
+              const answer = await new Promise<string>((resolve) => {
+                this.rl.question(`\nSelect which to edit [1-${matching.length}]: `, resolve);
+              });
+
+              const selection = parseInt(answer.trim(), 10);
+              if (isNaN(selection) || selection < 1 || selection > matching.length) {
+                console.log(`Invalid selection: ${answer}`);
+                break;
+              }
+
+              selectionAttr = ` selection="${selection}"`;
+            }
+
+            const xml = `<edit-subroutine name="${subName}"${selectionAttr} />`;
             const ast = this.xmlParser.parse(xml);
             await integrate(this.session, ast);
             if (this.session.output.length > 0) {
