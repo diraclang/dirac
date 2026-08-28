@@ -4,7 +4,7 @@
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { substituteAttribute, emit } from '../runtime/session.js';
+import { substituteAttribute, emit, setVariable } from '../runtime/session.js';
 import { exec, spawn } from 'child_process';
 import { promisify } from 'util';
 import { integrate } from '../runtime/interpreter.js';
@@ -46,13 +46,24 @@ export async function executeSystem(session: DiracSession, element: DiracElement
   // Check for background attribute
   const backgroundAttr = element.attributes?.background;
   const isBackground = backgroundAttr === 'true';
-  
+
+  // Optional result capture: <system result="varName">, consistent with
+  // <eval result="...">/<python result="...">. Still emits stdout to output
+  // by default; add silent="true" to suppress the emit when only the
+  // captured variable is needed.
+  const resultVar = element.attributes?.result;
+  const silentAttr = element.attributes?.silent === 'true';
+
   if (session.debug) {
     console.error(`[SYSTEM] Executing${isBackground ? ' (background)' : ''}: ${command}`);
   }
   
   // Background mode - spawn and don't wait
   if (isBackground) {
+    if (resultVar && session.debug) {
+      console.error(`[SYSTEM] Warning: result="${resultVar}" is ignored in background mode (no stdout available)`);
+    }
+
     const child = spawn(command, {
       detached: true,
       stdio: 'ignore',
@@ -76,8 +87,13 @@ export async function executeSystem(session: DiracSession, element: DiracElement
       maxBuffer: 10 * 1024 * 1024, // 10MB buffer
     });
 
-    // Emit stdout
-    if (stdout) {
+    // Capture stdout into a session variable if requested
+    if (resultVar) {
+      setVariable(session, resultVar, stdout, false);
+    }
+
+    // Emit stdout (unless silenced)
+    if (stdout && !silentAttr) {
       emit(session, stdout);
     }
     

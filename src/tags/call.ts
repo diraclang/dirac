@@ -106,15 +106,25 @@ export async function executeCall(session: DiracSession, element: DiracElement):
   const extendAttr = subroutine.attributes.extend;
   const extendsAttr = subroutine.attributes.extends;
   
+  let returnedValue: any;
   if (extendAttr !== undefined || extendsAttr !== undefined) {
     // This subroutine extends another - use recursive descent to build stack
     const cleanupBoundary = session.subroutines.length;
     const baseSubroutine = await registerExtendChain(session, subroutine, name);
     // Execute the ultimate base subroutine with extend flag set
-    await executeCallInternal(session, baseSubroutine, element, true, cleanupBoundary);
+    returnedValue = await executeCallInternal(session, baseSubroutine, element, true, cleanupBoundary);
   } else {
     // No extension - normal subroutine call
-    await executeCallInternal(session, subroutine, element, false);
+    returnedValue = await executeCallInternal(session, subroutine, element, false);
+  }
+
+  // Capture the subroutine's <return> value into the call site's variable,
+  // if requested. This happens after executeCallInternal has already
+  // restored the caller's scope, so the variable naturally lands in the
+  // caller's boundary without needing visible="variable".
+  const resultAttr = element.attributes.result;
+  if (resultAttr) {
+    setVariable(session, resultAttr, returnedValue, false);
   }
 }
 
@@ -189,14 +199,17 @@ async function executeCallInternal(
   callElement: DiracElement,
   isExtendExecution: boolean = false,
   cleanupSubBoundary?: number
-): Promise<void> {
+): Promise<any> {
   // Set boundary for local scope (variables AND subroutines)
   const oldBoundary = setBoundary(session);
   const oldSubBoundary = session.subBoundary;
   const currentSubBoundary = session.subroutines.length;
   session.subBoundary = currentSubBoundary;
   const wasReturn = session.isReturn;
+  const wasReturnValue = session.returnValue;
   session.isReturn = false;
+  session.returnValue = undefined;
+  let capturedReturnValue: any;
   
   // Track current subroutine name for available-subroutines
   const oldSubroutineName = session.currentSubroutineName;
@@ -355,6 +368,10 @@ async function executeCallInternal(
     }
 
   } finally {
+    // Capture this call's return value (if <return> was hit) before the
+    // caller's isReturn/returnValue state is restored below.
+    capturedReturnValue = session.returnValue;
+
     // Restore skip flag
     session.skipSubroutineRegistration = oldSkipFlag;
     
@@ -382,9 +399,12 @@ async function executeCallInternal(
       session.subBoundary = oldSubBoundary;
     }
     session.isReturn = wasReturn;
+    session.returnValue = wasReturnValue;
     session.currentSubroutineName = oldSubroutineName;
     session.childrenConsumed = oldChildrenConsumed;
   }
+
+  return capturedReturnValue;
 }
 
 async function bindParameters(

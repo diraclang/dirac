@@ -10,7 +10,9 @@ import { setVariable, getVariable, substituteVariables } from '../runtime/sessio
 const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
 
 export async function executeEval(session: DiracSession, element: DiracElement): Promise<void> {
-  const name = element.attributes.name;
+  // `result` is the preferred attribute (consistent with <python result="...">
+  // and <call result="...">); `name` is kept as a backward-compatible alias.
+  const name = element.attributes.result || element.attributes.name;
   const exprAttr = element.attributes.expr;
   
   // Get expression as-is (do not replace ${var})

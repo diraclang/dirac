@@ -108,6 +108,11 @@ export interface DiracSession {
   isReturn: boolean;
   isBreak: boolean;
   isThrown: boolean;
+
+  // Value set by <return>, read back by the call site via the `result`
+  // attribute on <call>/direct-tag calls. Only meaningful while isReturn
+  // is true for the subroutine that produced it.
+  returnValue?: any;
   
   // Track if children were consumed by <parameters select="*"/>
   childrenConsumed: boolean;

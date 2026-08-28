@@ -36,6 +36,7 @@ import { executeSaveSubroutine } from '../tags/save-subroutine.js';
 import { executeEditSubroutine } from '../tags/edit-subroutine.js';
 import { executeForeach } from '../tags/foreach.js';
 import { executeBreak } from '../tags/break.js';
+import { executeReturn } from '../tags/return.js';
 import { executeAttr } from '../tags/attr.js';
 import { executeEnvironment } from '../tags/environment.js';
 import { executeInput } from '../tags/input.js';
@@ -97,6 +98,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'break':
         await executeBreak(session, element);
+        break;
+
+      case 'return':
+        await executeReturn(session, element);
         break;
         
       case 'if':
