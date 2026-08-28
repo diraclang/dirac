@@ -69,7 +69,12 @@ function dedent(text: string): string {
 export async function executePython(session: DiracSession, element: DiracElement): Promise<void> {
   const resultVar = element.attributes.result;
   const backgroundAttr = element.attributes.background;
-  const isBackground = backgroundAttr === 'true';
+  // Default to background execution for fire-and-forget calculations.
+  // If result capture is requested, stay foreground by default so the value
+  // can be returned to the session.
+  const isBackground = backgroundAttr !== undefined
+    ? backgroundAttr === 'true'
+    : !resultVar;
   const pythonCode = element.text;
 
   if (!pythonCode || pythonCode.trim() === '') {

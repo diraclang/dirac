@@ -51,6 +51,21 @@
 ## 🔴 High Priority
 
 ### Pending
+- [ ] **Align `<loop>` condition behavior with test suite or update legacy test assumptions**
+  - **Issue**: `tests/loop-condition.test.ts` is currently excluded from required `test:unit` because it fails against current runtime semantics.
+  - **Current runtime behavior**:
+    1. `<loop>` requires `count` attribute.
+    2. `<loop condition="...">` is not supported.
+    3. `<if condition="...">` style used in the legacy file is not the canonical conditional style for this code path.
+  - **Why this is backlog**: all required tests pass, but this is test coverage debt and semantic drift risk.
+  - **Decision needed**:
+    1. Implement condition-based loop semantics in `src/tags/loop.ts`.
+    2. Or rewrite `tests/loop-condition.test.ts` to match current supported syntax (`count` + `<test-if>`/`<break>` pattern).
+  - **Acceptance criteria**:
+    1. `tests/loop-condition.test.ts` passes.
+    2. File is included in required `npm test` path (`test:unit`).
+    3. `npm test` remains green end-to-end.
+
 - [ ] **Multi-language `<eval>` support**: Enable execution of Python, Ruby, Go, etc. within DIRAC
   - **Why**: Position DIRAC as a polyglot integration layer - uniform LLM interface for multiple languages
   - **Vision**: DIRAC becomes the "glue language" that orchestrates JavaScript, Python, system APIs, and services
