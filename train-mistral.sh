@@ -6,9 +6,6 @@ LLM_DIR="${SCRIPT_DIR}/../dirac-llm"
 MODELS_BASE="${LLM_DIR}/mlx/llm_models"
 STATE_FILE="${MODELS_BASE}/.current"
 SERVER_LOG="${LLM_DIR}/mlx/server.log"
-TRAIN_SCRIPT="./lora_train_balanced_qwen.sh"
-SERVER_SCRIPT="mlx/python_script/stateless_chat_server_train.py"
-DEFAULT_BASE_MODEL="${LLM_DIR}/mlx/Qwen2.5-7B-Instruct"
 
 # Determine current active slot (A or B)
 if [[ -f "$STATE_FILE" ]]; then
@@ -25,10 +22,8 @@ else
 fi
 
 NEW_MODEL_DIR="${MODELS_BASE}/model_extended_${new_slot}"
-NEW_ADAPTER_DIR="${NEW_MODEL_DIR}/adapters"
 echo "Current active model: model_extended_${current_slot}"
-echo "Training new Qwen model into: model_extended_${new_slot}"
-echo "Base model: ${BASE_MODEL:-$DEFAULT_BASE_MODEL}"
+echo "Training new model into: model_extended_${new_slot}"
 echo ""
 
 cd "$LLM_DIR"
@@ -36,11 +31,11 @@ source .venv/bin/activate
 cd mlx
 
 # Train with the new slot directory
-MODEL_OUTPUT_DIR="$NEW_MODEL_DIR" BASE_MODEL="${BASE_MODEL:-$DEFAULT_BASE_MODEL}" "$TRAIN_SCRIPT"
+MODEL_OUTPUT_DIR="$NEW_MODEL_DIR" ./lora_train_balanced_fresh.sh
 
-# Verify the new adapter was created successfully
-if [[ ! -f "${NEW_ADAPTER_DIR}/adapters.safetensors" ]]; then
-	echo "Error: Training completed but adapter checkpoint is missing: ${NEW_ADAPTER_DIR}/adapters.safetensors"
+# Verify the new model was created successfully
+if [[ ! -f "${NEW_MODEL_DIR}/config.json" ]]; then
+	echo "Error: Training completed but model directory is incomplete: ${NEW_MODEL_DIR}"
 	exit 1
 fi
 
@@ -64,19 +59,18 @@ else
 fi
 
 # Start server with new model
-# The server selects the active slot from .current, so update the marker before launch.
-echo "$new_slot" > "$STATE_FILE"
-
-echo "Starting new server with base model: ${BASE_MODEL:-$DEFAULT_BASE_MODEL}"
-echo "Applying adapters from: $NEW_ADAPTER_DIR"
+echo "Starting new server with model: $NEW_MODEL_DIR"
 cd "$LLM_DIR"
-MLX_MODEL_PATH="${BASE_MODEL:-$DEFAULT_BASE_MODEL}" MLX_ADAPTER_PATH="$NEW_ADAPTER_DIR" nohup .venv/bin/python "$SERVER_SCRIPT" > "$SERVER_LOG" 2>&1 &
+MLX_MODEL_PATH="$NEW_MODEL_DIR" nohup .venv/bin/python mlx/python_script/stateless_chat_server_train.py > "$SERVER_LOG" 2>&1 &
 new_pid=$!
+
+# Update state file to mark new slot as active
+echo "$new_slot" > "$STATE_FILE"
 
 echo ""
 echo "=" | head -c 60; echo
 echo "Training complete!"
-echo "New slot: model_extended_${new_slot} (Qwen adapters)"
+echo "New model: model_extended_${new_slot}"
 echo "Old model: model_extended_${current_slot} (kept for rollback)"
 echo "Server restarted on port 5001 (PID $new_pid)"
 echo "Server log: $SERVER_LOG"
