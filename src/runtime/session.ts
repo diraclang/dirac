@@ -165,18 +165,14 @@ export function cleanToBoundary(session: DiracSession, keepVisible: boolean = fa
   }
   
   // For variables at or beyond current boundary:
-  // - If keepVisible is true: promote ALL variables (set boundary=1 so they survive one more level)
-  // - If keepVisible is false but variable has boundary > 0: promote it
-  // - Otherwise: discard
+  // - If keepVisible is true: keep them so they remain available to the caller scope
+  // - If keepVisible is false: discard them when the enclosing subroutine exits
   for (let i = session.varBoundary; i < session.variables.length; i++) {
     const v = session.variables[i];
     if (keepVisible) {
-      // Promote all variables in this scope by setting boundary=1
-      v.boundary = 1;
-      kept.push(v);
-    } else if (v.boundary > 0) {
-      // Decrement and keep visible variables
-      v.boundary = v.boundary - 1;
+      // Keep the variable in the caller scope; it will be removed when that
+      // caller's own cleanup runs unless that caller is also visible.
+      v.boundary = 0;
       kept.push(v);
     }
     // Non-visible or non-kept variables are discarded (not added to kept)
