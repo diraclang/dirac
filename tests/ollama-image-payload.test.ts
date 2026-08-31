@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 
 import { OllamaProvider } from '../src/llm/ollama.ts';
 import { execute } from '../src/index.ts';
@@ -99,6 +100,46 @@ test('llm image attribute accepts variable substitution via subroutine parameter
     globalThis.fetch = originalFetch;
     if (fs.existsSync(imagePath)) {
       fs.unlinkSync(imagePath);
+    }
+  }
+});
+
+test('llm image attribute expands a leading ~ to the home directory', async () => {
+  const requests: any[] = [];
+  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z8xQAAAAASUVORK5CYII=';
+  const homeImagePath = path.join(os.homedir(), `dirac-tilde-test-${Date.now()}.png`);
+  fs.writeFileSync(homeImagePath, Buffer.from(pngBase64, 'base64'));
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url: string | URL, init?: RequestInit) => {
+    const payload = JSON.parse(String(init?.body ?? '{}'));
+    requests.push(payload);
+
+    return new Response(JSON.stringify({ response: 'ok', done: true }) + '\n', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    const source = `
+<dirac>
+  <llm provider="ollama" model="llava" image="~/${path.basename(homeImagePath)}">what is in the image</llm>
+</dirac>
+`;
+
+    await execute(source, {
+      llmProvider: 'ollama',
+      llmModel: 'llava',
+    });
+
+    assert.equal(requests.length, 1);
+    assert.equal(Array.isArray(requests[0].images), true);
+    assert.equal(requests[0].images[0].startsWith('iVBORw0KGgo'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (fs.existsSync(homeImagePath)) {
+      fs.unlinkSync(homeImagePath);
     }
   }
 });

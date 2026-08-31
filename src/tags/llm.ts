@@ -93,9 +93,15 @@ function extractImagePathsFromElement(session: DiracSession, element: DiracEleme
 }
 
 function resolveImageDataUrl(imagePath: string): string {
-  const resolvedPath = path.isAbsolute(imagePath)
-    ? imagePath
-    : path.resolve(process.cwd(), imagePath);
+  // Expand a leading ~ (or ~/...) to the user's home directory before resolving.
+  let expandedPath = imagePath;
+  if (expandedPath === '~' || expandedPath.startsWith('~/') || expandedPath.startsWith('~\\')) {
+    expandedPath = path.join(os.homedir(), expandedPath.slice(1));
+  }
+
+  const resolvedPath = path.isAbsolute(expandedPath)
+    ? expandedPath
+    : path.resolve(process.cwd(), expandedPath);
 
   if (!fs.existsSync(resolvedPath)) {
     throw new Error(`Image file not found: ${imagePath}`);
