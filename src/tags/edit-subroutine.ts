@@ -261,8 +261,13 @@ function serializeElementToBraKet(el: any, lines: string[], indent: number): voi
   // Handle text nodes
   if (!el.tag || el.tag === '') {
     if (el.text) {
-      // Don't add text nodes as separate lines - they'll be handled inline
-      // Just return and let parent handle them
+      // Preserve raw multi-line text content (e.g. lang="js" code bodies).
+      // This path is only reached when a parent (like <subroutine>) recurses
+      // directly into its children, so emitting each line here is safe and
+      // prevents raw code from being silently dropped.
+      for (const textLine of String(el.text).split('\n')) {
+        lines.push(indentStr + textLine);
+      }
     }
     return;
   }
