@@ -1,7 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
 
 import { OllamaProvider } from '../src/llm/ollama.ts';
+import { execute } from '../src/index.ts';
 
 test('Ollama strips data URLs before sending images to /api/generate', async () => {
   const requests: any[] = [];
@@ -51,4 +54,51 @@ test('Ollama stream parser preserves responses across chunk boundaries', async (
   const response = await provider.complete('What is the capital of Korea?');
 
   assert.equal(response, 'Seoul');
+});
+
+test('llm image attribute accepts variable substitution via subroutine parameter', async () => {
+  const requests: any[] = [];
+  const imagePath = path.join(process.cwd(), 'tests', 'fixtures', 'tiny-test-image.png');
+
+  // 1x1 PNG
+  const pngBase64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO7Z8xQAAAAASUVORK5CYII=';
+  fs.writeFileSync(imagePath, Buffer.from(pngBase64, 'base64'));
+
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async (_url: string | URL, init?: RequestInit) => {
+    const payload = JSON.parse(String(init?.body ?? '{}'));
+    requests.push(payload);
+
+    return new Response(JSON.stringify({ response: 'ok', done: true }) + '\n', {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  };
+
+  try {
+    const source = `
+<dirac>
+  <subroutine name="llava" param-image="string">
+    <llm provider="ollama" model="llava" image="$image">what is in the image</llm>
+  </subroutine>
+  <llava image="tests/fixtures/tiny-test-image.png" />
+</dirac>
+`;
+
+    await execute(source, {
+      llmProvider: 'ollama',
+      llmModel: 'llava',
+    });
+
+    assert.equal(requests.length, 1);
+    assert.equal(Array.isArray(requests[0].images), true);
+    assert.equal(requests[0].images.length, 1);
+    assert.equal(typeof requests[0].images[0], 'string');
+    assert.equal(requests[0].images[0].startsWith('iVBORw0KGgo'), true);
+  } finally {
+    globalThis.fetch = originalFetch;
+    if (fs.existsSync(imagePath)) {
+      fs.unlinkSync(imagePath);
+    }
+  }
 });

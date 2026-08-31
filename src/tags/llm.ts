@@ -61,20 +61,32 @@ function extractImageUrlsFromContent(content: DialogContent): string[] {
   return urls;
 }
 
-function extractImagePathsFromElement(element: DiracElement): string[] {
+function extractImagePathsFromElement(session: DiracSession, element: DiracElement): string[] {
   const candidates: string[] = [];
   const attributeNames = ['image', 'images', 'image-path', 'image-paths', 'img'];
 
   for (const name of attributeNames) {
-    const value = element.attributes[name];
-    if (!value) continue;
+    const rawValue = element.attributes[name];
+    if (!rawValue) continue;
 
-    const items = String(value)
-      .split(/[,\s]+/)
-      .map(part => part.trim())
-      .filter(Boolean);
+    // Resolve $var/${var} first so image attributes can be passed through subroutine params.
+    const substituted = String(substituteAttribute(session, rawValue)).trim();
+    if (!substituted) continue;
 
-    candidates.push(...items);
+    // Keep data URLs intact (they contain commas that should not be tokenized).
+    if (/^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(substituted)) {
+      candidates.push(substituted);
+      continue;
+    }
+
+    // Support quoted path tokens and multi-value attributes.
+    const tokens = substituted.match(/"[^"]*"|'[^']*'|[^,\s]+/g) || [];
+    for (const token of tokens) {
+      const normalized = token.trim().replace(/^['"]|['"]$/g, '');
+      if (normalized) {
+        candidates.push(normalized);
+      }
+    }
   }
 
   return [...new Set(candidates)];
@@ -559,7 +571,7 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
 
   const outputVar = element.attributes.output;
   const contextVar = element.attributes.context;
-  const imagePaths = extractImagePathsFromElement(element).map(value => substituteAttribute(session, value));
+  const imagePaths = extractImagePathsFromElement(session, element);
   const saveDialog = element.attributes['save-dialog'] === 'true'; // NEW: Enable persistent dialog history
   const executeMode = element.attributes.execute === 'true'; // NEW: seamless execution mode
   const temperature = parseFloat(element.attributes.temperature || '1.0');
