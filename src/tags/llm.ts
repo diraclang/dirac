@@ -1261,8 +1261,8 @@ CRITICAL: When defining parameters:
               console.error(`[LLM] Execution output (${executionOutput.length} chars):\n${executionOutput}\n`);
             }
             
-            // Build feedback prompt (corrections already added to dialog earlier if any)
-            const feedbackPrompt = `The code executed successfully. Here is the output:\n\`\`\`\n${executionOutput}\n\`\`\`\n\nPlease review the output carefully. If the output is correct and complete, respond with ONLY the tag "<DONE />" and nothing else. If the output is incorrect or incomplete, generate corrected Dirac XML code.`;
+            // Build feedback prompt from execution output only.
+            const feedbackPrompt = `The code executed successfully. Here is the output:\n\`\`\`\n${executionOutput}\n\`\`\``;
             
             if (session.debug) {
               console.error(`[LLM] Feedback prompt:\n${feedbackPrompt}\n`);
