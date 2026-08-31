@@ -906,6 +906,7 @@ CRITICAL: When defining parameters:
       const maxIterations = parseInt(maxIterationsAttr, 10);
       
       const replaceTick = element.attributes['replace-tick'] === 'true';
+      const hasXmlTag = (text: string): boolean => /<\s*\/?\s*[a-zA-Z_][\w:-]*(?:\s[^<>]*?)?\/?\s*>/.test(text);
       
       if (session.debug) {
         console.error(`[LLM] Executing response as Dirac code:\n${result}\n`);
@@ -919,6 +920,7 @@ CRITICAL: When defining parameters:
 
       // Feedback loop: execute, capture output, send back to LLM, repeat
       let iteration = 0;
+      let stopFeedbackLoop = false;
       
       while (iteration < maxIterations && (iteration === 0 || feedbackMode)) {
         iteration++;
@@ -956,6 +958,13 @@ CRITICAL: When defining parameters:
             console.error(`[LLM] Feedback loop terminating - LLM indicated completion with <DONE /> (before parsing)\n`);
           }
           break; // Exit feedback loop immediately without parsing
+        }
+
+        // If response is plain text (no XML tags), emit once and stop feedback loop.
+        if (!hasXmlTag(trimmedCode)) {
+          console.error(`[LLM] Iteration ${iteration}: No XML tags detected in response, treating as final text output`);
+          emit(session, result);
+          break;
         }
         
         try {
@@ -1076,9 +1085,20 @@ CRITICAL: When defining parameters:
                   diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
                 }
               }
+
+              if (!hasXmlTag(diracCode.trim())) {
+                console.error(`[LLM] Iteration ${iteration}: Retry response has no XML tags, stopping feedback loop`);
+                emit(session, result);
+                stopFeedbackLoop = true;
+                break;
+              }
               
               dynamicAST = parser.parse(diracCode);
               validation = await validateDiracCode(session, dynamicAST, { autocorrect, deepValidation: true });
+            }
+
+            if (stopFeedbackLoop) {
+              break;
             }
             
             if (!validation.valid) {

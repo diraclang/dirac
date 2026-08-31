@@ -19,7 +19,7 @@
   "scripts": {
     "dev": "tsx src/cli.ts",
     "build": "tsup src/index.ts src/cli.ts src/test-runner.ts --format esm --dts --clean",
-    "test:unit": "tsx --test tests/extends-inline-child-stack.test.ts tests/extends-subroutine-cleanup.test.ts tests/save-subroutine-multi-version.test.ts tests/system-result-capture.test.ts tests/return-tag.test.ts tests/python-subroutine-context.test.ts tests/python-background-default.test.ts tests/ollama-image-payload.test.ts",
+    "test:unit": "tsx --test tests/extends-inline-child-stack.test.ts tests/extends-subroutine-cleanup.test.ts tests/save-subroutine-multi-version.test.ts tests/system-result-capture.test.ts tests/return-tag.test.ts tests/python-subroutine-context.test.ts tests/python-background-default.test.ts tests/ollama-image-payload.test.ts tests/llm-feedback-plain-text-stop.test.ts",
     "test:unit:all": "find tests -type f -name '*.test.ts' -print0 | xargs -0 tsx --test",
     "test": "npm run build && node dist/test-runner.js tests && npm run test:unit",
     "typecheck": "tsc --noEmit"
