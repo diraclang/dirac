@@ -36,6 +36,22 @@ export class DiracShell {
   private currentIndent: number = 0;
   private config: DiracConfig;
 
+  private getQuestionMarkTarget(): string {
+    const target = (this.config.questionMarkTarget || 'ai').trim();
+    return target || 'ai';
+  }
+
+  private normalizeQuestionMarkInput(input: string): string {
+    const trimmed = input.trim();
+    if (!trimmed.startsWith('?')) {
+      return input;
+    }
+
+    const rest = trimmed.substring(1).trim();
+    const target = this.getQuestionMarkTarget();
+    return rest ? `|${target}>${rest}` : `|${target}>`;
+  }
+
   constructor(config: DiracConfig = {}) {
     this.config = config;
     this.session = createSession(config);
@@ -591,10 +607,9 @@ export class DiracShell {
       return;
     }
 
-    // Simple shorthand: ? -> |ai>
+    // Simple shorthand: ? -> configurable target tag/subroutine
     if (this.inputBuffer.length === 0 && input.trim().startsWith('?')) {
-      const rest = input.trim().substring(1).trim();
-      input = rest ? `|ai>${rest}` : `|ai>`;
+      input = this.normalizeQuestionMarkInput(input);
       if (this.config.debug) {
         console.log(`[mapped: ? -> ${input}]`);
       }
@@ -1934,6 +1949,7 @@ Examples:
     this.config.llmProvider = configData.llmProvider || process.env.LLM_PROVIDER;
     this.config.llmModel = configData.llmModel || process.env.LLM_MODEL;
     this.config.customLLMUrl = configData.customLLMUrl || process.env.CUSTOM_LLM_URL;
+    this.config.questionMarkTarget = configData.questionMarkTarget || this.config.questionMarkTarget || 'ai';
     
     // Reinitialize the session with new config (keeps variables/subroutines but updates LLM client)
     const oldVariables = this.session.variables;

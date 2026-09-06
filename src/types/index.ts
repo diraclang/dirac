@@ -147,4 +147,5 @@ export interface DiracConfig {
   customLLMUrl?: string;  // Custom LLM server URL
   initScript?: string;  // Shell init script path (like .bashrc)
   libraryPaths?: string[];  // Additional library search paths
+  questionMarkTarget?: string;  // shorthand '?' target tag/subroutine, e.g. 'ai' or 'mySubroutine'
 }

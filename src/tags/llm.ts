@@ -950,20 +950,29 @@ CRITICAL: When defining parameters:
         let correctionMessages: string[] = [];
         let hasTagCorrections = false; // Track if there were actual tag/attribute corrections (not just warnings)
         
-        // Only replace triple backtick code blocks if replace-tick="true" is set
+        // Only replace triple backtick code blocks if replace-tick="true" is set.
+        // Fenced XML/Dirac/HTML blocks are treated as literal text and wrapped in CDATA so
+        // they are not accidentally executed as Dirac code. Bash blocks remain convertible
+        // to <system>...</system> for explicit command execution.
         let diracCode = result.trim();
+        let fencedLiteralXml = false;
         if (replaceTick && diracCode.startsWith('```')) {
-          // Check for bash, xml, html, dirac, or no language
           const match = diracCode.match(/^```(\w+)?\n?/m);
           if (match && match[1] === 'bash') {
-            // Find closing triple backticks
             const endIdx = diracCode.indexOf('```', 3);
-            let bashContent = diracCode.slice(match[0].length, endIdx).trim();
+            const bashContent = diracCode.slice(match[0].length, endIdx).trim();
             diracCode = `<system>${bashContent}</system>`;
           } else {
-            // Remove opening and closing backticks for xml/html/dirac/none
-            diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
+            const fencedBody = diracCode.replace(/^```(?:\w+)?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
+            diracCode = `<![CDATA[${fencedBody}]]>`;
+            fencedLiteralXml = true;
           }
+        }
+
+        if (fencedLiteralXml) {
+          console.error(`[LLM] Iteration ${iteration}: fenced XML/Dirac/HTML block treated as literal text`);
+          emit(session, result);
+          break;
         }
         
         // Capture output before execution (for feedback and silent operation detection)
@@ -1091,17 +1100,29 @@ CRITICAL: When defining parameters:
                 console.error(`[LLM] Retry ${retryCount} response:\n${result}\n`);
               }
               
-              // Clean up and parse the new response
+              // Clean up and parse the new response.
+              // Fenced XML/Dirac blocks are preserved as literal text instead of being
+              // parsed as executable Dirac tags.
               diracCode = result.trim();
+              fencedLiteralXml = false;
               if (replaceTick && diracCode.startsWith('```')) {
                 const match = diracCode.match(/^```(\w+)?\n?/m);
                 if (match && match[1] === 'bash') {
                   const endIdx = diracCode.indexOf('```', 3);
-                  let bashContent = diracCode.slice(match[0].length, endIdx).trim();
+                  const bashContent = diracCode.slice(match[0].length, endIdx).trim();
                   diracCode = `<system>${bashContent}</system>`;
                 } else {
-                  diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
+                  const fencedBody = diracCode.replace(/^```(?:\w+)?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
+                  diracCode = `<![CDATA[${fencedBody}]]>`;
+                  fencedLiteralXml = true;
                 }
+              }
+
+              if (fencedLiteralXml) {
+                console.error(`[LLM] Iteration ${iteration}: retry fenced XML/Dirac/HTML block treated as literal text`);
+                emit(session, result);
+                stopFeedbackLoop = true;
+                break;
               }
 
               if (!hasXmlTag(diracCode.trim())) {
