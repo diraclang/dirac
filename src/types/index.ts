@@ -8,6 +8,7 @@ export interface DiracElement {
   attributes: Record<string, string>;
   children: DiracElement[];
   text?: string;
+  literal?: boolean;
 }
 
 /**

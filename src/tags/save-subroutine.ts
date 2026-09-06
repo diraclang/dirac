@@ -207,8 +207,11 @@ function serializeElementToBraKet(el: any, lines: string[], indent: number): voi
   // Handle text nodes
   if (!el.tag || el.tag === '') {
     if (el.text) {
-      // Don't add text nodes as separate lines - they'll be handled inline
-      // Just return and let parent handle them
+      const trimmedText = el.text.trim();
+      if (trimmedText) {
+        const literalText = el.literal ? `<![CDATA[${trimmedText}]]>` : trimmedText;
+        lines.push(indentStr + literalText);
+      }
     }
     return;
   }
@@ -316,7 +319,8 @@ function serializeChildren(children: any[], indent: number): string {
     
     if (child.text && !child.tag) {
       // Text node with content - preserve text but trim whitespace
-      xml += child.text.trim();
+      const literalText = child.literal ? `<![CDATA[${child.text.trim()}]]>` : child.text.trim();
+      xml += literalText;
     } else if (child.tag) {
       // Check if this is the start of a line (need indent)
       const needsIndent = i === 0 || xml.endsWith('\n');

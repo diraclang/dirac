@@ -261,12 +261,11 @@ function serializeElementToBraKet(el: any, lines: string[], indent: number): voi
   // Handle text nodes
   if (!el.tag || el.tag === '') {
     if (el.text) {
-      // Preserve raw multi-line text content (e.g. lang="js" code bodies).
-      // This path is only reached when a parent (like <subroutine>) recurses
-      // directly into its children, so emitting each line here is safe and
-      // prevents raw code from being silently dropped.
-      for (const textLine of String(el.text).split('\n')) {
-        lines.push(indentStr + textLine);
+      const content = el.literal ? `<![CDATA[${String(el.text).trim()}]]>` : String(el.text).trim();
+      if (content) {
+        for (const textLine of content.split('\n')) {
+          lines.push(indentStr + textLine);
+        }
       }
     }
     return;
@@ -376,14 +375,15 @@ function serializeElement(el: any, lines: string[], indent: string): void {
   // Handle text nodes (tag is empty string)
   if (!el.tag || el.tag === '') {
     if (el.text) {
+      const textContent = el.literal ? `<![CDATA[${el.text.trim()}]]>` : el.text;
       // Text node - output inline without newline
       let lastIdx = lines.length - 1;
       if (lastIdx >= 0 && !lines[lastIdx].endsWith('>')) {
         // Append to current line
-        lines[lastIdx] += el.text;
+        lines[lastIdx] += textContent;
       } else {
         // Start new line with text
-        lines.push(indent + el.text);
+        lines.push(indent + textContent);
       }
     }
     return;
@@ -432,10 +432,11 @@ function serializeElement(el: any, lines: string[], indent: string): void {
       
       // Check if this is a text node
       if (!child.tag || child.tag === '') {
-        // Text node - keep inline
+        // Text node - keep inline, but preserve fenced literal blocks as CDATA.
         lastIdx = lines.length - 1;
         if (child.text) {
-          lines[lastIdx] += child.text;
+          const textValue = child.literal ? `<![CDATA[${child.text.trim()}]]>` : child.text;
+          lines[lastIdx] += textValue;
         }
       } else {
         // Element node

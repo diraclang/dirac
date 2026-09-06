@@ -950,23 +950,15 @@ CRITICAL: When defining parameters:
         let correctionMessages: string[] = [];
         let hasTagCorrections = false; // Track if there were actual tag/attribute corrections (not just warnings)
         
-        // Only replace triple backtick code blocks if replace-tick="true" is set.
-        // Fenced XML/Dirac/HTML blocks are treated as literal text and wrapped in CDATA so
-        // they are not accidentally executed as Dirac code. Bash blocks remain convertible
-        // to <system>...</system> for explicit command execution.
+        // Treat fenced blocks as literal content and do not attempt implicit bash execution.
+        // The shared parser normalization handles this policy before parsing, so we only keep
+        // the LLM-layer handling for direct literal passthrough when replace-tick is enabled.
         let diracCode = result.trim();
         let fencedLiteralXml = false;
         if (replaceTick && diracCode.startsWith('```')) {
-          const match = diracCode.match(/^```(\w+)?\n?/m);
-          if (match && match[1] === 'bash') {
-            const endIdx = diracCode.indexOf('```', 3);
-            const bashContent = diracCode.slice(match[0].length, endIdx).trim();
-            diracCode = `<system>${bashContent}</system>`;
-          } else {
-            const fencedBody = diracCode.replace(/^```(?:\w+)?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
-            diracCode = `<![CDATA[${fencedBody}]]>`;
-            fencedLiteralXml = true;
-          }
+          const fencedBody = diracCode.replace(/^```(?:\w+)?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
+          diracCode = `<![CDATA[${fencedBody}]]>`;
+          fencedLiteralXml = true;
         }
 
         if (fencedLiteralXml) {
@@ -1101,21 +1093,13 @@ CRITICAL: When defining parameters:
               }
               
               // Clean up and parse the new response.
-              // Fenced XML/Dirac blocks are preserved as literal text instead of being
-              // parsed as executable Dirac tags.
+              // Fenced blocks are preserved as literal text instead of being parsed as executable Dirac.
               diracCode = result.trim();
               fencedLiteralXml = false;
               if (replaceTick && diracCode.startsWith('```')) {
-                const match = diracCode.match(/^```(\w+)?\n?/m);
-                if (match && match[1] === 'bash') {
-                  const endIdx = diracCode.indexOf('```', 3);
-                  const bashContent = diracCode.slice(match[0].length, endIdx).trim();
-                  diracCode = `<system>${bashContent}</system>`;
-                } else {
-                  const fencedBody = diracCode.replace(/^```(?:\w+)?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
-                  diracCode = `<![CDATA[${fencedBody}]]>`;
-                  fencedLiteralXml = true;
-                }
+                const fencedBody = diracCode.replace(/^```(?:\w+)?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
+                diracCode = `<![CDATA[${fencedBody}]]>`;
+                fencedLiteralXml = true;
               }
 
               if (fencedLiteralXml) {
