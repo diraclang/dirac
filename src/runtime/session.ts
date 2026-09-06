@@ -75,6 +75,7 @@ export function createSession(config: DiracConfig = {}): DiracSession {
     isReturn: false,
     isBreak: false,
     isThrown: false,
+    childrenConsumed: false,
     skipSubroutineRegistration: false,
     debug: config.debug || false,
     currentFile: config.filePath, // Set current file from config for proper relative import resolution
@@ -85,22 +86,36 @@ export function createSession(config: DiracConfig = {}): DiracSession {
 // Variable management (maps to var_info functions in MASK)
 
 export function setVariable(session: DiracSession, name: string, value: any, visible: boolean = false): void {
-  // Check if variable already exists in the CURRENT scope (same boundary) and update it
-  for (let i = session.variables.length - 1; i >= 0; i--) {
-    if (session.variables[i].name === name && session.variables[i].boundary === session.varBoundary) {
-      // Update existing variable in same scope
-      session.variables[i].value = value;
-      session.variables[i].visible = visible;
+  // First, check if variable exists in current scope (from varBoundary onwards) and update it
+  // Search from end to find most recent instance
+  for (let i = session.variables.length - 1; i >= session.varBoundary; i--) {
+    if (session.variables[i].name === name) {
+      // Update existing variable in current scope, preserving refName and passby
+      const existingVar = session.variables[i];
+      existingVar.value = value;
+      existingVar.visible = visible;
+      // Note: preserve refName and passby from existing variable
       return;
     }
   }
   
-  // Variable doesn't exist in current scope, create new one (may shadow outer scope)
+  // Not in current scope - check if it exists in parent scopes (might be a parameter)
+  for (let i = session.varBoundary - 1; i >= 0; i--) {
+    if (session.variables[i].name === name) {
+      // Update existing variable from parent scope, preserving refName and passby
+      const existingVar = session.variables[i];
+      existingVar.value = value;
+      existingVar.visible = visible;
+      return;
+    }
+  }
+  
+  // Variable doesn't exist anywhere, create new one in current scope
   session.variables.push({
     name,
     value,
     visible,
-    boundary: session.varBoundary,
+    boundary: visible ? 1 : 0,  // Boundary is a counter: 1 for visible (can be promoted once), 0 for non-visible
     passby: 'value',
   });
 }
@@ -141,21 +156,30 @@ export function popToBoundary(session: DiracSession): void {
  * Clean private variables but keep visible ones
  * Maps to var_info_clean_to_boundary in MASK
  */
-export function cleanToBoundary(session: DiracSession): void {
+export function cleanToBoundary(session: DiracSession, keepVisible: boolean = false): void {
+  // Keep all variables before current boundary
   const kept: Variable[] = [];
   
   for (let i = 0; i < session.varBoundary; i++) {
     kept.push(session.variables[i]);
   }
   
+  // For variables at or beyond current boundary:
+  // - If keepVisible is true: keep them so they remain available to the caller scope
+  // - If keepVisible is false: discard them when the enclosing subroutine exits
   for (let i = session.varBoundary; i < session.variables.length; i++) {
-    if (session.variables[i].visible) {
-      kept.push(session.variables[i]);
+    const v = session.variables[i];
+    if (keepVisible) {
+      // Keep the variable in the caller scope; it will be removed when that
+      // caller's own cleanup runs unless that caller is also visible.
+      v.boundary = 0;
+      kept.push(v);
     }
+    // Non-visible or non-kept variables are discarded (not added to kept)
   }
   
   session.variables = kept;
-  session.varBoundary = kept.length;
+  // Don't change varBoundary - it stays at current level
 }
 
 // Subroutine management (maps to subroutine functions in MASK)
@@ -173,7 +197,7 @@ export function registerSubroutine(
   session.subroutines.push({
     name,
     element,
-    boundary: session.subBoundary,
+    boundary: visible ? 1 : 0,  // Boundary is a counter: 1 for visible (can be promoted once), 0 for non-visible
     visible,
     description,
     parameters,
@@ -246,9 +270,26 @@ export function cleanSubroutinesToBoundary(session: DiracSession, callerSubrouti
                      visibleValue === 'true';
   
   if (keepNested) {
-    // Keep all subroutines registered during this call (they persist)
-    // Just update the boundary to include them
-    session.subBoundary = session.subroutines.length;
+    // Promote nested subroutines up one boundary level
+    // Keep subroutines before current boundary
+    const kept: Subroutine[] = [];
+    
+    for (let i = 0; i < session.subBoundary; i++) {
+      kept.push(session.subroutines[i]);
+    }
+    
+    // For subroutines at or beyond current boundary: decrement boundary level
+    for (let i = session.subBoundary; i < session.subroutines.length; i++) {
+      const sub = session.subroutines[i];
+      if (sub.boundary > 0) {
+        // Promote subroutine up one boundary level
+        sub.boundary = sub.boundary - 1;
+      }
+      kept.push(sub);
+    }
+    
+    session.subroutines = kept;
+    // Don't change subBoundary - it stays at current level
   } else {
     // Pop subroutines back to boundary (default behavior)
     session.subroutines = session.subroutines.slice(0, session.subBoundary);

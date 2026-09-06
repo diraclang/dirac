@@ -4,7 +4,7 @@
  */
 
 import type { DiracSession, DiracElement, ParameterMetadata } from '../types/index.js';
-import { registerSubroutine } from '../runtime/session.js';
+import { registerSubroutine, substituteVariables, substituteAttribute } from '../runtime/session.js';
 
 export function executeSubroutine(session: DiracSession, element: DiracElement): void {
   // Skip registration if we're in extend mode (nested subroutines already registered)
@@ -12,11 +12,14 @@ export function executeSubroutine(session: DiracSession, element: DiracElement):
     return;
   }
   
-  const name = element.attributes.name;
+  const nameAttr = element.attributes.name;
   
-  if (!name) {
+  if (!nameAttr) {
     throw new Error('<subroutine> requires name attribute');
   }
+  
+  // Substitute variables in the name attribute to support dynamic naming
+  const name = substituteAttribute(session, nameAttr);
   
   // Extract metadata from attributes (no structural changes!)
   const description = element.attributes.description;
@@ -61,7 +64,7 @@ export function executeSubroutine(session: DiracSession, element: DiracElement):
   // This ensures nested subroutines don't get their children consumed during execution
   const subroutine: DiracElement = {
     tag: 'subroutine',
-    attributes: { ...element.attributes },
+    attributes: { ...element.attributes, name }, // Use substituted name
     children: deepCloneChildren(element.children),
   };
   

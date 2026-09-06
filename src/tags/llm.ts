@@ -18,9 +18,169 @@ import * as os from 'os';
 /**
  * Dialog message structure
  */
+type DialogContentBlock = {
+  type: 'text' | 'image_url' | 'image';
+  text?: string;
+  image_url?: { url: string };
+  source?: { type: 'base64'; media_type: string; data: string };
+};
+
+type DialogContent = string | DialogContentBlock[];
+
 interface DialogMessage {
   role: 'system' | 'user' | 'assistant';
-  content: string;
+  content: DialogContent;
+}
+
+function contentToText(content: DialogContent): string {
+  if (typeof content === 'string') {
+    return content;
+  }
+
+  return content
+    .filter(block => block.type === 'text' && typeof block.text === 'string')
+    .map(block => block.text ?? '')
+    .join('\n')
+    .trim();
+}
+
+function extractImageUrlsFromContent(content: DialogContent): string[] {
+  if (typeof content === 'string') {
+    return [];
+  }
+
+  const urls: string[] = [];
+  for (const block of content) {
+    if (block.type === 'image_url' && block.image_url?.url) {
+      urls.push(block.image_url.url);
+    }
+    if (block.type === 'image' && block.source?.type === 'base64') {
+      urls.push(`data:${block.source.media_type};base64,${block.source.data}`);
+    }
+  }
+  return urls;
+}
+
+function extractImagePathsFromElement(session: DiracSession, element: DiracElement): string[] {
+  const candidates: string[] = [];
+  const attributeNames = ['image', 'images', 'image-path', 'image-paths', 'img'];
+
+  for (const name of attributeNames) {
+    const rawValue = element.attributes[name];
+    if (!rawValue) continue;
+
+    // Resolve $var/${var} first so image attributes can be passed through subroutine params.
+    const substituted = String(substituteAttribute(session, rawValue)).trim();
+    if (!substituted) continue;
+
+    // Keep data URLs intact (they contain commas that should not be tokenized).
+    if (/^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(substituted)) {
+      candidates.push(substituted);
+      continue;
+    }
+
+    // Support quoted path tokens and multi-value attributes.
+    const tokens = substituted.match(/"[^"]*"|'[^']*'|[^,\s]+/g) || [];
+    for (const token of tokens) {
+      const normalized = token.trim().replace(/^['"]|['"]$/g, '');
+      if (normalized) {
+        candidates.push(normalized);
+      }
+    }
+  }
+
+  return [...new Set(candidates)];
+}
+
+function resolveImageDataUrl(imagePath: string): string {
+  // Expand a leading ~ (or ~/...) to the user's home directory before resolving.
+  let expandedPath = imagePath;
+  if (expandedPath === '~' || expandedPath.startsWith('~/') || expandedPath.startsWith('~\\')) {
+    expandedPath = path.join(os.homedir(), expandedPath.slice(1));
+  }
+
+  const resolvedPath = path.isAbsolute(expandedPath)
+    ? expandedPath
+    : path.resolve(process.cwd(), expandedPath);
+
+  if (!fs.existsSync(resolvedPath)) {
+    throw new Error(`Image file not found: ${imagePath}`);
+  }
+
+  const mimeTypeByExt: Record<string, string> = {
+    '.jpg': 'image/jpeg',
+    '.jpeg': 'image/jpeg',
+    '.png': 'image/png',
+    '.webp': 'image/webp',
+    '.gif': 'image/gif',
+    '.bmp': 'image/bmp',
+  };
+
+  const ext = path.extname(resolvedPath).toLowerCase();
+  const mimeType = mimeTypeByExt[ext] || 'image/png';
+  const buffer = fs.readFileSync(resolvedPath);
+  return `data:${mimeType};base64,${buffer.toString('base64')}`;
+}
+
+function buildMultimodalContent(prompt: string, imagePaths: string[], provider: 'openai' | 'anthropic' | 'custom' | 'ollama'): DialogContent {
+  if (imagePaths.length === 0) {
+    return prompt;
+  }
+
+  if (provider === 'anthropic') {
+    const blocks: DialogContentBlock[] = [{ type: 'text', text: prompt }];
+
+    for (const imagePath of imagePaths) {
+      const dataUrl = resolveImageDataUrl(imagePath);
+      const match = dataUrl.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+      if (!match) {
+        continue;
+      }
+
+      blocks.push({
+        type: 'image',
+        source: {
+          type: 'base64',
+          media_type: match[1],
+          data: match[2],
+        },
+      });
+    }
+
+    return blocks;
+  }
+
+  const blocks: DialogContentBlock[] = [{ type: 'text', text: prompt }];
+  for (const imagePath of imagePaths) {
+    blocks.push({
+      type: 'image_url',
+      image_url: { url: resolveImageDataUrl(imagePath) },
+    });
+  }
+
+  return blocks;
+}
+
+function normalizeMessagesForProvider(messages: DialogMessage[], provider: 'openai' | 'anthropic' | 'custom' | 'ollama') {
+  return messages.map((message) => {
+    if (typeof message.content === 'string') {
+      return { ...message, content: message.content };
+    }
+
+    if (provider === 'ollama' || provider === 'custom') {
+      return { ...message, content: contentToText(message.content) };
+    }
+
+    return { ...message, content: message.content };
+  });
+}
+
+function extractImageUrlsFromMessages(messages: DialogMessage[]): string[] {
+  const urls: string[] = [];
+  for (const message of messages) {
+    urls.push(...extractImageUrlsFromContent(message.content));
+  }
+  return [...new Set(urls)];
 }
 
 /**
@@ -268,23 +428,111 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
   // Helper function to call Anthropic API with proper system message handling
   const callAnthropic = async (client: any, model: string, maxTokens: number, temperature: number, messages: DialogMessage[]) => {
     const systemMessages = messages.filter(m => m.role === 'system');
-    const userAssistantMessages = messages.filter(m => m.role !== 'system');
-    const systemContent = systemMessages.map(m => m.content).join('\n\n');
-    
+    const userAssistantMessages = messages.filter(m => m.role !== 'system').map((message) => {
+      if (typeof message.content === 'string') {
+        return { ...message, content: message.content };
+      }
+
+      return {
+        ...message,
+        content: message.content.map((block) => {
+          if (block.type === 'text') {
+            return { type: 'text', text: block.text ?? '' };
+          }
+
+          if (block.type === 'image_url' && block.image_url?.url) {
+            const match = block.image_url.url.match(/^data:(image\/[a-zA-Z0-9.+-]+);base64,(.*)$/);
+            if (!match) {
+              return { type: 'text', text: '' };
+            }
+
+            return {
+              type: 'image',
+              source: {
+                type: 'base64',
+                media_type: match[1],
+                data: match[2],
+              },
+            };
+          }
+
+          if (block.type === 'image' && block.source) {
+            return {
+              type: 'image',
+              source: block.source,
+            };
+          }
+
+          return { type: 'text', text: '' };
+        }),
+      };
+    });
+
+    const systemContent = systemMessages
+      .map(message => contentToText(message.content))
+      .filter(Boolean)
+      .join('\n\n');
+
     const anthropicParams: any = {
       model,
       max_tokens: maxTokens,
       temperature,
       messages: userAssistantMessages,
     };
-    
+
     if (systemContent) {
       anthropicParams.system = systemContent;
     }
-    
+
     const response = await client.messages.create(anthropicParams);
     const content = response.content[0];
     return content.type === 'text' ? content.text : '';
+  };
+
+  const invokeLLMCall = async (
+    messages: DialogMessage[],
+    llmClient: any,
+    model: string,
+    maxTokens: number,
+    temperature: number,
+  ): Promise<string> => {
+    const imageUrls = extractImageUrlsFromMessages(messages);
+
+    if (isOpenAI) {
+      const response = await llmClient.chat.completions.create({
+        model,
+        max_tokens: maxTokens,
+        temperature,
+        messages: normalizeMessagesForProvider(messages, 'openai'),
+      });
+      return response.choices[0]?.message?.content || '';
+    }
+
+    if (isOllama) {
+      const ollamaPrompt = messages
+        .map((message) => `${message.role.charAt(0).toUpperCase() + message.role.slice(1)}: ${contentToText(message.content)}`)
+        .join('\n');
+
+      return await llmClient.complete(ollamaPrompt, {
+        model,
+        temperature,
+        max_tokens: maxTokens,
+        images: imageUrls.length > 0 ? imageUrls : undefined,
+      });
+    }
+
+    if (isCustom) {
+      const customPrompt = contentToText(messages[messages.length - 1]?.content || '');
+      const normalizedMessages = normalizeMessagesForProvider(messages, 'custom');
+      return await llmClient.complete(customPrompt, {
+        model,
+        temperature,
+        max_tokens: maxTokens,
+        messages: normalizedMessages,
+      });
+    }
+
+    return await callAnthropic(llmClient, model, maxTokens, temperature, messages);
   };
 
   // Check limits
@@ -329,6 +577,7 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
 
   const outputVar = element.attributes.output;
   const contextVar = element.attributes.context;
+  const imagePaths = extractImagePathsFromElement(session, element);
   const saveDialog = element.attributes['save-dialog'] === 'true'; // NEW: Enable persistent dialog history
   const executeMode = element.attributes.execute === 'true'; // NEW: seamless execution mode
   const temperature = parseFloat(element.attributes.temperature || '1.0');
@@ -616,7 +865,10 @@ CRITICAL: When defining parameters:
   }
 
   // Add user message to dialog history (for full audit log)
-  dialogHistory.push({ role: 'user', content: currentUserPrompt });
+  const userMessageContent = imagePaths.length > 0
+    ? buildMultimodalContent(currentUserPrompt, imagePaths, isOpenAI ? 'openai' : isCustom ? 'custom' : isOllama ? 'ollama' : 'anthropic')
+    : currentUserPrompt;
+  dialogHistory.push({ role: 'user', content: userMessageContent });
   
   // Prune dialog history for LLM call (keep full history for audit)
   const prunedDialogHistory = pruneDialogForLLM(dialogHistory, 20); // Keep last 20 messages
@@ -628,37 +880,7 @@ CRITICAL: When defining parameters:
   }
   
   try {
-    let result: string;
-    if (isOpenAI) {
-      // Call OpenAI API with pruned dialog history
-      const response = await llmClient.chat.completions.create({
-        model,
-        max_tokens: maxTokens,
-        temperature,
-        messages: prunedDialogHistory,
-      });
-      result = response.choices[0]?.message?.content || '';
-    } else if (isOllama) {
-      // Call OllamaProvider with dialog history as joined string
-      const ollamaPrompt = prunedDialogHistory.map((m: DialogMessage) => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
-      result = await llmClient.complete(ollamaPrompt, {
-        model,
-        temperature,
-        max_tokens: maxTokens,
-      });
-    } else if (isCustom) {
-      // Call CustomLLMProvider with dialog history
-      const customPrompt = prunedDialogHistory.map((m: DialogMessage) => `${m.role}: ${m.content}`).join('\n');
-      result = await llmClient.complete(customPrompt, {
-        model,
-        temperature,
-        max_tokens: maxTokens,
-        messages: prunedDialogHistory,
-      });
-    } else {
-      // Call Anthropic API - use helper function
-      result = await callAnthropic(llmClient, model, maxTokens, temperature, prunedDialogHistory);
-    }
+    let result = await invokeLLMCall(prunedDialogHistory, llmClient, model, maxTokens, temperature);
     
     if (session.debug) {
       console.error(`[LLM] Response length: ${result.length}`);
@@ -702,6 +924,7 @@ CRITICAL: When defining parameters:
       const maxIterations = parseInt(maxIterationsAttr, 10);
       
       const replaceTick = element.attributes['replace-tick'] === 'true';
+      const hasXmlTag = (text: string): boolean => /<\s*\/?\s*[a-zA-Z_][\w:-]*(?:\s[^<>]*?)?\/?\s*>/.test(text);
       
       if (session.debug) {
         console.error(`[LLM] Executing response as Dirac code:\n${result}\n`);
@@ -715,6 +938,7 @@ CRITICAL: When defining parameters:
 
       // Feedback loop: execute, capture output, send back to LLM, repeat
       let iteration = 0;
+      let stopFeedbackLoop = false;
       
       while (iteration < maxIterations && (iteration === 0 || feedbackMode)) {
         iteration++;
@@ -726,20 +950,21 @@ CRITICAL: When defining parameters:
         let correctionMessages: string[] = [];
         let hasTagCorrections = false; // Track if there were actual tag/attribute corrections (not just warnings)
         
-        // Only replace triple backtick code blocks if replace-tick="true" is set
+        // Treat fenced blocks as literal content and do not attempt implicit bash execution.
+        // The shared parser normalization handles this policy before parsing, so we only keep
+        // the LLM-layer handling for direct literal passthrough when replace-tick is enabled.
         let diracCode = result.trim();
+        let fencedLiteralXml = false;
         if (replaceTick && diracCode.startsWith('```')) {
-          // Check for bash, xml, html, dirac, or no language
-          const match = diracCode.match(/^```(\w+)?\n?/m);
-          if (match && match[1] === 'bash') {
-            // Find closing triple backticks
-            const endIdx = diracCode.indexOf('```', 3);
-            let bashContent = diracCode.slice(match[0].length, endIdx).trim();
-            diracCode = `<system>${bashContent}</system>`;
-          } else {
-            // Remove opening and closing backticks for xml/html/dirac/none
-            diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
-          }
+          const fencedBody = diracCode.replace(/^```(?:\w+)?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
+          diracCode = `<![CDATA[${fencedBody}]]>`;
+          fencedLiteralXml = true;
+        }
+
+        if (fencedLiteralXml) {
+          console.error(`[LLM] Iteration ${iteration}: fenced XML/Dirac/HTML block treated as literal text`);
+          emit(session, result);
+          break;
         }
         
         // Capture output before execution (for feedback and silent operation detection)
@@ -752,6 +977,13 @@ CRITICAL: When defining parameters:
             console.error(`[LLM] Feedback loop terminating - LLM indicated completion with <DONE /> (before parsing)\n`);
           }
           break; // Exit feedback loop immediately without parsing
+        }
+
+        // If response is plain text (no XML tags), emit once and stop feedback loop.
+        if (!hasXmlTag(trimmedCode)) {
+          console.error(`[LLM] Iteration ${iteration}: No XML tags detected in response, treating as final text output`);
+          emit(session, result);
+          break;
         }
         
         try {
@@ -837,32 +1069,7 @@ CRITICAL: When defining parameters:
               dialogHistory.push({ role: 'user', content: retryPrompt });
               
               // Retry LLM call
-              if (isOpenAI) {
-                const response = await llmClient.chat.completions.create({
-                  model,
-                  max_tokens: maxTokens,
-                  temperature,
-                  messages: dialogHistory,
-                });
-                result = response.choices[0]?.message?.content || '';
-              } else if (isOllama) {
-                const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
-                result = await llmClient.complete(ollamaPrompt, {
-                  model,
-                  temperature,
-                  max_tokens: maxTokens,
-                });
-              } else if (isCustom) {
-                const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
-                result = await llmClient.complete(customPrompt, {
-                  model,
-                  temperature,
-                  max_tokens: maxTokens,
-                  messages: dialogHistory,
-                });
-              } else {
-                result = await callAnthropic(llmClient, model, maxTokens, temperature, dialogHistory);
-              }
+              result = await invokeLLMCall(dialogHistory, llmClient, model, maxTokens, temperature);
               
               // Add new response to dialog history
               dialogHistory.push({ role: 'assistant', content: result });
@@ -885,21 +1092,36 @@ CRITICAL: When defining parameters:
                 console.error(`[LLM] Retry ${retryCount} response:\n${result}\n`);
               }
               
-              // Clean up and parse the new response
+              // Clean up and parse the new response.
+              // Fenced blocks are preserved as literal text instead of being parsed as executable Dirac.
               diracCode = result.trim();
+              fencedLiteralXml = false;
               if (replaceTick && diracCode.startsWith('```')) {
-                const match = diracCode.match(/^```(\w+)?\n?/m);
-                if (match && match[1] === 'bash') {
-                  const endIdx = diracCode.indexOf('```', 3);
-                  let bashContent = diracCode.slice(match[0].length, endIdx).trim();
-                  diracCode = `<system>${bashContent}</system>`;
-                } else {
-                  diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
-                }
+                const fencedBody = diracCode.replace(/^```(?:\w+)?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
+                diracCode = `<![CDATA[${fencedBody}]]>`;
+                fencedLiteralXml = true;
+              }
+
+              if (fencedLiteralXml) {
+                console.error(`[LLM] Iteration ${iteration}: retry fenced XML/Dirac/HTML block treated as literal text`);
+                emit(session, result);
+                stopFeedbackLoop = true;
+                break;
+              }
+
+              if (!hasXmlTag(diracCode.trim())) {
+                console.error(`[LLM] Iteration ${iteration}: Retry response has no XML tags, stopping feedback loop`);
+                emit(session, result);
+                stopFeedbackLoop = true;
+                break;
               }
               
               dynamicAST = parser.parse(diracCode);
               validation = await validateDiracCode(session, dynamicAST, { autocorrect, deepValidation: true });
+            }
+
+            if (stopFeedbackLoop) {
+              break;
             }
             
             if (!validation.valid) {
@@ -936,32 +1158,7 @@ CRITICAL: When defining parameters:
                 console.error('[LLM] Corrections made - waiting for LLM confirmation (not executing yet)');
                 
                 // Call LLM to get confirmation/corrected response
-                if (isOpenAI) {
-                  const response = await llmClient.chat.completions.create({
-                    model,
-                    max_tokens: maxTokens,
-                    temperature,
-                    messages: dialogHistory,
-                  });
-                  result = response.choices[0]?.message?.content || '';
-                } else if (isOllama) {
-                  const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
-                  result = await llmClient.complete(ollamaPrompt, {
-                    model,
-                    temperature,
-                    max_tokens: maxTokens,
-                  });
-                } else if (isCustom) {
-                  const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
-                  result = await llmClient.complete(customPrompt, {
-                    model,
-                    temperature,
-                    max_tokens: maxTokens,
-                    messages: dialogHistory,
-                  });
-                } else {
-                  result = await callAnthropic(llmClient, model, maxTokens, temperature, dialogHistory);
-                }
+                result = await invokeLLMCall(dialogHistory, llmClient, model, maxTokens, temperature);
                 
                 // Add response to dialog history
                 dialogHistory.push({ role: 'assistant', content: result });
@@ -1031,32 +1228,7 @@ CRITICAL: When defining parameters:
               }
               
               // Call LLM to get fixed code
-              if (isOpenAI) {
-                const response = await llmClient.chat.completions.create({
-                  model,
-                  max_tokens: maxTokens,
-                  temperature,
-                  messages: dialogHistory,
-                });
-                result = response.choices[0]?.message?.content || '';
-              } else if (isOllama) {
-                const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
-                result = await llmClient.complete(ollamaPrompt, {
-                  model,
-                  temperature,
-                  max_tokens: maxTokens,
-                });
-              } else if (isCustom) {
-                const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
-                result = await llmClient.complete(customPrompt, {
-                  model,
-                  temperature,
-                  max_tokens: maxTokens,
-                  messages: dialogHistory,
-                });
-              } else {
-                result = await callAnthropic(llmClient, model, maxTokens, temperature, dialogHistory);
-              }
+              result = await invokeLLMCall(dialogHistory, llmClient, model, maxTokens, temperature);
               
               // Add LLM's response to dialog
               dialogHistory.push({ role: 'assistant', content: result });
@@ -1132,8 +1304,8 @@ CRITICAL: When defining parameters:
               console.error(`[LLM] Execution output (${executionOutput.length} chars):\n${executionOutput}\n`);
             }
             
-            // Build feedback prompt (corrections already added to dialog earlier if any)
-            const feedbackPrompt = `The code executed successfully. Here is the output:\n\`\`\`\n${executionOutput}\n\`\`\`\n\nPlease review the output carefully. If the output is correct and complete, respond with ONLY the tag "<DONE />" and nothing else. If the output is incorrect or incomplete, generate corrected Dirac XML code.`;
+            // Build feedback prompt from execution output only.
+            const feedbackPrompt = `The code executed successfully. Here is the output:\n\`\`\`\n${executionOutput}\n\`\`\``;
             
             if (session.debug) {
               console.error(`[LLM] Feedback prompt:\n${feedbackPrompt}\n`);
@@ -1143,32 +1315,7 @@ CRITICAL: When defining parameters:
             dialogHistory.push({ role: 'user', content: feedbackPrompt });
             
             // Get LLM's assessment
-            if (isOpenAI) {
-              const response = await llmClient.chat.completions.create({
-                model,
-                max_tokens: maxTokens,
-                temperature,
-                messages: dialogHistory,
-              });
-              result = response.choices[0]?.message?.content || '';
-            } else if (isOllama) {
-              const ollamaPrompt = dialogHistory.map(m => `${m.role.charAt(0).toUpperCase() + m.role.slice(1)}: ${m.content}`).join('\n');
-              result = await llmClient.complete(ollamaPrompt, {
-                model,
-                temperature,
-                max_tokens: maxTokens,
-              });
-            } else if (isCustom) {
-              const customPrompt = dialogHistory.map(m => `${m.role}: ${m.content}`).join('\n');
-              result = await llmClient.complete(customPrompt, {
-                model,
-                temperature,
-                max_tokens: maxTokens,
-                messages: dialogHistory,
-              });
-            } else {
-              result = await callAnthropic(llmClient, model, maxTokens, temperature, dialogHistory);
-            }
+            result = await invokeLLMCall(dialogHistory, llmClient, model, maxTokens, temperature);
             
             // Add response to dialog history
             dialogHistory.push({ role: 'assistant', content: result });

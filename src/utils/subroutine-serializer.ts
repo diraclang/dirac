@@ -39,16 +39,18 @@ function serializeElement(el: any, lines: string[], indent: string): void {
       if (trimmedText === '') {
         return;
       }
-      
-      // Use trimmed text to avoid preserving unwanted whitespace
-      // Text node with content - output inline without newline
+
+      const literalText = el.literal
+        ? `<![CDATA[${trimmedText}]]>`
+        : trimmedText;
+
       let lastIdx = lines.length - 1;
       if (lastIdx >= 0 && !lines[lastIdx].endsWith('>')) {
         // Append to current line
-        lines[lastIdx] += trimmedText;
+        lines[lastIdx] += literalText;
       } else {
         // Start new line with text
-        lines.push(indent + trimmedText);
+        lines.push(indent + literalText);
       }
     }
     return;
@@ -103,10 +105,13 @@ function serializeElement(el: any, lines: string[], indent: string): void {
           if (trimmedText === '') {
             continue; // Skip whitespace-only nodes
           }
-          
+
+          // Preserve literal fenced blocks as CDATA instead of reinterpreting them as XML.
+          const textValue = child.literal ? `<![CDATA[${trimmedText}]]>` : trimmedText;
+
           // Append trimmed text inline
           lastIdx = lines.length - 1;
-          lines[lastIdx] += trimmedText;
+          lines[lastIdx] += textValue;
         }
       } else {
         // Element child - check if it's complex
@@ -173,7 +178,9 @@ function serializeElementToBraKet(el: any, lines: string[], indent: number): voi
       if (trimmedText === '') {
         return;
       }
-      lines.push(indentStr + trimmedText);
+
+      const literalText = el.literal ? `<![CDATA[${trimmedText}]]>` : trimmedText;
+      lines.push(indentStr + literalText);
     }
     return;
   }

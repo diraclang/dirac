@@ -36,17 +36,70 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
     throw new Error('<edit-subroutine> requires name attribute');
   }
   
-  // Find the subroutine in the session
-  let subroutine: any = undefined;
-  for (let i = session.subroutines.length - 1; i >= 0; i--) {
+  // Find ALL subroutines with the given name (not just the top one)
+  const matchingSubroutines: { sub: any, index: number }[] = [];
+  for (let i = 0; i < session.subroutines.length; i++) {
     if (session.subroutines[i].name === name) {
-      subroutine = session.subroutines[i];
-      break;
+      matchingSubroutines.push({ sub: session.subroutines[i], index: i });
     }
   }
   
-  if (!subroutine) {
+  if (matchingSubroutines.length === 0) {
     throw new Error(`Subroutine '${name}' not found in session`);
+  }
+  
+  // If multiple versions exist, let user choose which one to edit
+  let selectedIndex = 0;
+  let subroutine: any;
+  let subroutineArrayIndex: number;
+  
+  if (matchingSubroutines.length > 1) {
+    console.error(`\nMultiple versions of '${name}' found:`);
+    matchingSubroutines.forEach((item, idx) => {
+      const extendsAttr = item.sub.element?.attributes?.extends || 
+                          item.sub.element?.attributes?.extend;
+      const label = extendsAttr 
+        ? `extends="${extendsAttr}"` 
+        : '(base)';
+      console.error(`  [${idx + 1}] ${name} ${label}`);
+    });
+
+    const selectionAttr = element.attributes.selection;
+    let selection = selectionAttr ? parseInt(selectionAttr.trim(), 10) : NaN;
+
+    // If the caller did not preselect a version, prompt here as a fallback.
+    if (isNaN(selection)) {
+      const readline = await import('readline');
+      const rl = readline.createInterface({
+        input: process.stdin,
+        output: process.stdout
+      });
+
+      const answer = await new Promise<string>((resolve) => {
+        rl.question(`\nSelect which to edit [1-${matchingSubroutines.length}]: `, (ans) => {
+          rl.close();
+          resolve(ans);
+        });
+      });
+
+      selection = parseInt(answer.trim(), 10);
+    }
+
+    if (isNaN(selection) || selection < 1 || selection > matchingSubroutines.length) {
+      throw new Error(`Invalid selection: ${selectionAttr ?? ''}`);
+    }
+    
+    selectedIndex = selection - 1;
+    subroutine = matchingSubroutines[selectedIndex].sub;
+    subroutineArrayIndex = matchingSubroutines[selectedIndex].index;
+    
+    console.error(`Editing version ${selection}: ${name} ${
+      subroutine.element?.attributes?.extends ? 'extends="' + subroutine.element.attributes.extends + '"' : '(base)'
+    }\n`);
+  } else {
+    // Only one version - edit it directly
+    subroutine = matchingSubroutines[0].sub;
+    subroutineArrayIndex = matchingSubroutines[0].index;
   }
   
   // Try to load original source if available
@@ -56,14 +109,13 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
     // Read from original source file to preserve formatting
     try {
       const sourceContent = readFileSync(subroutine.sourcePath, 'utf-8');
-      
-      // Try to extract just this subroutine from the file
-      const match = sourceContent.match(
-        new RegExp(`<subroutine\\s+name="${name}"[\\s\\S]*?<\\/subroutine>`, 'i')
-      );
-      
-      if (match) {
-        xml = match[0];
+
+      // Extract selected version via AST traversal rather than regex.
+      // Regex breaks when nested <subroutine> tags are present.
+      const extracted = extractSubroutineFromSource(sourceContent, name, selectedIndex);
+
+      if (extracted) {
+        xml = extracted;
         if (session.debug) {
           console.error(`[edit-subroutine] Loaded from source: ${subroutine.sourcePath}`);
         }
@@ -140,12 +192,13 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
   
   // Preserve original sourcePath before re-importing
   const originalSourcePath = subroutine.sourcePath;
+  const originalBoundary = subroutine.boundary;
   
-  // Remove old subroutine entry to avoid duplicates
-  const oldIndex = session.subroutines.findIndex(s => s.name === name);
-  if (oldIndex !== -1) {
-    session.subroutines.splice(oldIndex, 1);
+  // Remove the specific subroutine we edited (at its exact position)
+  if (session.debug) {
+    console.error(`[edit-subroutine] Removing subroutine at index ${subroutineArrayIndex}`);
   }
+  session.subroutines.splice(subroutineArrayIndex, 1);
   
   // Parse and execute the edited subroutine to re-register it
   // If format was braket, convert back to XML first
@@ -161,11 +214,26 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
   const ast = parser.parse(xmlContent);
   await integrate(session, ast);
   
-  // Mark the subroutine as modified and restore original sourcePath
-  const editedSub = session.subroutines.find(s => s.name === name);
-  if (editedSub) {
-    editedSub.modified = true;
-    editedSub.sourcePath = originalSourcePath; // Restore original path for saving
+  // The newly registered subroutine is now at the end of the array
+  // Move it back to its original position
+  const lastIndex = session.subroutines.length - 1;
+  const lastSub = session.subroutines[lastIndex];
+  
+  if (lastSub && lastSub.name === name) {
+    // Remove from end
+    session.subroutines.splice(lastIndex, 1);
+    
+    // Insert at original position
+    session.subroutines.splice(subroutineArrayIndex, 0, lastSub);
+    
+    // Mark as modified and restore original metadata
+    lastSub.modified = true;
+    lastSub.sourcePath = originalSourcePath;
+    lastSub.boundary = originalBoundary;
+    
+    if (session.debug) {
+      console.error(`[edit-subroutine] Moved subroutine back to index ${subroutineArrayIndex}`);
+    }
   }
   
   emit(session, `Subroutine '${name}' updated in session (use save-subroutine to persist)\n`);
@@ -193,8 +261,12 @@ function serializeElementToBraKet(el: any, lines: string[], indent: number): voi
   // Handle text nodes
   if (!el.tag || el.tag === '') {
     if (el.text) {
-      // Don't add text nodes as separate lines - they'll be handled inline
-      // Just return and let parent handle them
+      const content = el.literal ? `<![CDATA[${String(el.text).trim()}]]>` : String(el.text).trim();
+      if (content) {
+        for (const textLine of content.split('\n')) {
+          lines.push(indentStr + textLine);
+        }
+      }
     }
     return;
   }
@@ -303,14 +375,15 @@ function serializeElement(el: any, lines: string[], indent: string): void {
   // Handle text nodes (tag is empty string)
   if (!el.tag || el.tag === '') {
     if (el.text) {
+      const textContent = el.literal ? `<![CDATA[${el.text.trim()}]]>` : el.text;
       // Text node - output inline without newline
       let lastIdx = lines.length - 1;
       if (lastIdx >= 0 && !lines[lastIdx].endsWith('>')) {
         // Append to current line
-        lines[lastIdx] += el.text;
+        lines[lastIdx] += textContent;
       } else {
         // Start new line with text
-        lines.push(indent + el.text);
+        lines.push(indent + textContent);
       }
     }
     return;
@@ -359,10 +432,11 @@ function serializeElement(el: any, lines: string[], indent: string): void {
       
       // Check if this is a text node
       if (!child.tag || child.tag === '') {
-        // Text node - keep inline
+        // Text node - keep inline, but preserve fenced literal blocks as CDATA.
         lastIdx = lines.length - 1;
         if (child.text) {
-          lines[lastIdx] += child.text;
+          const textValue = child.literal ? `<![CDATA[${child.text.trim()}]]>` : child.text;
+          lines[lastIdx] += textValue;
         }
       } else {
         // Element node
@@ -389,5 +463,42 @@ function serializeElement(el: any, lines: string[], indent: string): void {
     } else {
       lines.push(`${indent}</${el.tag}>`);
     }
+  }
+}
+
+function extractSubroutineFromSource(sourceContent: string, name: string, selectedIndex: number): string | undefined {
+  try {
+    const parser = new DiracParser();
+    const ast = parser.parse(sourceContent);
+    const matches: DiracElement[] = [];
+    collectNamedSubroutines(ast, name, matches);
+
+    if (matches.length === 0) {
+      return undefined;
+    }
+
+    const targetIndex = Math.min(selectedIndex, matches.length - 1);
+    const selected = matches[targetIndex];
+
+    return serializeSubroutineToXML({
+      name,
+      element: selected,
+    });
+  } catch {
+    return undefined;
+  }
+}
+
+function collectNamedSubroutines(node: DiracElement, name: string, out: DiracElement[]): void {
+  if (node.tag === 'subroutine' && node.attributes?.name === name) {
+    out.push(node);
+  }
+
+  if (!node.children) {
+    return;
+  }
+
+  for (const child of node.children) {
+    collectNamedSubroutines(child, name, out);
   }
 }
