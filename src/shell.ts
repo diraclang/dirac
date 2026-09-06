@@ -30,6 +30,7 @@ export class DiracShell {
   private cachedSubroutines: any[] = [];  // Cache for agent mode tab completion
   private braketParser: BraKetParser;
   private xmlParser: DiracParser;
+  private integrateFn: typeof integrate;
   private rl: readline.Interface;
   private inputBuffer: string[] = [];
   private baseIndent: number | null = null;
@@ -57,6 +58,7 @@ export class DiracShell {
     this.session = createSession(config);
     this.braketParser = new BraKetParser();
     this.xmlParser = new DiracParser();
+    this.integrateFn = integrate;
     
     this.rl = readline.createInterface({
       input: process.stdin,
@@ -471,6 +473,23 @@ export class DiracShell {
     return unsaved;
   }
 
+  private async saveAllUnsavedSubroutines(unsaved: string[]): Promise<void> {
+    console.log('\nSaving all unsaved subroutines...\n');
+    for (const name of unsaved) {
+      try {
+        const xml = `<save-subroutine name="${name}" format="xml" />`;
+        const ast = this.xmlParser.parse(xml);
+        await this.integrateFn(this.session, ast);
+        if (this.session.output.length > 0) {
+          console.log(this.session.output.join(''));
+          this.session.output = [];
+        }
+      } catch (error) {
+        console.error(`Error saving ${name}:`, error instanceof Error ? error.message : String(error));
+      }
+    }
+  }
+
   private async promptSaveUnsaved(unsaved: string[]): Promise<boolean> {
     console.log('\n⚠️  Warning: You have unsaved subroutines created in this session:');
     for (const name of unsaved) {
@@ -492,21 +511,7 @@ export class DiracShell {
         const choice = answer.trim().toLowerCase();
         
         if (choice === 'a') {
-          // Save all unsaved subroutines
-          console.log('\nSaving all unsaved subroutines...\n');
-          for (const name of unsaved) {
-            try {
-              const xml = `<save-subroutine name="${name}" format="braket" />`;
-              const ast = this.xmlParser.parse(xml);
-              await integrate(this.session, ast);
-              if (this.session.output.length > 0) {
-                console.log(this.session.output.join(''));
-                this.session.output = [];
-              }
-            } catch (error) {
-              console.error(`Error saving ${name}:`, error instanceof Error ? error.message : String(error));
-            }
-          }
+          await this.saveAllUnsavedSubroutines(unsaved);
           resolve(true);  // Proceed with exit
         } else if (choice === 'n') {
           resolve(true);  // Proceed with exit without saving
