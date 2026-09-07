@@ -401,3 +401,5 @@ Dirac XML (.di):
 - The `.bk` extension is recommended for PAUL scripts.
 
 PAUL is the human-centric dialect of Dirac—optimized for clarity, speed, and LLM interaction.
+
+<!-- dirac push probe: 2026-09-07T20:09:31Z -->
