@@ -4,8 +4,50 @@
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { setVariable } from '../runtime/session.js';
+import { setVariable, substituteAttribute } from '../runtime/session.js';
 import { execSync, spawn } from 'child_process';
+import { existsSync } from 'fs';
+import { dirname, join } from 'path';
+
+export function resolvePythonExecutable(startDir: string = process.cwd()): string {
+  const envOverride = process.env.PYTHON || process.env.DIRAC_PYTHON;
+  if (envOverride) {
+    return envOverride;
+  }
+
+  const candidates = [
+    join(startDir, '.venv', 'bin', 'python'),
+    join(startDir, 'venv', 'bin', 'python'),
+  ];
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate;
+    }
+  }
+
+  let currentDir = startDir;
+  while (true) {
+    const parentCandidates = [
+      join(currentDir, '.venv', 'bin', 'python'),
+      join(currentDir, 'venv', 'bin', 'python'),
+    ];
+
+    for (const candidate of parentCandidates) {
+      if (existsSync(candidate)) {
+        return candidate;
+      }
+    }
+
+    const parentDir = dirname(currentDir);
+    if (parentDir === currentDir) {
+      break;
+    }
+    currentDir = parentDir;
+  }
+
+  return 'python3';
+}
 
 function toEmbeddedJson(value: unknown): string {
   return JSON.stringify(value).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -67,7 +109,8 @@ function dedent(text: string): string {
 }
 
 export async function executePython(session: DiracSession, element: DiracElement): Promise<void> {
-  const resultVar = element.attributes.result;
+  const rawResultVar = element.attributes.result;
+  const resultVar = rawResultVar ? substituteAttribute(session, rawResultVar).replace(/^\$/, '') : undefined;
   const backgroundAttr = element.attributes.background;
   // Default to foreground execution so simple scripts/demos behave predictably
   // and their output/errors are visible immediately. Use background="true"
@@ -96,7 +139,8 @@ export async function executePython(session: DiracSession, element: DiracElement
       session.debug ? 'inherit' : 'ignore', // stderr - show if debugging
     ];
     
-    const child = spawn('python3', [], {
+    const pythonExecutable = resolvePythonExecutable();
+    const child = spawn(pythonExecutable, [], {
       detached: true,
       stdio,
       shell: false,
@@ -237,7 +281,8 @@ except NameError:
     }
 
     // Execute Python subprocess
-    const output = execSync('python3', {
+    const pythonExecutable = resolvePythonExecutable();
+    const output = execSync(pythonExecutable, {
       input: pythonScript,
       encoding: 'utf-8',
       maxBuffer: 10 * 1024 * 1024, // 10MB buffer

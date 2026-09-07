@@ -51,3 +51,22 @@ __dirac_updates = {
   const output = await execute(dirac);
   assert.equal(output.trim(), 'ok|Use only visible subroutines|subroutine-first');
 });
+
+test('python tag resolves subroutine result parameter values', async () => {
+  const dirac = `
+<dirac>
+  <subroutine name="capture" param-file="string" param-result="string">
+    <python result="$result">
+file_path = file
+saved_path = file_path
+    </python>
+  </subroutine>
+
+  <capture file="/tmp/test.png" result="saved_path" />
+  <output><variable name="saved_path" /></output>
+</dirac>
+`;
+
+  const output = await execute(dirac);
+  assert.equal(output.trim(), '/tmp/test.png');
+});
