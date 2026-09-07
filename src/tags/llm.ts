@@ -61,47 +61,29 @@ function extractImageUrlsFromContent(content: DialogContent): string[] {
   return urls;
 }
 
-function extractImagePathsFromElement(session: DiracSession, element: DiracElement): string[] {
+function extractImagePathsFromElement(element: DiracElement): string[] {
   const candidates: string[] = [];
   const attributeNames = ['image', 'images', 'image-path', 'image-paths', 'img'];
 
   for (const name of attributeNames) {
-    const rawValue = element.attributes[name];
-    if (!rawValue) continue;
+    const value = element.attributes[name];
+    if (!value) continue;
 
-    // Resolve $var/${var} first so image attributes can be passed through subroutine params.
-    const substituted = String(substituteAttribute(session, rawValue)).trim();
-    if (!substituted) continue;
+    const items = String(value)
+      .split(/[,\s]+/)
+      .map(part => part.trim())
+      .filter(Boolean);
 
-    // Keep data URLs intact (they contain commas that should not be tokenized).
-    if (/^data:image\/[a-zA-Z0-9.+-]+;base64,/i.test(substituted)) {
-      candidates.push(substituted);
-      continue;
-    }
-
-    // Support quoted path tokens and multi-value attributes.
-    const tokens = substituted.match(/"[^"]*"|'[^']*'|[^,\s]+/g) || [];
-    for (const token of tokens) {
-      const normalized = token.trim().replace(/^['"]|['"]$/g, '');
-      if (normalized) {
-        candidates.push(normalized);
-      }
-    }
+    candidates.push(...items);
   }
 
   return [...new Set(candidates)];
 }
 
 function resolveImageDataUrl(imagePath: string): string {
-  // Expand a leading ~ (or ~/...) to the user's home directory before resolving.
-  let expandedPath = imagePath;
-  if (expandedPath === '~' || expandedPath.startsWith('~/') || expandedPath.startsWith('~\\')) {
-    expandedPath = path.join(os.homedir(), expandedPath.slice(1));
-  }
-
-  const resolvedPath = path.isAbsolute(expandedPath)
-    ? expandedPath
-    : path.resolve(process.cwd(), expandedPath);
+  const resolvedPath = path.isAbsolute(imagePath)
+    ? imagePath
+    : path.resolve(process.cwd(), imagePath);
 
   if (!fs.existsSync(resolvedPath)) {
     throw new Error(`Image file not found: ${imagePath}`);
@@ -577,7 +559,7 @@ export async function executeLLM(session: DiracSession, element: DiracElement): 
 
   const outputVar = element.attributes.output;
   const contextVar = element.attributes.context;
-  const imagePaths = extractImagePathsFromElement(session, element);
+  const imagePaths = extractImagePathsFromElement(element).map(value => substituteAttribute(session, value));
   const saveDialog = element.attributes['save-dialog'] === 'true'; // NEW: Enable persistent dialog history
   const executeMode = element.attributes.execute === 'true'; // NEW: seamless execution mode
   const temperature = parseFloat(element.attributes.temperature || '1.0');
@@ -950,21 +932,20 @@ CRITICAL: When defining parameters:
         let correctionMessages: string[] = [];
         let hasTagCorrections = false; // Track if there were actual tag/attribute corrections (not just warnings)
         
-        // Treat fenced blocks as literal content and do not attempt implicit bash execution.
-        // The shared parser normalization handles this policy before parsing, so we only keep
-        // the LLM-layer handling for direct literal passthrough when replace-tick is enabled.
+        // Only replace triple backtick code blocks if replace-tick="true" is set
         let diracCode = result.trim();
-        let fencedLiteralXml = false;
         if (replaceTick && diracCode.startsWith('```')) {
-          const fencedBody = diracCode.replace(/^```(?:\w+)?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
-          diracCode = `<![CDATA[${fencedBody}]]>`;
-          fencedLiteralXml = true;
-        }
-
-        if (fencedLiteralXml) {
-          console.error(`[LLM] Iteration ${iteration}: fenced XML/Dirac/HTML block treated as literal text`);
-          emit(session, result);
-          break;
+          // Check for bash, xml, html, dirac, or no language
+          const match = diracCode.match(/^```(\w+)?\n?/m);
+          if (match && match[1] === 'bash') {
+            // Find closing triple backticks
+            const endIdx = diracCode.indexOf('```', 3);
+            let bashContent = diracCode.slice(match[0].length, endIdx).trim();
+            diracCode = `<system>${bashContent}</system>`;
+          } else {
+            // Remove opening and closing backticks for xml/html/dirac/none
+            diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
+          }
         }
         
         // Capture output before execution (for feedback and silent operation detection)
@@ -1092,21 +1073,17 @@ CRITICAL: When defining parameters:
                 console.error(`[LLM] Retry ${retryCount} response:\n${result}\n`);
               }
               
-              // Clean up and parse the new response.
-              // Fenced blocks are preserved as literal text instead of being parsed as executable Dirac.
+              // Clean up and parse the new response
               diracCode = result.trim();
-              fencedLiteralXml = false;
               if (replaceTick && diracCode.startsWith('```')) {
-                const fencedBody = diracCode.replace(/^```(?:\w+)?\s*\n?/m, '').replace(/\n?```\s*$/m, '').trim();
-                diracCode = `<![CDATA[${fencedBody}]]>`;
-                fencedLiteralXml = true;
-              }
-
-              if (fencedLiteralXml) {
-                console.error(`[LLM] Iteration ${iteration}: retry fenced XML/Dirac/HTML block treated as literal text`);
-                emit(session, result);
-                stopFeedbackLoop = true;
-                break;
+                const match = diracCode.match(/^```(\w+)?\n?/m);
+                if (match && match[1] === 'bash') {
+                  const endIdx = diracCode.indexOf('```', 3);
+                  let bashContent = diracCode.slice(match[0].length, endIdx).trim();
+                  diracCode = `<system>${bashContent}</system>`;
+                } else {
+                  diracCode = diracCode.replace(/^```(?:xml|html|dirac)?\n?/m, '').replace(/\n?```$/m, '').trim();
+                }
               }
 
               if (!hasXmlTag(diracCode.trim())) {
