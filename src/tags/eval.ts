@@ -10,7 +10,9 @@ import { setVariable, getVariable, substituteVariables } from '../runtime/sessio
 const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
 
 export async function executeEval(session: DiracSession, element: DiracElement): Promise<void> {
-  const name = element.attributes.name;
+  // `result` is the preferred attribute (consistent with <python result="...">
+  // and <call result="...">); `name` is kept as a backward-compatible alias.
+  const name = element.attributes.result || element.attributes.name;
   const exprAttr = element.attributes.expr;
   
   // Get expression as-is (do not replace ${var})
@@ -31,7 +33,26 @@ export async function executeEval(session: DiracSession, element: DiracElement):
     // Build context object with all variables
     const context: Record<string, any> = {};
     for (const v of session.variables) {
-      context[v.name] = v.value;
+      let value = v.value;
+      
+      // Auto-parse JSON strings to objects/arrays
+      if (typeof value === 'string') {
+        const trimmed = value.trim();
+        if ((trimmed.startsWith('{') && trimmed.endsWith('}')) ||
+            (trimmed.startsWith('[') && trimmed.endsWith(']'))) {
+          try {
+            value = JSON.parse(value);
+          } catch (e) {
+            // Not valid JSON, keep as string
+          }
+        }
+      }
+      
+      context[v.name] = value;
+    }
+    
+    if (session.debug) {
+      console.error('[EVAL] Context variables:', Object.keys(context).filter(k => !['fs', 'path', '__dirname', 'getParams', 'getVariable', 'setVariable', 'session'].includes(k)));
     }
     
     // Add Node.js modules to context
@@ -58,8 +79,25 @@ export async function executeEval(session: DiracSession, element: DiracElement):
     
     let result: any;
     // Execute as async function to support top-level await
-    const func = new AsyncFunction(...Object.keys(context), expr);
-    result = await func(...Object.values(context));
+    // Filter variables to only include valid JavaScript identifiers as parameters
+    const validIdentifierPattern = /^[a-zA-Z_$][a-zA-Z0-9_$]*$/;
+    const validParams: Record<string, any> = {};
+    const allVars: Record<string, any> = {};
+    
+    for (const [key, value] of Object.entries(context)) {
+      allVars[key] = value;
+      // Only include as direct parameter if it's a valid JS identifier and not a special variable
+      if (validIdentifierPattern.test(key) && 
+          !['fs', 'path', '__dirname', 'getParams', 'getVariable', 'setVariable', 'session', 'vars'].includes(key)) {
+        validParams[key] = value;
+      }
+    }
+    
+    // Add 'vars' object containing ALL variables (including invalid identifier names like "an-apple")
+    validParams.vars = allVars;
+    
+    const func = new AsyncFunction(...Object.keys(validParams), expr);
+    result = await func(...Object.values(validParams));
     
     if (session.debug) {
       console.error(`[EVAL] Result: ${JSON.stringify(result)}`);
@@ -69,6 +107,32 @@ export async function executeEval(session: DiracSession, element: DiracElement):
     if (name) {
       setVariable(session, name, result, false);
     }
+    
+    // Write back modified objects to session variables
+    // This allows mutations like self.x = 10 to persist
+    // Check both direct context and vars object for modifications
+    const allContextVars = { ...context, ...allVars };
+    for (const [varName, varValue] of Object.entries(allContextVars)) {
+      // Skip special context variables
+      if (['fs', 'path', '__dirname', 'getParams', 'getVariable', 'setVariable', 'session', 'vars'].includes(varName)) {
+        continue;
+      }
+      
+      // Check if the value was modified (objects are mutable)
+      const sessionVar = session.variables.find(v => v.name === varName);
+      if (sessionVar && typeof varValue === 'object' && varValue !== null) {
+        sessionVar.value = varValue;
+        
+        // If this was passed from another variable (Object-type parameter), write back to source
+        if (sessionVar.refName) {
+          const sourceVar = session.variables.find(v => v.name === sessionVar.refName);
+          if (sourceVar) {
+            sourceVar.value = varValue;
+          }
+        }
+      }
+    }
+
     
   } catch (error) {
     throw new Error(`Eval error: ${error instanceof Error ? error.message : String(error)}`);

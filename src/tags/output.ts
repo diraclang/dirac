@@ -25,7 +25,7 @@ export async function executeOutput(session: DiracSession, element: DiracElement
       content = popAndCaptureOutput(session);
       session.outputBoundary = oldBoundary;
     } else if (element.text) {
-      content = substituteVariables(session, element.text);
+      content = substituteAttribute(session, element.text);
     }
     
     // Ensure directory exists
@@ -58,7 +58,7 @@ export async function executeOutput(session: DiracSession, element: DiracElement
   }
   
   if (element.text) {
-    const content = substituteVariables(session, element.text);
+    const content = substituteAttribute(session, element.text);
     emit(session, content);
     return;
   }

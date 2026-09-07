@@ -4,7 +4,7 @@
  */
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { getCurrentParameters, emit, setVariable } from '../runtime/session.js';
+import { getCurrentParameters, emit, setVariable, setOutputBoundary, popAndCaptureOutput } from '../runtime/session.js';
 import { integrate } from '../runtime/interpreter.js';
 
 export async function executeParameters(session: DiracSession, element: DiracElement): Promise<string | void> {
@@ -32,6 +32,8 @@ export async function executeParameters(session: DiracSession, element: DiracEle
     if (session.debug) {
       console.error(`[PARAMETERS] Selecting all children (${caller.children.length} elements)`);
     }
+    // Mark that children were consumed
+    session.childrenConsumed = true;
     // Save current output buffer
     const oldBoundary = setOutputBoundary(session);
     for (const child of caller.children) {

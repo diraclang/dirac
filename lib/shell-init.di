@@ -8,6 +8,8 @@
 |import src="./native-tags.di" >
 
 |import src="./ai.di" >
+|import src="~/.dirac/lib/user/llama3.di" >
+|import src="~/.dirac/lib/user/sys-router.di" >
 
 # Define some useful helper subroutines
 #<hello |

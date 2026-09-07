@@ -3,7 +3,7 @@
  */
 
 import type { DiracElement, DiracSession } from '../types/index.js';
-import { substituteVariables, emit, getSubroutine } from './session.js';
+import { substituteVariables, substituteAttribute, emit, getSubroutine } from './session.js';
 import { executeDefvar } from '../tags/defvar.js';
 import { executeVariable } from '../tags/variable.js';
 import { executeAssign } from '../tags/assign.js';
@@ -15,6 +15,7 @@ import { executeIf } from '../tags/if.js';
 import { executeLLM } from '../tags/llm.js';
 import { executeEval } from '../tags/eval.js';
 import { executePython } from '../tags/python.js';
+import { executeBrowser } from '../tags/browser.js';
 import { executeExecute } from '../tags/execute.js';
 import { executeImport } from '../tags/import.js';
 import { executeParameters } from '../tags/parameters.js';
@@ -35,6 +36,7 @@ import { executeSaveSubroutine } from '../tags/save-subroutine.js';
 import { executeEditSubroutine } from '../tags/edit-subroutine.js';
 import { executeForeach } from '../tags/foreach.js';
 import { executeBreak } from '../tags/break.js';
+import { executeReturn } from '../tags/return.js';
 import { executeAttr } from '../tags/attr.js';
 import { executeEnvironment } from '../tags/environment.js';
 import { executeInput } from '../tags/input.js';
@@ -54,7 +56,7 @@ export async function integrate(session: DiracSession, element: DiracElement): P
   try {
     // Handle text nodes
     if (element.text && !element.tag) {
-      const substituted = substituteVariables(session, element.text);
+      const substituted = substituteAttribute(session, element.text);
       emit(session, substituted);
       return;
     }
@@ -97,6 +99,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
       case 'break':
         await executeBreak(session, element);
         break;
+
+      case 'return':
+        await executeReturn(session, element);
+        break;
         
       case 'if':
         await executeIf(session, element);
@@ -112,6 +118,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'python':
         await executePython(session, element);
+        break;
+        
+      case 'browser':
+        await executeBrowser(session, element);
         break;
         
       case 'execute':
@@ -245,6 +255,9 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         if (subroutine) {
           // Treat unknown tag as subroutine call
           await executeCall(session, element);
+        } else if (session.literalHTML) {
+          // In HTML generation mode - output unknown tags as HTML
+          await renderAsHTML(session, element);
         } else {
           // Really unknown - just process children
           for (const child of element.children) {
@@ -262,5 +275,46 @@ export async function integrateChildren(session: DiracSession, element: DiracEle
   for (const child of element.children) {
     await integrate(session, child);
     if (session.isReturn || session.isBreak || session.isThrown) break;
+  }
+}
+
+/**
+ * Render an element as HTML literal output
+ * Used when session.literalHTML is true (e.g., in browser capture mode)
+ */
+async function renderAsHTML(session: DiracSession, element: DiracElement): Promise<void> {
+  const tag = element.tag;
+  
+  // Build opening tag with attributes
+  let html = `<${tag}`;
+  if (element.attributes && Object.keys(element.attributes).length > 0) {
+    for (const [key, value] of Object.entries(element.attributes)) {
+      // Escape attribute values
+      const escapedValue = String(value)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+      html += ` ${key}="${escapedValue}"`;
+    }
+  }
+  html += '>';
+  
+  emit(session, html);
+  
+  // Process children (text content is included as text nodes in children)
+  if (element.children && element.children.length > 0) {
+    for (const child of element.children) {
+      await integrate(session, child);
+      if (session.isReturn || session.isBreak || session.isThrown) break;
+    }
+  }
+  
+  // Closing tag (handle self-closing tags)
+  const selfClosing = ['area', 'base', 'br', 'col', 'embed', 'hr', 'img', 'input', 
+                       'link', 'meta', 'param', 'source', 'track', 'wbr'];
+  if (!selfClosing.includes(tag.toLowerCase())) {
+    emit(session, `</${tag}>`);
   }
 }

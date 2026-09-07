@@ -235,18 +235,19 @@ export class BraKetParser {
   /**
    * Convert bra-ket attribute syntax to XML for subroutine definitions
    * Automatically converts parameter attributes to param-* format
-   * Reserved attributes (description, extends, visible) are kept as-is
+   * Reserved attributes (description, extends, visible, lang) are kept as-is
    * 
    * Examples:
    *   name=String          → param-name="String"
    *   x=number y=string    → param-x="number" param-y="string"
    *   description=Adds     → description="Adds"  (reserved, no prefix)
+   *   lang=js              → lang="js"  (reserved, no prefix)
    */
   private convertBraAttributes(attrs: string): string {
     if (!attrs) return '';
 
     // Reserved attributes that don't get param- prefix
-    const RESERVED = new Set(['description', 'extends', 'visible']);
+    const RESERVED = new Set(['description', 'extends', 'visible', 'lang']);
 
     // Split by spaces but respect quoted strings
     const parts: string[] = [];

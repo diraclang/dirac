@@ -5,21 +5,24 @@
 
 
 import type { DiracSession, DiracElement } from '../types/index.js';
-import { setVariable, substituteVariables, setOutputBoundary, popAndCaptureOutput } from '../runtime/session.js';
+import { setVariable, substituteVariables,substituteAttribute, setOutputBoundary, popAndCaptureOutput } from '../runtime/session.js';
 import { integrate } from '../runtime/interpreter.js';
 import { executeParameters } from './parameters.js';
 
 export async function executeDefvar(session: DiracSession, element: DiracElement): Promise<void> {
-  const name = element.attributes.name;
+  const nameAttr = element.attributes.name;
   const valueAttr = element.attributes.value;
   const visibleAttr = element.attributes.visible || 'false';
   const literal = 'literal' in element.attributes;
   const trimAttr = element.attributes.trim;
   const trim = trimAttr !== 'false'; // Trim by default unless explicitly set to false
 
-  if (!name) {
+  if (!nameAttr) {
     throw new Error('<defvar> requires name attribute');
   }
+
+  // Substitute variables in the name attribute to support dynamic naming
+  const name = substituteAttribute(session, nameAttr);
 
   // Determine visibility
   const visible = visibleAttr === 'true' || visibleAttr === 'variable' || visibleAttr === 'both';
