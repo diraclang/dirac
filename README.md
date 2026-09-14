@@ -297,7 +297,23 @@ Hello, Alice!
 ...
 ```
 
-**Setup**: dish requires `config.yml` with your LLM provider credentials:
+**Setup**: dish requires `config.yml` with your LLM provider settings.
+
+Local-first setup (no subscription):
+
+```bash
+brew install ollama
+brew services start ollama
+ollama pull qwen2.5:3b
+
+mkdir -p ~/.dirac
+cat > ~/.dirac/config.yml << EOF
+llmProvider: ollama
+llmModel: qwen2.5:3b
+EOF
+```
+
+Provider config examples:
 
 ```yaml
 # Dirac configuration

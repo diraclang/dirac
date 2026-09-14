@@ -10,6 +10,46 @@ npm install -g dirac-lang
 
 The `dish` command (Dirac Shell) works out of the box with minimal configuration!
 
+### Option 0: Local AI (No Subscription, Recommended)
+
+Use Ollama with a small Qwen2.5 model so users can run AI mode immediately without OpenAI/Anthropic keys.
+
+```bash
+# Install Ollama (macOS)
+brew install ollama
+
+# Start Ollama in the background (or run `ollama serve` in another terminal)
+brew services start ollama
+
+# Pull a small Qwen2.5 model (fast to download/run)
+ollama pull qwen2.5:3b
+
+# Optional but recommended for LLM validation/autocorrect features
+ollama pull embeddinggemma
+```
+
+Create `~/.dirac/config.yml`:
+
+```bash
+mkdir -p ~/.dirac
+cat > ~/.dirac/config.yml << EOF
+llmProvider: ollama
+llmModel: qwen2.5:3b
+EOF
+```
+
+Run dish:
+
+```bash
+dish
+```
+
+Quick check inside dish:
+
+```
+> ? explain what this shell can do in one paragraph
+```
+
 ### Option 1: Environment Variables (Quickest)
 
 Simply set an API key environment variable:
@@ -102,6 +142,7 @@ Create `shell-init.di` in your project directory and reference it in `./config.y
 
 - **anthropic** - Anthropic Claude models
 - **openai** - OpenAI GPT models
+- **ollama** - Local models via Ollama (no API key required)
 - **custom** - Custom LLM server
 
 ### Environment Variables
@@ -194,6 +235,22 @@ Make sure you've set an API key:
 export ANTHROPIC_API_KEY="your-key"
 # or
 export OPENAI_API_KEY="your-key"
+```
+
+Or use local Ollama (no key):
+
+```bash
+brew install ollama
+brew services start ollama
+ollama pull qwen2.5:3b
+
+mkdir -p ~/.dirac
+cat > ~/.dirac/config.yml << EOF
+llmProvider: ollama
+llmModel: qwen2.5:3b
+EOF
+
+dish
 ```
 
 ### "Init script not found"

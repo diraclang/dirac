@@ -2032,7 +2032,10 @@ async function main() {
       }
     }
     
-    // Try global init script
+  }
+
+  // Try global init script if not explicitly configured
+  if (!config.initScript) {
     const globalInitScript = path.join(process.env.HOME || '~', '.dirac', 'shell-init.di');
     if (fs.existsSync(globalInitScript)) {
       config.initScript = globalInitScript;
