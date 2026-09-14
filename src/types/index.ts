@@ -8,6 +8,7 @@ export interface DiracElement {
   attributes: Record<string, string>;
   children: DiracElement[];
   text?: string;
+  literal?: boolean;
 }
 
 /**
@@ -108,6 +109,14 @@ export interface DiracSession {
   isReturn: boolean;
   isBreak: boolean;
   isThrown: boolean;
+
+  // Value set by <return>, read back by the call site via the `result`
+  // attribute on <call>/direct-tag calls. Only meaningful while isReturn
+  // is true for the subroutine that produced it.
+  returnValue?: any;
+  
+  // Track if children were consumed by <parameters select="*"/>
+  childrenConsumed: boolean;
   
   // Extend mechanism
   skipSubroutineRegistration: boolean;
@@ -115,6 +124,9 @@ export interface DiracSession {
   
   // Debugging
   debug: boolean;
+  
+  // HTML generation mode (for browser tag capture mode)
+  literalHTML?: boolean;
   
   // Import tracking
   currentFile?: string;
@@ -136,4 +148,5 @@ export interface DiracConfig {
   customLLMUrl?: string;  // Custom LLM server URL
   initScript?: string;  // Shell init script path (like .bashrc)
   libraryPaths?: string[];  // Additional library search paths
+  questionMarkTarget?: string;  // shorthand '?' target tag/subroutine, e.g. 'ai' or 'mySubroutine'
 }

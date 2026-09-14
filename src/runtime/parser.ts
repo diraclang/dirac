@@ -27,6 +27,10 @@ export class DiracParser {
     if (source.startsWith('#!')) {
       source = source.replace(/^#!.*\n/, '');
     }
+
+    // Preserve fenced blocks as literal text so they are never interpreted as executable Dirac.
+    // This keeps markdown code fences inert across runtime execution and persistence.
+    source = this.normalizeFencedLiteralBlocks(source);
     
     // Always wrap in DIRAC-ROOT to ensure valid XML with single root
     // This allows files with comments, multiple elements, or no root
@@ -48,6 +52,14 @@ export class DiracParser {
     throw new Error('No root element found');
   }
   
+  private normalizeFencedLiteralBlocks(source: string): string {
+    return source.replace(/(^|\n)([ \t]*)```(?:[A-Za-z0-9_-]+)?\s*\n([\s\S]*?)\n[ \t]*```/g, (_match, newline: string, indent: string, body: string) => {
+      const trimmed = body.trim();
+      const literal = trimmed ? `<![CDATA[${trimmed}]]>` : '<![CDATA[]]>';
+      return `${newline}${indent}${literal}`;
+    });
+  }
+
   private convertOrderedToElement(obj: any): DiracElement {
     // obj is like { "tagname": [...children], ":@": {...attributes} }
     const tagName = Object.keys(obj).find(k => k !== ':@' && k !== '#comment');
@@ -77,17 +89,43 @@ export class DiracParser {
       for (const child of children) {
         if (child['#text']) {
           // Text node - add as child AND to element.text for backward compat
+          const textContent = String(child['#text']);
           element.children.push({
             tag: '',
-            text: child['#text'],
+            text: textContent,
             attributes: {},
             children: []
           });
           // Also set element.text if not set (for simple text-only elements)
           if (!element.text) {
-            element.text = child['#text'];
+            element.text = textContent;
           } else {
-            element.text += child['#text'];
+            element.text += textContent;
+          }
+        } else if (child['#cdata']) {
+          // CDATA node - extract text from the CDATA structure
+          // CDATA is an array like [{ '#text': '...' }]
+          let cdataContent = '';
+          if (Array.isArray(child['#cdata'])) {
+            for (const cdataChild of child['#cdata']) {
+              if (cdataChild['#text']) {
+                cdataContent += String(cdataChild['#text']);
+              }
+            }
+          }
+          const literalNode = {
+            tag: '',
+            text: cdataContent,
+            literal: true,
+            attributes: {},
+            children: []
+          };
+          element.children.push(literalNode as any);
+          // Also set element.text if not set
+          if (!element.text) {
+            element.text = cdataContent;
+          } else {
+            element.text += cdataContent;
           }
         } else if (child['#comment']) {
           // Skip comments

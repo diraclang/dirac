@@ -13,7 +13,6 @@ import {
   setBoundary, 
   popToBoundary,
   cleanToBoundary,
-  setSubroutineBoundary,
   cleanSubroutinesToBoundary,
   pushParameters,
   popParameters,
@@ -21,12 +20,12 @@ import {
   setVariable,
   getVariable,
 } from '../runtime/session.js';
-import { integrateChildren } from '../runtime/interpreter.js';
+import { integrateChildren, integrate } from '../runtime/interpreter.js';
 
 /**
  * Convert a string value to the specified type
  */
-function convertType(value: string, type: string): any {
+function convertType(value: string, type: string, session?: DiracSession): any {
   if (value === '') {
     return value; // Keep empty strings as-is
   }
@@ -48,6 +47,23 @@ function convertType(value: string, type: string): any {
       } catch (e) {
         throw new Error(`Cannot parse '${value}' as JSON`);
       }
+    case 'Object':
+      // For Object type, look up the variable by name
+      if (session && !value.startsWith('{')) {
+        const varValue = getVariable(session, value);
+        if (varValue !== undefined) {
+          return varValue;
+        }
+      }
+      // If it looks like JSON, parse it
+      if (value.startsWith('{') || value.startsWith('[')) {
+        try {
+          return JSON.parse(value);
+        } catch (e) {
+          // Fall through to return as-is
+        }
+      }
+      return value;
     case 'string':
     default:
       return value;
@@ -69,6 +85,10 @@ export async function executeCall(session: DiracSession, element: DiracElement):
     name = element.tag;
   }
   
+  if (session.debug) {
+    console.error(`[CALL] Calling subroutine: ${name}`);
+  }
+  
   if (!name) {
     throw new Error('<call> requires name or subroutine attribute');
   }
@@ -78,18 +98,33 @@ export async function executeCall(session: DiracSession, element: DiracElement):
     throw new Error(`Subroutine '${name}' not found`);
   }
   
+  if (session.debug) {
+    console.error(`[CALL] Found subroutine with attributes:`, Object.keys(subroutine.attributes));
+  }
+  
   // Handle extension (parent subroutine) using recursive descent
   const extendAttr = subroutine.attributes.extend;
   const extendsAttr = subroutine.attributes.extends;
   
+  let returnedValue: any;
   if (extendAttr !== undefined || extendsAttr !== undefined) {
     // This subroutine extends another - use recursive descent to build stack
+    const cleanupBoundary = session.subroutines.length;
     const baseSubroutine = await registerExtendChain(session, subroutine, name);
     // Execute the ultimate base subroutine with extend flag set
-    await executeCallInternal(session, baseSubroutine, element, true);
+    returnedValue = await executeCallInternal(session, baseSubroutine, element, true, cleanupBoundary);
   } else {
     // No extension - normal subroutine call
-    await executeCallInternal(session, subroutine, element, false);
+    returnedValue = await executeCallInternal(session, subroutine, element, false);
+  }
+
+  // Capture the subroutine's <return> value into the call site's variable,
+  // if requested. This happens after executeCallInternal has already
+  // restored the caller's scope, so the variable naturally lands in the
+  // caller's boundary without needing visible="variable".
+  const resultAttr = element.attributes.result;
+  if (resultAttr) {
+    setVariable(session, resultAttr, returnedValue, false);
   }
 }
 
@@ -162,17 +197,26 @@ async function executeCallInternal(
   session: DiracSession, 
   subroutine: DiracElement,
   callElement: DiracElement,
-  isExtendExecution: boolean = false
-): Promise<void> {
+  isExtendExecution: boolean = false,
+  cleanupSubBoundary?: number
+): Promise<any> {
   // Set boundary for local scope (variables AND subroutines)
   const oldBoundary = setBoundary(session);
-  const oldSubBoundary = setSubroutineBoundary(session);
+  const oldSubBoundary = session.subBoundary;
+  const currentSubBoundary = session.subroutines.length;
+  session.subBoundary = currentSubBoundary;
   const wasReturn = session.isReturn;
+  const wasReturnValue = session.returnValue;
   session.isReturn = false;
+  session.returnValue = undefined;
+  let capturedReturnValue: any;
   
   // Track current subroutine name for available-subroutines
   const oldSubroutineName = session.currentSubroutineName;
   session.currentSubroutineName = callElement.tag;
+  
+  // Save childrenConsumed flag (nested calls will reset it)
+  const oldChildrenConsumed = session.childrenConsumed;
   
   // For extend execution, skip subroutine registration during body execution
   const oldSkipFlag = session.skipSubroutineRegistration;
@@ -197,6 +241,10 @@ async function executeCallInternal(
   
   // Push caller element onto parameter stack for <parameters select="*|@*|@attr"/> access
   pushParameters(session, [substitutedElement]);
+  
+  // Check if call site wants parameters to be visible
+  const visibleAttr = callElement.attributes.visible;
+  const parametersVisible = visibleAttr === 'true' || visibleAttr === 'variable' || visibleAttr === 'both';
   
   try {
     // 1. Set variables from <param-*> attributes if not already set in this boundary
@@ -237,13 +285,23 @@ async function executeCallInternal(
             const parts = attrValue.split(':');
             const paramType = parts[0] || 'string';
             try {
-              value = convertType(value, paramType);
+              value = convertType(value, paramType, session);
             } catch (e) {
               throw new Error(`Parameter '${paramName}': ${e instanceof Error ? e.message : String(e)}`);
             }
           }
           
-          setVariable(session, paramName, value, false);
+          setVariable(session, paramName, value, parametersVisible);
+          
+          // Track source variable for Object-type parameters (for writeback)
+          const parts = attrValue.split(':');
+          const paramType = parts[0] || 'string';
+          const originalAttr = substitutedElement.attributes[paramName];
+          if (paramType === 'Object' && originalAttr && !originalAttr.startsWith('{')) {
+            // Store the source variable name for writeback
+            const sourceVar = originalAttr.startsWith('$') ? originalAttr.substring(1) : originalAttr;
+            session.variables[session.variables.length - 1].refName = sourceVar;
+          }
         }
       }
     }
@@ -255,23 +313,98 @@ async function executeCallInternal(
     }
 
     // 3. Execute subroutine body
-    await integrateChildren(session, subroutine);
+    // Reset flag to track if children are consumed by <parameters select="*"/>
+    session.childrenConsumed = false;
+    
+    // Check if subroutine has lang=js attribute - if so, treat text content as JavaScript
+    const lang = subroutine.attributes.lang;
+    let langJsExecuted = false;
+    if (lang === 'js') {
+      if (session.debug) {
+        console.error(`[CALL] lang=js detected, subroutine.text=${subroutine.text}, children.length=${subroutine.children.length}`);
+      }
+      
+      // Collect text content from element.text or from text nodes in children
+      let textContent = subroutine.text || '';
+      if (!textContent) {
+        // Try to collect text from children (text nodes or elements with text property)
+        for (const child of subroutine.children) {
+          if (child.text) {
+            textContent += child.text;
+          }
+        }
+      }
+      
+      if (textContent.trim()) {
+        if (session.debug) {
+          console.error(`[CALL] Executing lang=js content: ${textContent.substring(0, 50)}...`);
+        }
+        // Execute text content as JavaScript (like <eval>)
+        const { executeEval } = await import('./eval.js');
+        const evalElement: DiracElement = {
+          tag: 'eval',
+          attributes: {},
+          children: [],
+          text: textContent
+        };
+        await executeEval(session, evalElement);
+        langJsExecuted = true;
+      }
+    }
+    
+    // Execute children normally (unless lang=js was executed)
+    if (!langJsExecuted) {
+      await integrateChildren(session, subroutine);
+    }
+    
+    // 4. Auto-execute children if they weren't consumed by <parameters select="*"/>
+    if (!session.childrenConsumed && callElement.children.length > 0) {
+      if (session.debug) {
+        console.error(`[CALL] Auto-executing ${callElement.children.length} unconsumed children`);
+      }
+      for (const child of callElement.children) {
+        await integrate(session, child);
+      }
+    }
 
   } finally {
+    // Capture this call's return value (if <return> was hit) before the
+    // caller's isReturn/returnValue state is restored below.
+    capturedReturnValue = session.returnValue;
+
     // Restore skip flag
     session.skipSubroutineRegistration = oldSkipFlag;
     
     // Pop parameter stack
     popParameters(session);
 
+    // Determine visibility setting for cleanup
+    let visibleValue = subroutine.attributes.visible || 'false';
+    if (callElement.attributes.visible) {
+      visibleValue = callElement.attributes.visible;
+    }
+    const keepVariables = visibleValue === 'variable' || visibleValue === 'both' || visibleValue === 'true';
+    const keepNested = visibleValue === 'subroutine' || visibleValue === 'both' || visibleValue === 'true';
+    
     // Clean up scope (keep visible variables and subroutines) BEFORE restoring boundary
-    cleanToBoundary(session);
+    cleanToBoundary(session, keepVariables);
+    const boundaryToClean = cleanupSubBoundary ?? currentSubBoundary;
+    session.subBoundary = boundaryToClean;
     cleanSubroutinesToBoundary(session, subroutine, callElement);
     
     session.varBoundary = oldBoundary;
-    session.subBoundary = oldSubBoundary;
+    // Only restore subBoundary if we're NOT keeping nested subroutines
+    // (cleanSubroutinesToBoundary already updated it if keepNested is true)
+    if (!keepNested) {
+      session.subBoundary = oldSubBoundary;
+    }
     session.isReturn = wasReturn;
+    session.returnValue = wasReturnValue;
+    session.currentSubroutineName = oldSubroutineName;
+    session.childrenConsumed = oldChildrenConsumed;
   }
+
+  return capturedReturnValue;
 }
 
 async function bindParameters(

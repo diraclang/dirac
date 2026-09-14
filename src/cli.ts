@@ -30,6 +30,7 @@ function loadShellConfig(args: string[] = []): any {
           llmModel: configData.llmModel,
           customLLMUrl: configData.customLLMUrl,
           initScript: configData.initScript,
+          questionMarkTarget: configData.questionMarkTarget,
         });
       }
     }
@@ -52,6 +53,7 @@ function loadShellConfig(args: string[] = []): any {
           shellConfig.llmProvider = shellConfig.llmProvider || configData.llmProvider;
           shellConfig.llmModel = shellConfig.llmModel || configData.llmModel;
           shellConfig.customLLMUrl = shellConfig.customLLMUrl || configData.customLLMUrl;
+          shellConfig.questionMarkTarget = shellConfig.questionMarkTarget || configData.questionMarkTarget || 'ai';
           
           // Resolve initScript path relative to config file directory
           if (configData.initScript && !shellConfig.initScript) {

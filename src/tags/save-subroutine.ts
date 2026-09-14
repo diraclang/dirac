@@ -35,26 +35,22 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
     throw new Error('<save-subroutine> requires name attribute');
   }
   
-  // Find the subroutine in the session (get the full object, not just element)
-  let subroutine: any = undefined;
-  for (let i = session.subroutines.length - 1; i >= 0; i--) {
-    if (session.subroutines[i].name === name) {
-      subroutine = session.subroutines[i];
-      break;
-    }
-  }
-  
-  if (!subroutine) {
+  // Collect all versions from bottom to top so re-import preserves override order.
+  const matchingSubroutines = session.subroutines.filter((sub) => sub.name === name);
+
+  if (matchingSubroutines.length === 0) {
     throw new Error(`Subroutine '${name}' not found in session`);
   }
+
+  const latestSubroutine = matchingSubroutines[matchingSubroutines.length - 1];
   
   // Generate the output based on format
   let content: string;
   
   if (format === 'braket') {
-    content = generateBraKetNotation(subroutine);
+    content = generateBraKetBundleNotation(matchingSubroutines);
   } else {
-    content = generateXMLNotation(subroutine);
+    content = generateXMLBundleNotation(matchingSubroutines);
   }
   
   // Determine file path with simplified logic
@@ -63,9 +59,9 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
   if (file) {
     // Explicit file path (user override)
     filePath = resolve(process.cwd(), file);
-  } else if (subroutine.sourcePath && existsSync(dirname(subroutine.sourcePath))) {
+  } else if (latestSubroutine.sourcePath && existsSync(dirname(latestSubroutine.sourcePath))) {
     // Use existing sourcePath if available (for edited subroutines)
-    filePath = subroutine.sourcePath;
+    filePath = latestSubroutine.sourcePath;
   } else if (pathAttr) {
     // Path is a directory name under ~/.dirac/lib/
     const targetDir = join(homedir(), '.dirac', 'lib', pathAttr);
@@ -85,17 +81,22 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
   // Write to file
   writeFileSync(filePath, content, 'utf-8');
   
-  emit(session, `Subroutine '${name}' saved to: ${filePath}\n`);
+  if (matchingSubroutines.length > 1) {
+    emit(session, `Subroutine chain '${name}' (${matchingSubroutines.length} versions) saved to: ${filePath}\n`);
+  } else {
+    emit(session, `Subroutine '${name}' saved to: ${filePath}\n`);
+  }
   
-  // Update subroutine metadata: clear modified flag and set sourcePath
-  const savedSub = session.subroutines.find(s => s.name === name);
-  if (savedSub) {
-    savedSub.sourcePath = filePath;
-    savedSub.modified = false;
+  // Update metadata for all saved versions.
+  for (const savedSub of session.subroutines) {
+    if (savedSub.name === name) {
+      savedSub.sourcePath = filePath;
+      savedSub.modified = false;
+    }
   }
   
   if (session.debug) {
-    console.error(`[save-subroutine] Saved '${name}' to: ${filePath}`);
+    console.error(`[save-subroutine] Saved '${name}' (${matchingSubroutines.length} version(s)) to: ${filePath}`);
   }
   
   // Re-index the file to update the subroutine registry
@@ -112,11 +113,32 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
   }
 }
 
+function generateXMLBundleNotation(subroutines: any[]): string {
+  const sections: string[] = ['<!-- Exported subroutine chain -->', ''];
+  for (const subroutine of subroutines) {
+    sections.push(generateXMLNotation(subroutine, false).trimEnd());
+    sections.push('');
+  }
+  return sections.join('\n').trimEnd() + '\n';
+}
+
+function generateBraKetBundleNotation(subroutines: any[]): string {
+  const sections: string[] = [];
+  for (const subroutine of subroutines) {
+    sections.push(generateBraKetNotation(subroutine));
+  }
+  return sections.join('\n\n') + '\n';
+}
+
 /**
  * Generate XML notation for a subroutine
  */
-function generateXMLNotation(subroutine: any): string {
-  let xml = '<!-- Exported subroutine -->\n\n';
+function generateXMLNotation(subroutine: any, includeHeader: boolean = true): string {
+  let xml = '';
+
+  if (includeHeader) {
+    xml += '<!-- Exported subroutine -->\n\n';
+  }
   
   xml += `<subroutine name="${subroutine.name}"`;
   
@@ -185,8 +207,11 @@ function serializeElementToBraKet(el: any, lines: string[], indent: number): voi
   // Handle text nodes
   if (!el.tag || el.tag === '') {
     if (el.text) {
-      // Don't add text nodes as separate lines - they'll be handled inline
-      // Just return and let parent handle them
+      const trimmedText = el.text.trim();
+      if (trimmedText) {
+        const literalText = el.literal ? `<![CDATA[${trimmedText}]]>` : trimmedText;
+        lines.push(indentStr + literalText);
+      }
     }
     return;
   }
@@ -294,7 +319,8 @@ function serializeChildren(children: any[], indent: number): string {
     
     if (child.text && !child.tag) {
       // Text node with content - preserve text but trim whitespace
-      xml += child.text.trim();
+      const literalText = child.literal ? `<![CDATA[${child.text.trim()}]]>` : child.text.trim();
+      xml += literalText;
     } else if (child.tag) {
       // Check if this is the start of a line (need indent)
       const needsIndent = i === 0 || xml.endsWith('\n');
