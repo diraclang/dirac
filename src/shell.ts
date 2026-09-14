@@ -35,6 +35,8 @@ export class DiracShell {
   private inputBuffer: string[] = [];
   private baseIndent: number | null = null;
   private currentIndent: number = 0;
+  private aiMode: boolean = false;
+  private isProcessingInput: boolean = false;
   private config: DiracConfig;
 
   private getQuestionMarkTarget(): string {
@@ -51,6 +53,16 @@ export class DiracShell {
     const rest = trimmed.substring(1).trim();
     const target = this.getQuestionMarkTarget();
     return rest ? `|${target}>${rest}` : `|${target}>`;
+  }
+
+  private enterAiMode(): void {
+    this.aiMode = true;
+    this.rl.setPrompt('?> ');
+  }
+
+  private exitAiMode(): void {
+    this.aiMode = false;
+    this.rl.setPrompt('> ');
   }
 
   constructor(config: DiracConfig = {}) {
@@ -560,7 +572,20 @@ export class DiracShell {
 
   private setupHandlers(): void {
     this.rl.on('line', async (input: string) => {
-      await this.handleInput(input);
+      if (this.isProcessingInput) {
+        // Drop repeated Enter while a previous request is still in progress.
+        if (input.trim() !== '') {
+          console.log('(Still processing previous request. Please wait...)');
+        }
+        return;
+      }
+
+      this.isProcessingInput = true;
+      try {
+        await this.handleInput(input);
+      } finally {
+        this.isProcessingInput = false;
+      }
     });
 
     this.rl.on('close', async () => {
@@ -605,6 +630,35 @@ export class DiracShell {
   }
 
   private async handleInput(input: string): Promise<void> {
+    // Sticky AI mode: every non-empty line is sent to AI until blank line exits
+    if (this.inputBuffer.length === 0 && this.aiMode) {
+      const trimmed = input.trim();
+
+      if (trimmed === '') {
+        this.exitAiMode();
+        console.log('(AI mode off)');
+        this.promptWithHint();
+        return;
+      }
+
+      if (trimmed.startsWith(':')) {
+        this.exitAiMode();
+        await this.handleCommand(trimmed);
+        this.promptWithHint();
+        return;
+      }
+
+      const aiInput = `|${this.getQuestionMarkTarget()}>${trimmed}`;
+      if (this.config.debug) {
+        console.log(`[ai-mode: ${aiInput}]`);
+      }
+
+      this.inputBuffer = [aiInput];
+      await this.executeBuffer();
+      this.promptWithHint();
+      return;
+    }
+
     // Special commands
     if (!this.inputBuffer.length && input.trim().startsWith(':')) {
       await this.handleCommand(input.trim());
@@ -614,7 +668,10 @@ export class DiracShell {
 
     // Simple shorthand: ? -> configurable target tag/subroutine
     if (this.inputBuffer.length === 0 && input.trim().startsWith('?')) {
+      this.enterAiMode();
+      this.rl.prompt();
       input = this.normalizeQuestionMarkInput(input);
+      console.log('(AI mode on. Press Enter on empty line to exit.)');
       if (this.config.debug) {
         console.log(`[mapped: ? -> ${input}]`);
       }
@@ -854,6 +911,16 @@ Commands:
   :save-training [mode=full|pruned|both]  Save LLM dialog as training data (opens in editor)
   :save-subroutine-training <name>  Save subroutine as training data with description
   :exit           Exit shell
+
+AI mode:
+  ? <text>        Run as AI and enter sticky AI mode
+  ?>              In AI mode, each non-empty line is sent to AI
+  (empty line)    Exit AI mode
+
+Fallback behavior:
+  - Plain input still tries Unix command first
+  - If command is not found (or fails and looks like natural language),
+    shell asks whether to switch to AI mode and run it as an AI query
 
 Syntax:
   |tag attrs>text         Ket notation (most tags)
@@ -1724,8 +1791,8 @@ Examples:
 
   /**
    * Execute a Unix shell command
-   * If command is not found, fallback to treating it as an AI query
-   * Also fallback if command fails and looks like natural language
+    * If command is not found (or looks like NL and fails), ask whether
+    * to switch to AI mode and run it as an AI query.
    */
   private async executeShellCommand(command: string): Promise<void> {
     const trimmed = command.trim();
@@ -1782,19 +1849,24 @@ Examples:
         const likelyNaturalLanguage = code !== 0 && this.isLikelyNaturalLanguage(trimmed);
         
         if (commandNotFound || likelyNaturalLanguage) {
-          // Notify user about fallback
+          // Ask user before fallback
           const reason = commandNotFound ? 'Command not found' : 'Command failed, looks like natural language';
-          console.log(`💡 ${reason}, trying as AI query...`);
-          
-          // Fallback to AI query
-          if (this.config.debug) {
-            console.log(`[executing: |ai>${trimmed}]`);
+          const answer = await new Promise<string>((resolveQuestion) => {
+            this.rl.question(`💡 ${reason}. Switch to AI mode and run this as an AI query? [y/N]: `, resolveQuestion);
+          });
+
+          if (/^(y|yes)$/i.test(answer.trim())) {
+            const aiInput = `|${this.getQuestionMarkTarget()}>${trimmed}`;
+            if (this.config.debug) {
+              console.log(`[executing: ${aiInput}]`);
+            }
+
+            this.enterAiMode();
+            this.rl.prompt();
+            console.log('(AI mode on. Press Enter on empty line to exit.)');
+            this.inputBuffer = [aiInput];
+            await this.executeBuffer();
           }
-          
-          // Execute as AI query
-          const aiInput = `|ai>${trimmed}`;
-          this.inputBuffer = [aiInput];
-          await this.executeBuffer();
         }
         
         resolve();
