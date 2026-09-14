@@ -1050,7 +1050,7 @@ CRITICAL: When defining parameters:
               dialogHistory.push({ role: 'user', content: retryPrompt });
               
               // Retry LLM call
-              result = await invokeLLMCall(dialogHistory, llmClient, model, maxTokens, temperature);
+              result = await invokeLLMCall(pruneDialogForLLM(dialogHistory, 20), llmClient, model, maxTokens, temperature);
               
               // Add new response to dialog history
               dialogHistory.push({ role: 'assistant', content: result });
@@ -1135,7 +1135,7 @@ CRITICAL: When defining parameters:
                 console.error('[LLM] Corrections made - waiting for LLM confirmation (not executing yet)');
                 
                 // Call LLM to get confirmation/corrected response
-                result = await invokeLLMCall(dialogHistory, llmClient, model, maxTokens, temperature);
+                result = await invokeLLMCall(pruneDialogForLLM(dialogHistory, 20), llmClient, model, maxTokens, temperature);
                 
                 // Add response to dialog history
                 dialogHistory.push({ role: 'assistant', content: result });
@@ -1205,7 +1205,7 @@ CRITICAL: When defining parameters:
               }
               
               // Call LLM to get fixed code
-              result = await invokeLLMCall(dialogHistory, llmClient, model, maxTokens, temperature);
+              result = await invokeLLMCall(pruneDialogForLLM(dialogHistory, 20), llmClient, model, maxTokens, temperature);
               
               // Add LLM's response to dialog
               dialogHistory.push({ role: 'assistant', content: result });
@@ -1292,7 +1292,7 @@ CRITICAL: When defining parameters:
             dialogHistory.push({ role: 'user', content: feedbackPrompt });
             
             // Get LLM's assessment
-            result = await invokeLLMCall(dialogHistory, llmClient, model, maxTokens, temperature);
+            result = await invokeLLMCall(pruneDialogForLLM(dialogHistory, 20), llmClient, model, maxTokens, temperature);
             
             // Add response to dialog history
             dialogHistory.push({ role: 'assistant', content: result });
