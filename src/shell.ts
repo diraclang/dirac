@@ -1852,10 +1852,13 @@ Examples:
           // Ask user before fallback
           const reason = commandNotFound ? 'Command not found' : 'Command failed, looks like natural language';
           const answer = await new Promise<string>((resolveQuestion) => {
-            this.rl.question(`💡 ${reason}. Switch to AI mode and run this as an AI query? [y/N]: `, resolveQuestion);
+            this.rl.question(`💡 ${reason}. Switch to AI mode and run this as an AI query? [Y/n]: `, resolveQuestion);
           });
 
-          if (/^(y|yes)$/i.test(answer.trim())) {
+          const normalizedAnswer = answer.trim().toLowerCase();
+          const acceptAiFallback = normalizedAnswer === '' || normalizedAnswer === 'y' || normalizedAnswer === 'yes';
+
+          if (acceptAiFallback) {
             const aiInput = `|${this.getQuestionMarkTarget()}>${trimmed}`;
             if (this.config.debug) {
               console.log(`[executing: ${aiInput}]`);
