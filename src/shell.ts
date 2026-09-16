@@ -23,6 +23,7 @@ import type { SessionClient } from './session-client.js';
 
 const HISTORY_FILE = path.join(os.homedir(), '.dirac_history');
 const MAX_HISTORY = 1000;
+const LLM_DIALOG_ARCHIVE_DIR = path.join(os.homedir(), '.dirac', 'llm-dialogs');
 
 export class DiracShell {
   private session: any;
@@ -440,6 +441,72 @@ export class DiracShell {
     }
   }
 
+  private async getRuntimeVariables(): Promise<any[]> {
+    if (this.client) {
+      try {
+        const state = await this.client.getState();
+        return Array.isArray(state.variables) ? state.variables : [];
+      } catch {
+        return [];
+      }
+    }
+
+    if (Array.isArray(this.session.variables)) {
+      return this.session.variables;
+    }
+
+    if (this.session.variables && typeof this.session.variables === 'object') {
+      return Object.entries(this.session.variables).map(([name, value]) => ({ name, value }));
+    }
+
+    return [];
+  }
+
+  private async saveLlmDialogSnapshotOnExit(): Promise<void> {
+    const variables = await this.getRuntimeVariables();
+    let dialogVar: any = undefined;
+
+    // Use the most recent __llm_dialog__ if multiple scoped copies exist.
+    for (let i = variables.length - 1; i >= 0; i--) {
+      if (variables[i].name === '__llm_dialog__') {
+        dialogVar = variables[i];
+        break;
+      }
+    }
+
+    if (!dialogVar || dialogVar.value == null) {
+      return;
+    }
+
+    let dialog: any;
+    try {
+      dialog = typeof dialogVar.value === 'string'
+        ? JSON.parse(dialogVar.value)
+        : dialogVar.value;
+    } catch {
+      return;
+    }
+
+    if (!Array.isArray(dialog) || dialog.length === 0) {
+      return;
+    }
+
+    fs.mkdirSync(LLM_DIALOG_ARCHIVE_DIR, { recursive: true });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `llm-dialog-${timestamp}.json`;
+    const filePath = path.join(LLM_DIALOG_ARCHIVE_DIR, fileName);
+    const payload = {
+      savedAt: new Date().toISOString(),
+      cwd: process.cwd(),
+      messageCount: dialog.length,
+      messages: dialog,
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf-8');
+    console.log(`Saved __llm_dialog__ snapshot to ${filePath}`);
+  }
+
   private getUnsavedSubroutines(): string[] {
     // Check subroutines created in session OR modified but not saved
     const unsaved: string[] = [];
@@ -551,8 +618,14 @@ export class DiracShell {
     return count;
   }
 
-  private finalizeExit(): void {
+  private async finalizeExit(): Promise<void> {
     this.saveHistory();
+
+    try {
+      await this.saveLlmDialogSnapshotOnExit();
+    } catch (error) {
+      console.error('Warning: failed to save __llm_dialog__ snapshot:', error instanceof Error ? error.message : String(error));
+    }
     
     // Disconnect from agent if connected
     if (this.client) {
@@ -595,7 +668,7 @@ export class DiracShell {
       if (unsaved.length > 0) {
         const shouldExit = await this.promptSaveUnsaved(unsaved);
         if (shouldExit) {
-          this.finalizeExit();
+          await this.finalizeExit();
         } else {
           // User canceled - restart the shell
           this.rl = readline.createInterface({
@@ -609,7 +682,7 @@ export class DiracShell {
           this.promptWithHint();
         }
       } else {
-        this.finalizeExit();
+        await this.finalizeExit();
       }
     });
 
@@ -668,10 +741,16 @@ export class DiracShell {
 
     // Simple shorthand: ? -> configurable target tag/subroutine
     if (this.inputBuffer.length === 0 && input.trim().startsWith('?')) {
+      const trimmedInput = input.trim();
       this.enterAiMode();
+      console.log('(AI mode on. Type your prompt; press Enter on an empty line to exit.)');
       this.rl.prompt();
+
+      if (trimmedInput === '?') {
+        return;
+      }
+
       input = this.normalizeQuestionMarkInput(input);
-      console.log('(AI mode on. Press Enter on empty line to exit.)');
       if (this.config.debug) {
         console.log(`[mapped: ? -> ${input}]`);
       }
@@ -1550,6 +1629,31 @@ Examples:
             console.log('Dialog is empty');
             break;
           }
+
+          // Keep only the most recent dialog series:
+          // from the last message back to the nearest preceding system message.
+          const extractLatestDialogSeries = (msgs: any[]): any[] => {
+            if (!Array.isArray(msgs) || msgs.length === 0) {
+              return [];
+            }
+
+            let startIndex = 0;
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              const msg = msgs[i];
+              if (msg && msg.role === 'system') {
+                startIndex = i;
+                break;
+              }
+            }
+
+            return msgs.slice(startIndex);
+          };
+
+          const latestDialogSeries = extractLatestDialogSeries(dialog);
+          if (latestDialogSeries.length === 0) {
+            console.log('Dialog is empty');
+            break;
+          }
           
           // Helper function to prune correction dialogs
           const pruneCorrections = (msgs: any[]): any[] => {
@@ -1604,16 +1708,17 @@ Examples:
           };
           
           // Prepare training example(s)
-          const fullExample = { messages: dialog };
-          const prunedExample = { messages: pruneCorrections(dialog) };
+          const fullExample = { messages: latestDialogSeries };
+          const prunedExample = { messages: pruneCorrections(latestDialogSeries) };
           
           // Show what will be saved
           console.log(`\nMode: ${saveMode}`);
+          console.log(`Latest series extracted: ${latestDialogSeries.length} messages`);
           if (saveMode === 'full' || saveMode === 'both') {
-            console.log(`Full dialog: ${dialog.length} messages`);
+            console.log(`Full dialog: ${latestDialogSeries.length} messages`);
           }
           if (saveMode === 'pruned' || saveMode === 'both') {
-            console.log(`Pruned dialog: ${prunedExample.messages.length} messages (removed ${dialog.length - prunedExample.messages.length} correction messages)`);
+            console.log(`Pruned dialog: ${prunedExample.messages.length} messages (removed ${latestDialogSeries.length - prunedExample.messages.length} correction messages)`);
           }
           
           // Create temp file with appropriate content
@@ -1865,8 +1970,8 @@ Examples:
             }
 
             this.enterAiMode();
+            console.log('(AI mode on. Type your prompt; press Enter on an empty line to exit.)');
             this.rl.prompt();
-            console.log('(AI mode on. Press Enter on empty line to exit.)');
             this.inputBuffer = [aiInput];
             await this.executeBuffer();
           }
