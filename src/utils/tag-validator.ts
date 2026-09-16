@@ -6,6 +6,7 @@
 import type { DiracSession, DiracElement, Subroutine } from '../types/index.js';
 import fs from 'fs';
 import yaml from 'js-yaml';
+import { extractSubroutineParameters, isSubroutineParameterDeclarationBlock } from './subroutine-parameters.js';
 
 // Configurable similarity cutoff
 const SIMILARITY_CUTOFF = 0.75;
@@ -460,22 +461,7 @@ export async function validateDiracCode(
     const subElement = localSubroutineElements.get(subName)!;
     
     // Extract parameters from param-* attributes
-    const parameters: any[] = [];
-    for (const attr in subElement.attributes) {
-      if (attr.startsWith('param-')) {
-        const paramName = attr.slice(6); // Remove 'param-' prefix
-        const paramSpec = subElement.attributes[attr];
-        // Parse "type:required|optional:description:example"
-        const parts = paramSpec.split(':');
-        parameters.push({
-          name: paramName,
-          type: parts[0] || 'string',
-          required: parts[1] === 'required',
-          description: parts[2] || '',
-          example: parts[3] || '',
-        });
-      }
-    }
+    const parameters: any[] = extractSubroutineParameters(subElement);
     
     if (session.debug) {
       console.error(`[VALIDATE] Temp subroutine '${subName}' has ${parameters.length} parameters:`, parameters.map(p => p.name));
@@ -492,7 +478,11 @@ export async function validateDiracCode(
   }
   
   // Recursively validate all elements
-  async function validateElement(element: DiracElement) {
+  async function validateElement(element: DiracElement, parent?: DiracElement) {
+    if (parent?.tag === 'subroutine' && isSubroutineParameterDeclarationBlock(element)) {
+      return;
+    }
+
     // Skip text nodes, whitespace-only tags, and root wrapper tags
     if (element.tag && element.tag !== 'dirac' && element.tag !== 'DIRAC-ROOT' && element.tag.trim() !== '') {
       const result = await validateTag(session, element, options);
@@ -510,7 +500,7 @@ export async function validateDiracCode(
     
     // Validate children
     for (const child of element.children) {
-      await validateElement(child);
+      await validateElement(child, element);
     }
   }
   

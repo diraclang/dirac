@@ -81,9 +81,13 @@ function extractImagePathsFromElement(element: DiracElement): string[] {
 }
 
 function resolveImageDataUrl(imagePath: string): string {
-  const resolvedPath = path.isAbsolute(imagePath)
-    ? imagePath
-    : path.resolve(process.cwd(), imagePath);
+  const expandedPath = imagePath.startsWith('~/')
+    ? path.join(os.homedir(), imagePath.slice(2))
+    : imagePath;
+
+  const resolvedPath = path.isAbsolute(expandedPath)
+    ? expandedPath
+    : path.resolve(process.cwd(), expandedPath);
 
   if (!fs.existsSync(resolvedPath)) {
     throw new Error(`Image file not found: ${imagePath}`);

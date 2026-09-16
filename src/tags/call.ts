@@ -101,6 +101,14 @@ export async function executeCall(session: DiracSession, element: DiracElement):
   if (session.debug) {
     console.error(`[CALL] Found subroutine with attributes:`, Object.keys(subroutine.attributes));
   }
+
+  // For compatibility, pre-create the call-site result variable in caller scope.
+  // This allows callee logic (e.g. <python result="$result">) to update the
+  // intended destination variable directly, even without an explicit <return>.
+  const resultAttr = element.attributes.result;
+  if (resultAttr) {
+    setVariable(session, resultAttr, '', false);
+  }
   
   // Handle extension (parent subroutine) using recursive descent
   const extendAttr = subroutine.attributes.extend;
@@ -122,8 +130,7 @@ export async function executeCall(session: DiracSession, element: DiracElement):
   // if requested. This happens after executeCallInternal has already
   // restored the caller's scope, so the variable naturally lands in the
   // caller's boundary without needing visible="variable".
-  const resultAttr = element.attributes.result;
-  if (resultAttr) {
+  if (resultAttr && returnedValue !== undefined) {
     setVariable(session, resultAttr, returnedValue, false);
   }
 }

@@ -15,6 +15,7 @@ import * as path from 'path';
 import * as os from 'os';
 import { DiracParser } from '../runtime/parser.js';
 import type { DiracElement } from '../types/index.js';
+import { extractSubroutineParameters } from '../utils/subroutine-parameters.js';
 
 export interface SubroutineMetadata {
   name: string;
@@ -149,19 +150,7 @@ export class SubroutineRegistry {
           filePath,
         };
         
-        // Extract param-* attributes
-        for (const [attrName, attrValue] of Object.entries(element.attributes)) {
-          if (attrName.startsWith('param-')) {
-            const paramName = attrName.substring(6);
-            const parts = attrValue.split(':');
-            metadata.parameters.push({
-              name: paramName,
-              type: parts[0] || 'any',
-              required: parts[1] === 'required',
-              description: parts[2],
-            });
-          }
-        }
+        metadata.parameters.push(...extractSubroutineParameters(element));
         
         subroutines.push(metadata);
       }

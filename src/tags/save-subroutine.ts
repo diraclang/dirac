@@ -43,6 +43,12 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
   }
 
   const latestSubroutine = matchingSubroutines[matchingSubroutines.length - 1];
+  const modifiedWithSource = matchingSubroutines
+    .filter((sub) => sub.modified && sub.sourcePath)
+    .filter((sub) => existsSync(dirname(sub.sourcePath!)));
+  const preferredSubroutine = modifiedWithSource.length > 0
+    ? modifiedWithSource[modifiedWithSource.length - 1]
+    : latestSubroutine;
   
   // Generate the output based on format
   let content: string;
@@ -59,9 +65,10 @@ export async function executeSaveSubroutine(session: DiracSession, element: Dira
   if (file) {
     // Explicit file path (user override)
     filePath = resolve(process.cwd(), file);
-  } else if (latestSubroutine.sourcePath && existsSync(dirname(latestSubroutine.sourcePath))) {
-    // Use existing sourcePath if available (for edited subroutines)
-    filePath = latestSubroutine.sourcePath;
+  } else if (preferredSubroutine.sourcePath && existsSync(dirname(preferredSubroutine.sourcePath))) {
+    // Prefer the most recently modified version's sourcePath when available.
+    // This keeps :edit -> :save targeting intuitive when same-name versions exist.
+    filePath = preferredSubroutine.sourcePath;
   } else if (pathAttr) {
     // Path is a directory name under ~/.dirac/lib/
     const targetDir = join(homedir(), '.dirac', 'lib', pathAttr);
