@@ -90,3 +90,19 @@ return r;
   const output = await execute(dirac);
   assert.equal(output.trim(), '12');
 });
+
+test('lang="python" subroutine top-level return maps to call result', async () => {
+  const dirac = `
+<dirac>
+  <subroutine name="add-py" lang="python" param-a="number" param-b="number">
+return a + b
+  </subroutine>
+
+  <add-py a="5" b="7" result="sum" />
+  <output><variable name="sum" /></output>
+</dirac>
+`;
+
+  const output = await execute(dirac);
+  assert.equal(output.trim(), '12');
+});

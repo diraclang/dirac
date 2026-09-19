@@ -323,24 +323,15 @@ async function executeCallInternal(
     // Reset flag to track if children are consumed by <parameters select="*"/>
     session.childrenConsumed = false;
     
-    // Check if subroutine has lang=js attribute - if so, treat text content as JavaScript
-    const lang = subroutine.attributes.lang;
+    // Check if subroutine has a language attribute and execute the body text as code.
+    const lang = (subroutine.attributes.lang || '').toLowerCase();
     let langJsExecuted = false;
     if (lang === 'js') {
       if (session.debug) {
         console.error(`[CALL] lang=js detected, subroutine.text=${subroutine.text}, children.length=${subroutine.children.length}`);
       }
       
-      // Collect text content from element.text or from text nodes in children
-      let textContent = subroutine.text || '';
-      if (!textContent) {
-        // Try to collect text from children (text nodes or elements with text property)
-        for (const child of subroutine.children) {
-          if (child.text) {
-            textContent += child.text;
-          }
-        }
-      }
+      const textContent = getSubroutineTextContent(subroutine);
       
       if (textContent.trim()) {
         if (session.debug) {
@@ -362,6 +353,49 @@ async function executeCallInternal(
           session.returnValue = jsResult;
           session.isReturn = true;
         }
+        langJsExecuted = true;
+      }
+    } else if (lang === 'python' || lang === 'py') {
+      if (session.debug) {
+        console.error(`[CALL] lang=python detected, subroutine.text=${subroutine.text}, children.length=${subroutine.children.length}`);
+      }
+
+      const textContent = getSubroutineTextContent(subroutine);
+
+      if (textContent.trim()) {
+        if (session.debug) {
+          console.error(`[CALL] Executing lang=python content: ${textContent.substring(0, 50)}...`);
+        }
+
+        const hasReturn = /^\s*return\s+/m.test(textContent);
+        const tempResultVar = `__dirac_lang_python_return_${Date.now()}_${session.variables.length}`;
+
+        const { executePython } = await import('./python.js');
+        const pythonElement: DiracElement = {
+          tag: 'python',
+          attributes: hasReturn ? { result: tempResultVar } : {},
+          children: [],
+          text: textContent,
+        };
+
+        await executePython(session, pythonElement);
+
+        if (hasReturn) {
+          const pyResult = getVariable(session, tempResultVar);
+          if (pyResult !== undefined) {
+            session.returnValue = pyResult;
+            session.isReturn = true;
+          }
+
+          // Clean up the internal temporary return variable.
+          for (let i = session.variables.length - 1; i >= 0; i--) {
+            if (session.variables[i].name === tempResultVar) {
+              session.variables.splice(i, 1);
+              break;
+            }
+          }
+        }
+
         langJsExecuted = true;
       }
     }
@@ -518,4 +552,17 @@ function resolvePositionalArguments(
     // Remove the _positional-N marker
     delete callElement.attributes[positionalKey];
   }
+}
+
+function getSubroutineTextContent(subroutine: DiracElement): string {
+  let textContent = subroutine.text || '';
+  if (!textContent) {
+    // Collect text from child text nodes produced by parser.
+    for (const child of subroutine.children) {
+      if (child.text) {
+        textContent += child.text;
+      }
+    }
+  }
+  return textContent;
 }
