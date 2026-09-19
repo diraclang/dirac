@@ -9,7 +9,7 @@ import { setVariable, getVariable, substituteVariables } from '../runtime/sessio
 // AsyncFunction constructor
 const AsyncFunction = Object.getPrototypeOf(async function(){}).constructor;
 
-export async function executeEval(session: DiracSession, element: DiracElement): Promise<void> {
+export async function executeEval(session: DiracSession, element: DiracElement): Promise<any> {
   // `result` is the preferred attribute (consistent with <python result="...">
   // and <call result="...">); `name` is kept as a backward-compatible alias.
   const name = element.attributes.result || element.attributes.name;
@@ -134,6 +134,8 @@ export async function executeEval(session: DiracSession, element: DiracElement):
     }
 
     
+    return result;
+
   } catch (error) {
     throw new Error(`Eval error: ${error instanceof Error ? error.message : String(error)}`);
   }

@@ -227,6 +227,18 @@
   <!-- Use save-subroutine to persist changes -->
 </subroutine>
 
+<subroutine name="show-subroutine"
+  meta-hide-from-llm="true"
+  description="Show serialized subroutine definition from session stack"
+  param-name="string:required:Subroutine name to inspect"
+  param-format="string:optional:Output format|xml|braket"
+  param-selection="string:optional:Version selector (1-based index, all, or *)"
+  param-output="string:optional:Variable name to store serialized content">
+  <!-- Defaults to the most recent same-name definition on stack -->
+  <!-- Use selection="all" to dump full same-name chain -->
+  <!-- Useful for LLM feedback loops and prompt grounding -->
+</subroutine>
+
 <subroutine name="subroutine-index"
   meta-hide-from-llm="true"
   description="Search and manage subroutine knowledge base"

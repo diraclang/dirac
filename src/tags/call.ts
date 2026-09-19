@@ -354,7 +354,14 @@ async function executeCallInternal(
           children: [],
           text: textContent
         };
-        await executeEval(session, evalElement);
+        const jsResult = await executeEval(session, evalElement);
+        if (jsResult !== undefined) {
+          // Bridge JavaScript return semantics to Dirac call semantics.
+          // A top-level `return` inside lang="js" becomes this subroutine's
+          // return value, so callers can use result="..." directly.
+          session.returnValue = jsResult;
+          session.isReturn = true;
+        }
         langJsExecuted = true;
       }
     }

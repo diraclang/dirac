@@ -34,6 +34,7 @@ import { executeIndexSubroutines, executeSearchSubroutines, executeRegistryStats
 import { executeLoadContext } from '../tags/load-context.js';
 import { executeSaveSubroutine } from '../tags/save-subroutine.js';
 import { executeEditSubroutine } from '../tags/edit-subroutine.js';
+import { executeShowSubroutine } from '../tags/show-subroutine.js';
 import { executeForeach } from '../tags/foreach.js';
 import { executeBreak } from '../tags/break.js';
 import { executeReturn } from '../tags/return.js';
@@ -202,6 +203,10 @@ export async function integrate(session: DiracSession, element: DiracElement): P
         
       case 'edit-subroutine':
         await executeEditSubroutine(session, element);
+        break;
+
+      case 'show-subroutine':
+        await executeShowSubroutine(session, element);
         break;
         
       case 'foreach':

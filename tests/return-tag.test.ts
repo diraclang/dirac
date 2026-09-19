@@ -73,3 +73,20 @@ test('calling a subroutine without <return> and result="..." yields no crash', a
   assert.equal(output.includes('ran'), true);
   assert.equal(output.includes('done'), true);
 });
+
+test('lang="js" subroutine top-level return maps to call result', async () => {
+  const dirac = `
+<dirac>
+  <subroutine name="add" lang="js" param-a="number" param-b="number">
+const r = Number(a) + Number(b);
+return r;
+  </subroutine>
+
+  <add a="5" b="7" result="sum" />
+  <output><variable name="sum" /></output>
+</dirac>
+`;
+
+  const output = await execute(dirac);
+  assert.equal(output.trim(), '12');
+});
