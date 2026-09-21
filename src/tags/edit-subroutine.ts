@@ -102,10 +102,17 @@ export async function executeEditSubroutine(session: DiracSession, element: Dira
     subroutineArrayIndex = matchingSubroutines[0].index;
   }
   
-  // Try to load original source if available
+  // Build editable XML content.
+  // If this subroutine was already edited in-session and not saved, prefer the
+  // in-memory AST so reopening :edit doesn't clobber unsaved changes from disk.
   let xml: string;
-  
-  if (subroutine.sourcePath && existsSync(subroutine.sourcePath)) {
+
+  if (subroutine.modified) {
+    xml = serializeSubroutineToXML(subroutine);
+    if (session.debug) {
+      console.error('[edit-subroutine] Using modified in-memory version');
+    }
+  } else if (subroutine.sourcePath && existsSync(subroutine.sourcePath)) {
     // Read from original source file to preserve formatting
     try {
       const sourceContent = readFileSync(subroutine.sourcePath, 'utf-8');
