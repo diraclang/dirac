@@ -31,7 +31,7 @@ test('extends calls do not leak nested subroutines after cleanup', async () => {
   await integrate(session, ast);
   const output = getOutput(session);
 
-  assert.equal(output.includes('<subroutines>'), true);
+  assert.equal(output.includes('<subroutines source="memory" scope="available" total="0">'), true);
   assert.equal(output.includes('helper'), false);
   assert.equal(output.includes('extra'), false);
 });

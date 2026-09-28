@@ -170,8 +170,9 @@ export class TestRunner {
       } else if (metadata.expected !== undefined) {
         // Check if output matches expected
         // Normalize whitespace for comparison (collapse multiple spaces/newlines)
-        const normalizedActual = result.actualOutput!.replace(/\s+/g, ' ').trim();
-        const normalizedExpected = metadata.expected.replace(/\s+/g, ' ').trim();
+        // and ignore XML comments, which are guidance-only for LLM readability.
+        const normalizedActual = stripXmlComments(result.actualOutput!).replace(/\s+/g, ' ').trim();
+        const normalizedExpected = stripXmlComments(metadata.expected).replace(/\s+/g, ' ').trim();
         
         if (normalizedActual === normalizedExpected) {
           result.passed = true;
@@ -245,6 +246,10 @@ export class TestRunner {
       return [];
     }
 
+    if (fs.statSync(dir).isFile()) {
+      return dir.endsWith('.test.di') ? [dir] : [];
+    }
+
     const files: string[] = [];
     const entries = fs.readdirSync(dir, { withFileTypes: true });
 
@@ -280,6 +285,11 @@ export class TestRunner {
     
     console.log('='.repeat(50));
   }
+
+}
+
+function stripXmlComments(text: string): string {
+  return text.replace(/<!--([\s\S]*?)-->/g, '');
 }
 
 // CLI interface

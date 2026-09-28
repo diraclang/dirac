@@ -1,5 +1,5 @@
 <!-- TEST: available-subroutines with foreach and attr -->
-<!-- EXPECT: <subroutines>  <subroutine name="greet" description="Greets someone" />  <subroutine name="gender" description="Returns gender identity" />  <subroutine name="age" description="Returns the person age" /></subroutines> -->
+<!-- EXPECT: <subroutines source="memory" scope="available" total="3"> <subroutine name="greet" description="Greets someone" /> <subroutine name="gender" description="Returns gender identity" /> <subroutine name="age" description="Returns the person age" /> </subroutines> -->
 <dirac>
 <subroutine name="TestSuite">
   <subroutine name="age" description="Returns the person age">
