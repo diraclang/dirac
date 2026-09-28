@@ -297,7 +297,23 @@ Hello, Alice!
 ...
 ```
 
-**Setup**: dish requires `config.yml` with your LLM provider credentials:
+**Setup**: dish requires `config.yml` with your LLM provider settings.
+
+Local-first setup (no subscription):
+
+```bash
+brew install ollama
+brew services start ollama
+ollama pull qwen2.5:3b
+
+mkdir -p ~/.dirac
+cat > ~/.dirac/config.yml << EOF
+llmProvider: ollama
+llmModel: qwen2.5:3b
+EOF
+```
+
+Provider config examples:
 
 ```yaml
 # Dirac configuration
@@ -401,3 +417,5 @@ Dirac XML (.di):
 - The `.bk` extension is recommended for PAUL scripts.
 
 PAUL is the human-centric dialect of Dirac—optimized for clarity, speed, and LLM interaction.
+
+<!-- dirac push probe: 2026-09-07T20:09:31Z -->

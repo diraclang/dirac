@@ -23,6 +23,7 @@ import type { SessionClient } from './session-client.js';
 
 const HISTORY_FILE = path.join(os.homedir(), '.dirac_history');
 const MAX_HISTORY = 1000;
+const LLM_DIALOG_ARCHIVE_DIR = path.join(os.homedir(), '.dirac', 'llm-dialogs');
 
 export class DiracShell {
   private session: any;
@@ -30,17 +31,47 @@ export class DiracShell {
   private cachedSubroutines: any[] = [];  // Cache for agent mode tab completion
   private braketParser: BraKetParser;
   private xmlParser: DiracParser;
+  private integrateFn: typeof integrate;
   private rl: readline.Interface;
   private inputBuffer: string[] = [];
   private baseIndent: number | null = null;
   private currentIndent: number = 0;
+  private aiMode: boolean = false;
+  private isProcessingInput: boolean = false;
   private config: DiracConfig;
+
+  private getQuestionMarkTarget(): string {
+    const target = (this.config.questionMarkTarget || 'ai').trim();
+    return target || 'ai';
+  }
+
+  private normalizeQuestionMarkInput(input: string): string {
+    const trimmed = input.trim();
+    if (!trimmed.startsWith('?')) {
+      return input;
+    }
+
+    const rest = trimmed.substring(1).trim();
+    const target = this.getQuestionMarkTarget();
+    return rest ? `|${target}>${rest}` : `|${target}>`;
+  }
+
+  private enterAiMode(): void {
+    this.aiMode = true;
+    this.rl.setPrompt('?> ');
+  }
+
+  private exitAiMode(): void {
+    this.aiMode = false;
+    this.rl.setPrompt('> ');
+  }
 
   constructor(config: DiracConfig = {}) {
     this.config = config;
     this.session = createSession(config);
     this.braketParser = new BraKetParser();
     this.xmlParser = new DiracParser();
+    this.integrateFn = integrate;
     
     this.rl = readline.createInterface({
       input: process.stdin,
@@ -81,6 +112,81 @@ export class DiracShell {
   private completer(line: string): [string[], string] {
     // Use cached subroutines if in agent mode, otherwise use session subroutines
     const subroutines = this.client ? this.cachedSubroutines : this.session.subroutines;
+    
+    // Commands that expect file/directory arguments
+    const fileCommands = ['vi', 'vim', 'nano', 'emacs', 'cat', 'less', 'more', 'head', 'tail', 
+                          'grep', 'find', 'rm', 'cp', 'mv', 'ln', 'chmod', 'chown', 'touch',
+                          'open', 'code', 'subl', 'atom', 'edit', 'view', 'bat'];
+    const dirCommands = ['cd', 'mkdir', 'rmdir', 'ls', 'pushd', 'popd'];
+    const allPathCommands = [...fileCommands, ...dirCommands];
+    
+    // Check if user is typing after a command that takes file/directory arguments
+    // Match: command_name followed by space(s) and optional partial path (no ./ ~/ / prefix)
+    const cmdMatch = line.match(new RegExp(`^(${allPathCommands.join('|')})\\s+([^\\s]*)$`));
+    
+    if (cmdMatch) {
+      const command = cmdMatch[1];
+      const partial = cmdMatch[2];
+      const dirsOnly = dirCommands.includes(command);
+      
+      try {
+        // Get directory to search in
+        let searchDir = process.cwd();
+        let filePrefix = partial;
+        
+        // If partial contains /, split into directory and prefix
+        if (partial.includes('/')) {
+          const lastSlash = partial.lastIndexOf('/');
+          const dirPart = partial.substring(0, lastSlash);
+          filePrefix = partial.substring(lastSlash + 1);
+          
+          // Expand ~ to home directory
+          if (dirPart.startsWith('~')) {
+            searchDir = path.join(os.homedir(), dirPart.slice(1));
+          } else if (path.isAbsolute(dirPart)) {
+            searchDir = dirPart;
+          } else {
+            searchDir = path.join(process.cwd(), dirPart);
+          }
+        }
+        
+        // Read directory contents
+        if (fs.existsSync(searchDir) && fs.statSync(searchDir).isDirectory()) {
+          const entries = fs.readdirSync(searchDir, { withFileTypes: true });
+          
+          // Filter by prefix and type
+          const matches = entries
+            .filter(entry => {
+              // Check if name matches prefix
+              if (!entry.name.startsWith(filePrefix)) return false;
+              
+              // For directory-only commands, filter to directories only
+              if (dirsOnly && !entry.isDirectory()) return false;
+              
+              return true;
+            })
+            .map(entry => {
+              // Build the completion path
+              let completionPath = entry.name;
+              
+              // If partial had a directory prefix, include it
+              if (partial.includes('/')) {
+                const dirPart = partial.substring(0, partial.lastIndexOf('/') + 1);
+                completionPath = dirPart + entry.name;
+              }
+              
+              // Add trailing slash for directories
+              return entry.isDirectory() ? completionPath + '/' : completionPath;
+            });
+          
+          if (matches.length > 0) {
+            return [matches, partial];
+          }
+        }
+      } catch (error) {
+        // Silently fail on file system errors
+      }
+    }
     
     // Check if user is typing a variable: $varname
     const varMatch = line.match(/\$([a-zA-Z0-9_-]*)$/);
@@ -335,9 +441,76 @@ export class DiracShell {
     }
   }
 
+  private async getRuntimeVariables(): Promise<any[]> {
+    if (this.client) {
+      try {
+        const state = await this.client.getState();
+        return Array.isArray(state.variables) ? state.variables : [];
+      } catch {
+        return [];
+      }
+    }
+
+    if (Array.isArray(this.session.variables)) {
+      return this.session.variables;
+    }
+
+    if (this.session.variables && typeof this.session.variables === 'object') {
+      return Object.entries(this.session.variables).map(([name, value]) => ({ name, value }));
+    }
+
+    return [];
+  }
+
+  private async saveLlmDialogSnapshotOnExit(): Promise<void> {
+    const variables = await this.getRuntimeVariables();
+    let dialogVar: any = undefined;
+
+    // Use the most recent __llm_dialog__ if multiple scoped copies exist.
+    for (let i = variables.length - 1; i >= 0; i--) {
+      if (variables[i].name === '__llm_dialog__') {
+        dialogVar = variables[i];
+        break;
+      }
+    }
+
+    if (!dialogVar || dialogVar.value == null) {
+      return;
+    }
+
+    let dialog: any;
+    try {
+      dialog = typeof dialogVar.value === 'string'
+        ? JSON.parse(dialogVar.value)
+        : dialogVar.value;
+    } catch {
+      return;
+    }
+
+    if (!Array.isArray(dialog) || dialog.length === 0) {
+      return;
+    }
+
+    fs.mkdirSync(LLM_DIALOG_ARCHIVE_DIR, { recursive: true });
+
+    const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+    const fileName = `llm-dialog-${timestamp}.json`;
+    const filePath = path.join(LLM_DIALOG_ARCHIVE_DIR, fileName);
+    const payload = {
+      savedAt: new Date().toISOString(),
+      cwd: process.cwd(),
+      messageCount: dialog.length,
+      messages: dialog,
+    };
+
+    fs.writeFileSync(filePath, JSON.stringify(payload, null, 2), 'utf-8');
+    console.log(`Saved __llm_dialog__ snapshot to ${filePath}`);
+  }
+
   private getUnsavedSubroutines(): string[] {
     // Check subroutines created in session OR modified but not saved
     const unsaved: string[] = [];
+    const seen = new Set<string>();
     const excludePaths = [
       path.join(os.homedir(), '.dirac', 'lib'),  // System library
       '/tmp/',  // Temp files
@@ -351,13 +524,19 @@ export class DiracShell {
       
       // Check if modified but not saved
       if (sub.modified) {
-        unsaved.push(sub.name);
+        if (!seen.has(sub.name)) {
+          unsaved.push(sub.name);
+          seen.add(sub.name);
+        }
         continue;
       }
       
       if (!sub.sourcePath) {
         // No source file - created in session
-        unsaved.push(sub.name);
+        if (!seen.has(sub.name)) {
+          unsaved.push(sub.name);
+          seen.add(sub.name);
+        }
       } else {
         // Check if it's from a system/excluded path
         const isExcluded = excludePaths.some(excludePath => 
@@ -371,6 +550,23 @@ export class DiracShell {
     }
     
     return unsaved;
+  }
+
+  private async saveAllUnsavedSubroutines(unsaved: string[]): Promise<void> {
+    console.log('\nSaving all unsaved subroutines...\n');
+    for (const name of unsaved) {
+      try {
+        const xml = `<save-subroutine name="${name}" format="xml" />`;
+        const ast = this.xmlParser.parse(xml);
+        await this.integrateFn(this.session, ast);
+        if (this.session.output.length > 0) {
+          console.log(this.session.output.join(''));
+          this.session.output = [];
+        }
+      } catch (error) {
+        console.error(`Error saving ${name}:`, error instanceof Error ? error.message : String(error));
+      }
+    }
   }
 
   private async promptSaveUnsaved(unsaved: string[]): Promise<boolean> {
@@ -394,21 +590,7 @@ export class DiracShell {
         const choice = answer.trim().toLowerCase();
         
         if (choice === 'a') {
-          // Save all unsaved subroutines
-          console.log('\nSaving all unsaved subroutines...\n');
-          for (const name of unsaved) {
-            try {
-              const xml = `<save-subroutine name="${name}" format="braket" />`;
-              const ast = this.xmlParser.parse(xml);
-              await integrate(this.session, ast);
-              if (this.session.output.length > 0) {
-                console.log(this.session.output.join(''));
-                this.session.output = [];
-              }
-            } catch (error) {
-              console.error(`Error saving ${name}:`, error instanceof Error ? error.message : String(error));
-            }
-          }
+          await this.saveAllUnsavedSubroutines(unsaved);
           resolve(true);  // Proceed with exit
         } else if (choice === 'n') {
           resolve(true);  // Proceed with exit without saving
@@ -436,8 +618,14 @@ export class DiracShell {
     return count;
   }
 
-  private finalizeExit(): void {
+  private async finalizeExit(): Promise<void> {
     this.saveHistory();
+
+    try {
+      await this.saveLlmDialogSnapshotOnExit();
+    } catch (error) {
+      console.error('Warning: failed to save __llm_dialog__ snapshot:', error instanceof Error ? error.message : String(error));
+    }
     
     // Disconnect from agent if connected
     if (this.client) {
@@ -457,7 +645,20 @@ export class DiracShell {
 
   private setupHandlers(): void {
     this.rl.on('line', async (input: string) => {
-      await this.handleInput(input);
+      if (this.isProcessingInput) {
+        // Drop repeated Enter while a previous request is still in progress.
+        if (input.trim() !== '') {
+          console.log('(Still processing previous request. Please wait...)');
+        }
+        return;
+      }
+
+      this.isProcessingInput = true;
+      try {
+        await this.handleInput(input);
+      } finally {
+        this.isProcessingInput = false;
+      }
     });
 
     this.rl.on('close', async () => {
@@ -467,7 +668,7 @@ export class DiracShell {
       if (unsaved.length > 0) {
         const shouldExit = await this.promptSaveUnsaved(unsaved);
         if (shouldExit) {
-          this.finalizeExit();
+          await this.finalizeExit();
         } else {
           // User canceled - restart the shell
           this.rl = readline.createInterface({
@@ -478,10 +679,10 @@ export class DiracShell {
             completer: this.completer.bind(this),
           });
           this.setupHandlers();
-          this.rl.prompt();
+          this.promptWithHint();
         }
       } else {
-        this.finalizeExit();
+        await this.finalizeExit();
       }
     });
 
@@ -494,7 +695,7 @@ export class DiracShell {
         this.currentIndent = 0;
         console.log('\n(Input cancelled)');
         this.rl.setPrompt('> ');
-        this.rl.prompt();
+        this.promptWithHint();
       } else {
         this.rl.close();
       }
@@ -502,17 +703,54 @@ export class DiracShell {
   }
 
   private async handleInput(input: string): Promise<void> {
-    // Special commands
-    if (!this.inputBuffer.length && input.trim().startsWith(':')) {
-      await this.handleCommand(input.trim());
-      this.rl.prompt();
+    // Sticky AI mode: every non-empty line is sent to AI until blank line exits
+    if (this.inputBuffer.length === 0 && this.aiMode) {
+      const trimmed = input.trim();
+
+      if (trimmed === '') {
+        this.exitAiMode();
+        console.log('(AI mode off)');
+        this.promptWithHint();
+        return;
+      }
+
+      if (trimmed.startsWith(':')) {
+        this.exitAiMode();
+        await this.handleCommand(trimmed);
+        this.promptWithHint();
+        return;
+      }
+
+      const aiInput = `|${this.getQuestionMarkTarget()}>${trimmed}`;
+      if (this.config.debug) {
+        console.log(`[ai-mode: ${aiInput}]`);
+      }
+
+      this.inputBuffer = [aiInput];
+      await this.executeBuffer();
+      this.promptWithHint();
       return;
     }
 
-    // Simple shorthand: ? -> |ai>
+    // Special commands
+    if (!this.inputBuffer.length && input.trim().startsWith(':')) {
+      await this.handleCommand(input.trim());
+      this.promptWithHint();
+      return;
+    }
+
+    // Simple shorthand: ? -> configurable target tag/subroutine
     if (this.inputBuffer.length === 0 && input.trim().startsWith('?')) {
-      const rest = input.trim().substring(1).trim();
-      input = rest ? `|ai>${rest}` : `|ai>`;
+      const trimmedInput = input.trim();
+      this.enterAiMode();
+      console.log('(AI mode on. Type your prompt; press Enter on an empty line to exit.)');
+      this.rl.prompt();
+
+      if (trimmedInput === '?') {
+        return;
+      }
+
+      input = this.normalizeQuestionMarkInput(input);
       if (this.config.debug) {
         console.log(`[mapped: ? -> ${input}]`);
       }
@@ -522,7 +760,7 @@ export class DiracShell {
     if (this.inputBuffer.length === 0 && !this.isDiracSyntax(input)) {
       // Pass to Unix shell
       await this.executeShellCommand(input);
-      this.rl.prompt();
+      this.promptWithHint();
       return;
     }
 
@@ -550,7 +788,7 @@ export class DiracShell {
         await this.executeBuffer();
         this.currentIndent = 0;
         this.rl.setPrompt('> ');
-        this.rl.prompt();
+        this.promptWithHint();
         return;
       }
       
@@ -611,7 +849,7 @@ export class DiracShell {
 
     // Execute single-line input
     await this.executeBuffer();
-    this.rl.prompt();
+    this.promptWithHint();
   }
 
   private getIndent(line: string): number {
@@ -753,6 +991,16 @@ Commands:
   :save-subroutine-training <name>  Save subroutine as training data with description
   :exit           Exit shell
 
+AI mode:
+  ? <text>        Run as AI and enter sticky AI mode
+  ?>              In AI mode, each non-empty line is sent to AI
+  (empty line)    Exit AI mode
+
+Fallback behavior:
+  - Plain input still tries Unix command first
+  - If command is not found (or fails and looks like natural language),
+    shell asks whether to switch to AI mode and run it as an AI query
+
 Syntax:
   |tag attrs>text         Ket notation (most tags)
   <name|                  Bra notation (subroutine definitions)
@@ -790,7 +1038,8 @@ Examples:
           } else {
             console.log('Variables:');
             for (const v of variables) {
-              if (v.visible) {
+              // Show all variables with names (MASK C implementation sets name to NULL when blocking)
+              if (v.name) {
                 // Pretty-print JSON values for better readability
                 let formattedValue;
                 if (typeof v.value === 'object' && v.value !== null) {
@@ -994,7 +1243,35 @@ Examples:
         } else {
           const subName = args[0];
           try {
-            const xml = `<edit-subroutine name="${subName}" />`;
+            let selectionAttr = '';
+            const subroutines = this.client
+              ? (await this.client.getState()).subroutines || []
+              : this.session.subroutines;
+
+            const matching = subroutines.filter((sub: any) => sub.name === subName);
+
+            if (matching.length > 1) {
+              console.error(`\nMultiple versions of '${subName}' found:`);
+              matching.forEach((item: any, idx: number) => {
+                const extendsAttr = item.element?.attributes?.extends || item.element?.attributes?.extend;
+                const label = extendsAttr ? `extends="${extendsAttr}"` : '(base)';
+                console.error(`  [${idx + 1}] ${subName} ${label}`);
+              });
+
+              const answer = await new Promise<string>((resolve) => {
+                this.rl.question(`\nSelect which to edit [1-${matching.length}]: `, resolve);
+              });
+
+              const selection = parseInt(answer.trim(), 10);
+              if (isNaN(selection) || selection < 1 || selection > matching.length) {
+                console.log(`Invalid selection: ${answer}`);
+                break;
+              }
+
+              selectionAttr = ` selection="${selection}"`;
+            }
+
+            const xml = `<edit-subroutine name="${subName}"${selectionAttr} />`;
             const ast = this.xmlParser.parse(xml);
             await integrate(this.session, ast);
             if (this.session.output.length > 0) {
@@ -1352,6 +1629,31 @@ Examples:
             console.log('Dialog is empty');
             break;
           }
+
+          // Keep only the most recent dialog series:
+          // from the last message back to the nearest preceding system message.
+          const extractLatestDialogSeries = (msgs: any[]): any[] => {
+            if (!Array.isArray(msgs) || msgs.length === 0) {
+              return [];
+            }
+
+            let startIndex = 0;
+            for (let i = msgs.length - 1; i >= 0; i--) {
+              const msg = msgs[i];
+              if (msg && msg.role === 'system') {
+                startIndex = i;
+                break;
+              }
+            }
+
+            return msgs.slice(startIndex);
+          };
+
+          const latestDialogSeries = extractLatestDialogSeries(dialog);
+          if (latestDialogSeries.length === 0) {
+            console.log('Dialog is empty');
+            break;
+          }
           
           // Helper function to prune correction dialogs
           const pruneCorrections = (msgs: any[]): any[] => {
@@ -1406,16 +1708,17 @@ Examples:
           };
           
           // Prepare training example(s)
-          const fullExample = { messages: dialog };
-          const prunedExample = { messages: pruneCorrections(dialog) };
+          const fullExample = { messages: latestDialogSeries };
+          const prunedExample = { messages: pruneCorrections(latestDialogSeries) };
           
           // Show what will be saved
           console.log(`\nMode: ${saveMode}`);
+          console.log(`Latest series extracted: ${latestDialogSeries.length} messages`);
           if (saveMode === 'full' || saveMode === 'both') {
-            console.log(`Full dialog: ${dialog.length} messages`);
+            console.log(`Full dialog: ${latestDialogSeries.length} messages`);
           }
           if (saveMode === 'pruned' || saveMode === 'both') {
-            console.log(`Pruned dialog: ${prunedExample.messages.length} messages (removed ${dialog.length - prunedExample.messages.length} correction messages)`);
+            console.log(`Pruned dialog: ${prunedExample.messages.length} messages (removed ${latestDialogSeries.length - prunedExample.messages.length} correction messages)`);
           }
           
           // Create temp file with appropriate content
@@ -1593,8 +1896,8 @@ Examples:
 
   /**
    * Execute a Unix shell command
-   * If command is not found, fallback to treating it as an AI query
-   * Also fallback if command fails and looks like natural language
+    * If command is not found (or looks like NL and fails), ask whether
+    * to switch to AI mode and run it as an AI query.
    */
   private async executeShellCommand(command: string): Promise<void> {
     const trimmed = command.trim();
@@ -1651,19 +1954,27 @@ Examples:
         const likelyNaturalLanguage = code !== 0 && this.isLikelyNaturalLanguage(trimmed);
         
         if (commandNotFound || likelyNaturalLanguage) {
-          // Notify user about fallback
+          // Ask user before fallback
           const reason = commandNotFound ? 'Command not found' : 'Command failed, looks like natural language';
-          console.log(`💡 ${reason}, trying as AI query...`);
-          
-          // Fallback to AI query
-          if (this.config.debug) {
-            console.log(`[executing: |ai>${trimmed}]`);
+          const answer = await new Promise<string>((resolveQuestion) => {
+            this.rl.question(`💡 ${reason}. Switch to AI mode and run this as an AI query? [Y/n]: `, resolveQuestion);
+          });
+
+          const normalizedAnswer = answer.trim().toLowerCase();
+          const acceptAiFallback = normalizedAnswer === '' || normalizedAnswer === 'y' || normalizedAnswer === 'yes';
+
+          if (acceptAiFallback) {
+            const aiInput = `|${this.getQuestionMarkTarget()}>${trimmed}`;
+            if (this.config.debug) {
+              console.log(`[executing: ${aiInput}]`);
+            }
+
+            this.enterAiMode();
+            console.log('(AI mode on. Type your prompt; press Enter on an empty line to exit.)');
+            this.rl.prompt();
+            this.inputBuffer = [aiInput];
+            await this.executeBuffer();
           }
-          
-          // Execute as AI query
-          const aiInput = `|ai>${trimmed}`;
-          this.inputBuffer = [aiInput];
-          await this.executeBuffer();
         }
         
         resolve();
@@ -1677,9 +1988,20 @@ Examples:
     });
   }
 
+  /**
+   * Show prompt with inline grey hint text
+   */
+  private promptWithHint(): void {
+    const hint = 'Type :help for help';
+    // Show prompt, then write grey hint, then move cursor back
+    this.rl.prompt();
+    process.stdout.write(`\x1b[90m${hint}\x1b[0m`);
+    // Move cursor back to start (left by hint length)
+    process.stdout.write(`\x1b[${hint.length}D`);
+  }
+
   async start(): Promise<void> {
-    console.log('Dirac Shell v0.1.0');
-    console.log('Type :help for commands, :exit to quit\n');
+    console.log('Dirac Shell v0.1.0\n');
     
     if (this.config.llmProvider) {
       console.log(`LLM: ${this.config.llmProvider} (${this.config.llmModel || 'default'})\n`);
@@ -1690,8 +2012,8 @@ Examples:
     }
     
     // Auto-index stdlib on first run
-    const { registry } = await import('./tags/subroutine-index.js');
-    const wasIndexed = await registry.autoIndexStdlib();
+    // const { registry } = await import('./tags/subroutine-index.js');
+    // const wasIndexed = await registry.autoIndexStdlib();
     
     // Load essential stdlib subroutines if available
     await this.loadEssentialSubroutines();
@@ -1701,7 +2023,7 @@ Examples:
       await this.runInitScript(this.config.initScript);
     }
     
-    this.rl.prompt();
+    this.promptWithHint();
   }
 
   /**
@@ -1812,6 +2134,7 @@ Examples:
     this.config.llmProvider = configData.llmProvider || process.env.LLM_PROVIDER;
     this.config.llmModel = configData.llmModel || process.env.LLM_MODEL;
     this.config.customLLMUrl = configData.customLLMUrl || process.env.CUSTOM_LLM_URL;
+    this.config.questionMarkTarget = configData.questionMarkTarget || this.config.questionMarkTarget || 'ai';
     
     // Reinitialize the session with new config (keeps variables/subroutines but updates LLM client)
     const oldVariables = this.session.variables;
@@ -1889,7 +2212,10 @@ async function main() {
       }
     }
     
-    // Try global init script
+  }
+
+  // Try global init script if not explicitly configured
+  if (!config.initScript) {
     const globalInitScript = path.join(process.env.HOME || '~', '.dirac', 'shell-init.di');
     if (fs.existsSync(globalInitScript)) {
       config.initScript = globalInitScript;
