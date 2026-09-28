@@ -1167,7 +1167,7 @@ Examples:
         } else {
           const query = args.join(' ');
           try {
-            const xml = `<search-subroutines query="${query}" format="text" />`;
+            const xml = `<search-subroutines query="${query}" format="xml" />`;
             const ast = this.xmlParser.parse(xml);
             await integrate(this.session, ast);
             if (this.session.output.length > 0) {

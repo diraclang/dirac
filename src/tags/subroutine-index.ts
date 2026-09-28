@@ -32,7 +32,7 @@ export async function executeSearchSubroutines(session: DiracSession, element: D
   const query = element.attributes.query;
   const limitAttr = element.attributes.limit;
   const outputVar = element.attributes.output;
-  const format = element.attributes.format || 'text';
+  const format = element.attributes.format || 'xml';
   
   if (!query) {
     throw new Error('<search-subroutines> requires query attribute');
@@ -49,13 +49,25 @@ export async function executeSearchSubroutines(session: DiracSession, element: D
       break;
       
     case 'xml':
-      output = '<subroutines>\n';
+      output = '<!-- Dirac Subroutine Interface (source=disk, scope=all) -->\n';
+      output += '<!-- Call convention: use direct tag call -->\n';
+      output += '<!-- Generic form: <subroutineName required1="..." required2="..." optional1="..." /> -->\n';
+      output += `<subroutines source="disk" scope="all" query="${escapeXml(query)}" total="${results.length}">\n`;
       for (const sub of results) {
-        const params = sub.parameters.map(p => `param-${p.name}="${p.type}"`).join(' ');
-        output += `  <subroutine name="${sub.name}" ${params} file="${sub.filePath}"/>\n`;
+        const attrs: string[] = [`name="${escapeXml(sub.name)}"`];
         if (sub.description) {
-          output += `    <!-- ${sub.description} -->\n`;
+          attrs.push(`description="${escapeXml(sub.description)}"`);
         }
+        for (const param of sub.parameters) {
+          const metadata = [param.type || 'any'];
+          if (param.required) metadata.push('required');
+          if (param.description) metadata.push(param.description);
+          attrs.push(`param-${param.name}="${escapeXml(metadata.join(':'))}"`);
+        }
+        attrs.push(`file="${escapeXml(sub.filePath)}"`);
+
+        output += `  <!-- Sample call: ${buildSampleCallFromMetadata(sub)} -->\n`;
+        output += `  <subroutine ${attrs.join(' ')} />\n`;
       }
       output += '</subroutines>';
       break;
@@ -82,6 +94,45 @@ export async function executeSearchSubroutines(session: DiracSession, element: D
   } else {
     emit(session, output);
   }
+}
+
+function buildSampleCallFromMetadata(sub: any): string {
+  const attrs: string[] = [];
+  const params = Array.isArray(sub.parameters) ? sub.parameters : [];
+
+  for (const param of params) {
+    if (!param.required) continue;
+    attrs.push(`${param.name}="${sampleValueForType(param.type)}"`);
+  }
+
+  return attrs.length > 0
+    ? `<${sub.name} ${attrs.join(' ')} />`
+    : `<${sub.name} />`;
+}
+
+function sampleValueForType(type?: string): string {
+  switch ((type || '').toLowerCase()) {
+    case 'number':
+    case 'integer':
+    case 'float':
+      return '1';
+    case 'boolean':
+      return 'true';
+    case 'json':
+    case 'object':
+      return '{}';
+    default:
+      return 'value';
+  }
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
 
 export async function executeRegistryStats(session: DiracSession, element: DiracElement): Promise<void> {

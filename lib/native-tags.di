@@ -193,7 +193,7 @@
 <subroutine name="list-subroutines"
   meta-hide-from-llm="true"
   description="List subroutines in specified format"
-  param-format="string:optional:Output format (default: text)|text|json|xml"
+  param-format="string:optional:Output format (default: xml)|text|json|xml"
   param-output="string:optional:Variable name to store result">
   <!-- xml: Same as <available-subroutines /> -->
 </subroutine>
@@ -265,10 +265,10 @@
   param-query="string:required:Search query (name or description keywords)"
   param-limit="string:optional:Maximum results to return (default: 10)"
   param-output="string:optional:Variable name to store results"
-  param-format="string:optional:Output format (default: text)|text|json|xml">
+  param-format="string:optional:Output format (default: xml)|text|json|xml">
   <!-- Searches subroutines indexed via index-subroutines -->
   <!-- Shell command: :search <query> -->
-  <!-- Example: <search-subroutines query="greeting" limit="5" format="text" /> -->
+  <!-- Example: <search-subroutines query="greeting" limit="5" format="xml" /> -->
 </subroutine>
 
 <!-- ============================================================

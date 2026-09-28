@@ -34,11 +34,18 @@ export async function executeAvailableSubroutines(
     }
   }
   
-  // Generate structured output with container
-  session.output.push('<subroutines>');
+  // Generate unified structured output with calling guidance.
+  const lines: string[] = [
+    '<!-- Dirac Subroutine Interface (source=memory, scope=available) -->',
+    '<!-- Call convention: use direct tag call -->',
+    '<!-- Generic form: <subroutineName required1="..." required2="..." optional1="..." /> -->',
+    `<subroutines source="memory" scope="available" total="${availableSubroutines.size}">`,
+  ];
   
   for (const [name, subElement] of availableSubroutines) {
     const attrs: string[] = [`name="${escapeXml(name)}"`];
+
+    lines.push(`  <!-- Sample call: ${buildSampleCallFromElement(name, subElement)} -->`);
     
     // Add description if available
     const description = subElement.attributes.description;
@@ -55,10 +62,48 @@ export async function executeAvailableSubroutines(
     
     // Build the output tag
     const attrString = attrs.join(' ');
-    session.output.push(`  <subroutine ${attrString} />`);
+    lines.push(`  <subroutine ${attrString} />`);
   }
   
-  session.output.push('</subroutines>');
+  lines.push('</subroutines>');
+  session.output.push(lines.join('\n'));
+}
+
+function buildSampleCallFromElement(name: string, subElement: DiracElement): string {
+  const requiredAttrs: string[] = [];
+
+  for (const [attrName, attrValue] of Object.entries(subElement.attributes)) {
+    if (!attrName.startsWith('param-')) continue;
+
+    const paramName = attrName.slice(6);
+    const parts = String(attrValue).split(':');
+    const type = parts[0] || 'string';
+    const required = parts.some((part) => part.trim().toLowerCase() === 'required');
+
+    if (required) {
+      requiredAttrs.push(`${paramName}="${sampleValueForType(type)}"`);
+    }
+  }
+
+  return requiredAttrs.length > 0
+    ? `<${name} ${requiredAttrs.join(' ')} />`
+    : `<${name} />`;
+}
+
+function sampleValueForType(type?: string): string {
+  switch ((type || '').toLowerCase()) {
+    case 'number':
+    case 'integer':
+    case 'float':
+      return '1';
+    case 'boolean':
+      return 'true';
+    case 'json':
+    case 'object':
+      return '{}';
+    default:
+      return 'value';
+  }
 }
 
 function escapeXml(text: string): string {

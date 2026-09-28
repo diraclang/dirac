@@ -17,7 +17,7 @@ import type { DiracSession, DiracElement } from '../types/index.js';
 import { getAvailableSubroutines, emit, setVariable } from '../runtime/session.js';
 
 export async function executeListSubroutines(session: DiracSession, element: DiracElement): Promise<void> {
-  const format = element.attributes.format || 'text';
+  const format = element.attributes.format || 'xml';
   const outputVar = element.attributes.output;
   
   const subroutines = getAvailableSubroutines(session);
@@ -72,24 +72,33 @@ function formatAsBraKet(subroutines: any[]): string {
 }
 
 function formatAsXml(subroutines: any[]): string {
-  const lines: string[] = ['Available subroutines:\n'];
+  const lines: string[] = [
+    '<!-- Dirac Subroutine Interface (source=memory, scope=all) -->',
+    '<!-- Call convention: use direct tag call -->',
+    '<!-- Generic form: <subroutineName required1="..." required2="..." optional1="..." /> -->',
+    `<subroutines source="memory" scope="all" total="${subroutines.length}">`,
+  ];
   
   for (const sub of subroutines) {
-    const params = sub.parameters?.map((p: any) => 
-      `param-${p.name}="${p.type || 'any'}"`
-    ).join(' ') || '';
-    
-    const xmlLine = params
-      ? `<subroutine name="${sub.name}" ${params}/>`
-      : `<subroutine name="${sub.name}"/>`;
-    
-    lines.push(xmlLine);
-    
+    const sampleCall = buildSampleCallFromMetadata(sub);
+    lines.push(`  <!-- Sample call: ${sampleCall} -->`);
+
+    const attrs: string[] = [`name="${escapeXml(sub.name)}"`];
     if (sub.description) {
-      lines.push(`  <!-- ${sub.description} -->`);
+      attrs.push(`description="${escapeXml(sub.description)}"`);
     }
-    lines.push('');
+
+    for (const param of sub.parameters || []) {
+      const metadata = [param.type || 'any'];
+      if (param.required) metadata.push('required');
+      if (param.description) metadata.push(param.description);
+      attrs.push(`param-${param.name}="${escapeXml(metadata.join(':'))}"`);
+    }
+
+    lines.push(`  <subroutine ${attrs.join(' ')} />`);
   }
+
+  lines.push('</subroutines>');
   
   return lines.join('\n');
 }
@@ -112,4 +121,43 @@ function formatAsText(subroutines: any[]): string {
   }
   
   return lines.join('\n');
+}
+
+function buildSampleCallFromMetadata(sub: any): string {
+  const attrs: string[] = [];
+  const params = Array.isArray(sub.parameters) ? sub.parameters : [];
+
+  for (const param of params) {
+    if (!param.required) continue;
+    attrs.push(`${param.name}="${sampleValueForType(param.type)}"`);
+  }
+
+  return attrs.length > 0
+    ? `<${sub.name} ${attrs.join(' ')} />`
+    : `<${sub.name} />`;
+}
+
+function sampleValueForType(type?: string): string {
+  switch ((type || '').toLowerCase()) {
+    case 'number':
+    case 'integer':
+    case 'float':
+      return '1';
+    case 'boolean':
+      return 'true';
+    case 'json':
+    case 'object':
+      return '{}';
+    default:
+      return 'value';
+  }
+}
+
+function escapeXml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
 }
